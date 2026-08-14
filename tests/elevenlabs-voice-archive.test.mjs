@@ -71,7 +71,7 @@ PLAIN=value # trailing comment
 });
 
 test("normalization classifies a real-shaped single-voice dialogue", () => {
-  const raw = dialogueHistoryItem("8d9VTQ1NMwuK6IAi4X6m", [{
+  const raw = dialogueHistoryItem("synthetic-dialogue-sol-001", [{
     voice_id: DEFAULT_VOICES.sol,
     voice_name: "Sol-2",
     text: "first line",
@@ -334,4 +334,7 @@ test("gitignore protects local credentials and archive output", async () => {
   assert.match(source, /^\*\*\/\.env\.local$/m);
   assert.match(source, /^VoiceArchive\/$/m);
   assert.match(source, /^voice-archive\/$/m);
+  assert.match(source, /^\*\*\/mappings\/$/m);
+  assert.match(source, /^chatgpt-solvoice\.json$/m);
+  assert.match(source, /^chatgpt-solvoice-summary\.json$/m);
 });

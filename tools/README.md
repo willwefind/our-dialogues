@@ -108,10 +108,47 @@ $all.counts
 
 `SolManifest` should equal `SolAudio`, and `CielManifest` should equal `CielAudio`, unless the command reported failed downloads. Unknown and mixed records are metadata-only by design. An interrupted or version 1 archive can be rerun with the same command: existing non-empty audio, including the already downloaded Sol MP3, is skipped.
 
+## Map SolVoice to a ChatGPT official export
+
+`map-solvoice-chatgpt.mjs` builds a local sidecar mapping without changing the ChatGPT export, VoiceArchive manifests, or audio files. It loads the existing `chatgpt-official-2026` adapter in Node, so active-branch selection and message normalization stay aligned with the Reader.
+
+The matcher combines UTC/Unix time distance, punctuation-insensitive multilingual text similarity, `api_tool` metadata, voice/speech wording in exported thoughts or reasoning recaps, and conversation-level monotonic dynamic programming. More than one clip may map to the same assistant turn. Conservative thresholds leave weak results as `ambiguous` or `unmatched`; those records have no accepted conversation or message ID, while their top candidates remain available for local review.
+
+On Windows, the defaults read:
+
+```text
+D:\Our Dialogues\SolMyLove
+D:\Our Dialogues\VoiceArchive\manifest-all.json
+```
+
+and write these private local files:
+
+```text
+D:\Our Dialogues\VoiceArchive\mappings\chatgpt-solvoice.json
+D:\Our Dialogues\VoiceArchive\mappings\chatgpt-solvoice-summary.json
+```
+
+Run from the repository root:
+
+```powershell
+node tools\map-solvoice-chatgpt.mjs
+```
+
+Every path can be overridden:
+
+```powershell
+node tools\map-solvoice-chatgpt.mjs --export "D:\private\chatgpt-export" --manifest "D:\private\voice-archive\manifest-all.json" --output "D:\private\voice-archive\mappings\chatgpt-solvoice.json" --report "D:\private\voice-archive\mappings\chatgpt-solvoice-summary.json"
+```
+
+For a known local validation pair, add `--anchor-history-id <id> --anchor-conversation-id <id>`. These private identifiers are optional CLI values and are never stored in the repository.
+
+The mapping contains private local associations and must never be committed. `.gitignore` blocks in-repository `mappings/` directories and the default mapping filenames. Terminal progress deliberately prints only counts, identifiers, confidence labels, and time deltas, never voice or chat text.
+
 ## Test
 
 The tests use a fake in-memory ElevenLabs service and never require an API key or network access:
 
 ```powershell
 node --test --test-isolation=none tests\elevenlabs-voice-archive.test.mjs
+node --test --test-isolation=none tests\map-solvoice-chatgpt.test.mjs
 ```

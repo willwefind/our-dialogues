@@ -79,11 +79,12 @@ OD.adapters = OD.adapters || [];
     return content.thoughts
       .map((item, i) => {
         const text = cleanExportMarkup(item?.content || "");
-        if (!text) return null;
+        const summary = cleanExportMarkup(item?.summary || "");
+        if (!text && !summary) return null;
         return {
           type: "text",
-          text,
-          summary: item?.summary || null,
+          text: text || summary,
+          summary: summary || null,
           finished: item?.finished ?? null,
           index: i
         };
@@ -196,6 +197,8 @@ OD.adapters = OD.adapters || [];
         contentType: msg?.content?.content_type || null,
         model: metadata.model_slug || null,
         reasoningRecap: extra.reasoningRecap || [],
+        reasoningToolIcons: extra.reasoningToolIcons || [],
+        reasoningSourceMessageIds: extra.reasoningSourceMessageIds || [],
         originalMetadata: metadata
       }
     };
@@ -205,6 +208,8 @@ OD.adapters = OD.adapters || [];
     const out = [];
     let pendingThinking = [];
     let pendingRecaps = [];
+    let pendingReasoningToolIcons = [];
+    let pendingReasoningSourceMessageIds = [];
     let pendingReasoningTime = null;
 
     function flushReasoningOnly() {
@@ -220,11 +225,15 @@ OD.adapters = OD.adapters || [];
         metadata: {
           contentType: "reasoning_only",
           reasoningRecap: pendingRecaps,
+          reasoningToolIcons: pendingReasoningToolIcons,
+          reasoningSourceMessageIds: pendingReasoningSourceMessageIds,
           reasoningOnly: true
         }
       });
       pendingThinking = [];
       pendingRecaps = [];
+      pendingReasoningToolIcons = [];
+      pendingReasoningSourceMessageIds = [];
       pendingReasoningTime = null;
     }
 
@@ -238,6 +247,8 @@ OD.adapters = OD.adapters || [];
       if (role === "assistant" && type === "thoughts") {
         if (pendingReasoningTime == null) pendingReasoningTime = msg.create_time ?? null;
         pendingThinking.push(...thinkingItems(content));
+        pendingReasoningToolIcons.push(...asArray(msg?.metadata?.tool_icons).filter(Boolean));
+        if (msg?.id) pendingReasoningSourceMessageIds.push(msg.id);
         continue;
       }
 
@@ -245,6 +256,8 @@ OD.adapters = OD.adapters || [];
         if (pendingReasoningTime == null) pendingReasoningTime = msg.create_time ?? null;
         const recap = visibleText(content);
         if (recap) pendingRecaps.push(recap);
+        pendingReasoningToolIcons.push(...asArray(msg?.metadata?.tool_icons).filter(Boolean));
+        if (msg?.id) pendingReasoningSourceMessageIds.push(msg.id);
         continue;
       }
 
@@ -253,10 +266,14 @@ OD.adapters = OD.adapters || [];
       if (role === "assistant") {
         out.push(makeMessage(msg, node, out.length, {
           thinking: pendingThinking,
-          reasoningRecap: pendingRecaps
+          reasoningRecap: pendingRecaps,
+          reasoningToolIcons: [...new Set(pendingReasoningToolIcons)],
+          reasoningSourceMessageIds: pendingReasoningSourceMessageIds
         }));
         pendingThinking = [];
         pendingRecaps = [];
+        pendingReasoningToolIcons = [];
+        pendingReasoningSourceMessageIds = [];
         pendingReasoningTime = null;
       } else {
         out.push(makeMessage(msg, node, out.length));
