@@ -15,7 +15,7 @@ Currently included:
 - Ciel House Export v1 contract
 - Ciel House adapter
 - Mufy raw-export adapter
-- Provisional ChatGPT official-export adapter
+- ChatGPT official-export adapter validated against a real 2026 export shard
 - Local JSON / ZIP import
 - Conversation list, title/full-text search, message rendering
 - Hide-my-messages toggle
@@ -24,7 +24,7 @@ Currently included:
 
 Planned next:
 
-- Validate ChatGPT adapter against a real 2026 official export
+- Validate multi-shard ChatGPT ZIP import and binary asset resolution against a complete export
 - Add Claude exporter adapters from real samples
 - Better attachment/audio/image rendering
 - EPUB / Markdown / HTML export
@@ -75,11 +75,24 @@ For local testing, opening `index.html` directly works in modern browsers becaus
 |---|---|
 | Ciel House Export v1 | implemented from contract |
 | Mufy `_原始数据.json` | implemented from current known schema |
-| ChatGPT official export | provisional; needs validation against a real 2026 export |
+| ChatGPT official export | JSON shard validated on a real 2026 export; full ZIP asset resolution still in progress |
 | Claude official / plugin exporters | pending real samples |
 | Already-normalized Our Dialogues archive | implemented |
 
 ZIP import uses browser-native decompression where available. JSON can always be imported directly.
+
+## ChatGPT 2026 export notes
+
+A real 2026 official export shard confirmed that ChatGPT conversation JSON is a parent-linked node graph (`mapping`) with an active `current_node`, not a flat message array. The adapter now:
+
+- follows the active branch while recording alternate-branch counts
+- reads `text` and `multimodal_text`
+- preserves file/image/audio attachment metadata
+- groups exported `thoughts` and `reasoning_recap` with the related assistant turn
+- preserves model and source metadata
+- strips opaque private-use citation control tokens from the reading surface while retaining backing metadata
+
+Real private export files are never committed. The public fixture is synthetic.
 
 ## Privacy
 
@@ -97,6 +110,7 @@ docs/
 fixtures/
   ciel-house-v1.json
   normalized-v1.json
+  chatgpt-official-2026.json
 src/
   core/
   adapters/
