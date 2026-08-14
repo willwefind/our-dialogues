@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.1.6-dev — 2026-08-15
+
+- Added optional local SolVoice mapping v2 and VoiceArchive folder selection
+- Attached only exact `strong` mappings to normalized ChatGPT assistant message IDs
+- Added multiple-clip ordering, lazy native audio players, and session-scoped object URL cleanup
+- Added non-invasive missing-message/audio statistics and a private-data-safe real verification tool
+- Kept the ChatGPT export, audio, mapping, and normalized archive immutable and browser-local
+
 ## v0.1.5-dev — 2026-08-14
 
 - Added persistent oldest-first / newest-first conversation sorting, including sorted search results and stable undated fallbacks

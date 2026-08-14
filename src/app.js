@@ -8,7 +8,14 @@ window.OD = window.OD || {};
     current: null,
     sortMode: OD.conversationOrder.readStoredMode(window.localStorage),
     assetSession: null,
+    solVoiceSession: null,
+    solVoiceMapping: null,
+    solVoiceAudioFiles: [],
     mediaObserver: null,
+    solVoiceObserver: null,
+    statusText: "",
+    archiveStatusText: "",
+    statusError: false,
     renderToken: 0
   };
 
@@ -37,9 +44,26 @@ window.OD = window.OD || {};
     return `${amount >= 10 ? amount.toFixed(0) : amount.toFixed(1)} ${unit}`;
   }
 
+  function solVoiceStatusText() {
+    const stats = state.solVoiceSession?.stats;
+    if (stats) {
+      return `SolVoice strong ${stats.strongMappingsTotal} · messages ${stats.strongMappingsWhoseMessageIdExists}/${stats.strongMappingsTotal} · audio ${stats.audioFileResolvedCount}/${stats.strongMappingsTotal} · players ${stats.attachedPlayerCount} · missing message ${stats.missingMessageCount} · missing audio ${stats.missingAudioCount}`;
+    }
+    if (state.solVoiceMapping && !state.archive) return "SolVoice mapping ready · load a ChatGPT export";
+    if (state.solVoiceMapping) return "SolVoice mapping ready · choose VoiceArchive or sol/audio";
+    if (state.solVoiceAudioFiles.length) return `SolVoice audio folder ready (${state.solVoiceAudioFiles.length} files) · choose mapping`;
+    return "";
+  }
+
+  function renderStatus() {
+    $("status").textContent = [state.statusText, solVoiceStatusText()].filter(Boolean).join(" · ");
+    $("status").classList.toggle("error", state.statusError);
+  }
+
   function setStatus(text, error=false) {
-    $("status").textContent = text;
-    $("status").classList.toggle("error", error);
+    state.statusText = text;
+    state.statusError = error;
+    renderStatus();
   }
 
   function conversationHaystack(c) {
@@ -51,10 +75,17 @@ window.OD = window.OD || {};
     state.renderToken += 1;
     state.mediaObserver?.disconnect();
     state.mediaObserver = null;
+    state.solVoiceObserver?.disconnect();
+    state.solVoiceObserver = null;
     try {
       state.assetSession?.objectURLs?.revokeAll?.();
     } catch (error) {
       console.warn("Could not release attachment object URLs", error);
+    }
+    try {
+      state.solVoiceSession?.objectURLs?.revokeAll?.();
+    } catch (error) {
+      console.warn("Could not release SolVoice object URLs", error);
     }
   }
 
@@ -67,6 +98,12 @@ window.OD = window.OD || {};
       console.warn("Could not dispose attachment session", error);
     }
     state.assetSession = null;
+    try {
+      state.solVoiceSession?.dispose?.();
+    } catch (error) {
+      console.warn("Could not dispose SolVoice session", error);
+    }
+    state.solVoiceSession = null;
   }
 
   function renderList() {
@@ -286,6 +323,77 @@ window.OD = window.OD || {};
     elements.forEach(element => state.mediaObserver.observe(element));
   }
 
+  function solVoiceMarkup(clip, index) {
+    return `<figure class="solvoice-player lazy-solvoice" data-solvoice-index="${index}">
+      <figcaption class="solvoice-caption">
+        <span>SolVoice</span>
+        <small title="Reader v1 only attaches confidence=strong mappings">local · strong</small>
+      </figcaption>
+      <div class="solvoice-viewport">
+        <div class="solvoice-loading">Ready when this message scrolls into view</div>
+      </div>
+    </figure>`;
+  }
+
+  async function materializeSolVoice(element, clip) {
+    const manager = state.solVoiceSession?.objectURLs;
+    if (!manager?.get || element.dataset.solvoiceState) return;
+    const token = state.renderToken;
+    element.dataset.solvoiceState = "loading";
+
+    try {
+      const url = await Promise.resolve(manager.get(clip));
+      if (!url) throw new Error("The local SolVoice audio file is unavailable.");
+      if (token !== state.renderToken || !element.isConnected) return;
+      const audio = document.createElement("audio");
+      audio.controls = true;
+      audio.preload = "metadata";
+      audio.src = url;
+      audio.setAttribute("aria-label", "SolVoice local audio");
+      audio.addEventListener("error", () => element.classList.add("is-unavailable"), { once: true });
+      element.querySelector(".solvoice-viewport").replaceChildren(audio);
+      element.dataset.solvoiceState = "loaded";
+      element.classList.add("is-loaded");
+    } catch (error) {
+      console.warn("Could not open local SolVoice audio", error);
+      if (token !== state.renderToken || !element.isConnected) return;
+      element.dataset.solvoiceState = "unavailable";
+      element.classList.add("is-unavailable");
+      const loading = element.querySelector(".solvoice-loading");
+      if (loading) loading.textContent = "Local audio unavailable";
+    }
+  }
+
+  function prepareLazySolVoice(clips) {
+    const elements = [...$("messages").querySelectorAll(".lazy-solvoice")];
+    if (!elements.length || !state.solVoiceSession?.objectURLs?.get) return;
+
+    const load = element => {
+      const clip = clips[Number(element.dataset.solvoiceIndex)];
+      if (clip) void materializeSolVoice(element, clip);
+    };
+    for (const element of elements) {
+      element.addEventListener("pointerenter", () => load(element), { once: true });
+      element.addEventListener("focusin", () => load(element), { once: true });
+    }
+    if (!("IntersectionObserver" in window)) {
+      elements.forEach(load);
+      return;
+    }
+    state.solVoiceObserver = new IntersectionObserver(entries => {
+      for (const entry of entries) {
+        if (!entry.isIntersecting) continue;
+        state.solVoiceObserver?.unobserve(entry.target);
+        load(entry.target);
+      }
+    }, {
+      root: $("main"),
+      rootMargin: "600px 0px",
+      threshold: 0.01
+    });
+    elements.forEach(element => state.solVoiceObserver.observe(element));
+  }
+
   function openConversation(id) {
     const c = (state.archive?.conversations || []).find(x => x.id === id);
     if (!c) return;
@@ -303,6 +411,7 @@ window.OD = window.OD || {};
     $("readerMeta").innerHTML = bits.map(x => `<span class="badge">${esc(x)}</span>`).join("");
 
     const renderedAttachments = [];
+    const renderedSolVoice = [];
     $("messages").innerHTML = (c.messages || []).map(m => {
       const text = OD.schema.textOf(m.content);
       const thinking = OD.schema.textOf(m.thinking);
@@ -313,10 +422,15 @@ window.OD = window.OD || {};
         const index = renderedAttachments.push(attachment) - 1;
         return attachmentMarkup(attachment, index);
       }).join("");
+      const solVoiceHTML = state.solVoiceSession?.clipsForMessage(m.id).map(clip => {
+        const index = renderedSolVoice.push(clip) - 1;
+        return solVoiceMarkup(clip, index);
+      }).join("") || "";
       return `<section class="message${reasoningOnly ? " reasoning-only" : ""}" data-role="${esc(m.role)}">
         <div class="message-who">${esc(m.speaker || m.role)}</div>
         ${text ? `<div class="message-body">${esc(text)}</div>` : ""}
         ${attachmentHTML ? `<div class="attachments">${attachmentHTML}</div>` : ""}
+        ${solVoiceHTML ? `<div class="solvoice-clips">${solVoiceHTML}</div>` : ""}
         ${(thinking || recaps.length) ? `<div class="thinking"><strong>Thinking / reasoning exported by source</strong>${recaps.length ? `\n${esc(recaps.join(" · "))}` : ""}${thinking ? `\n\n${esc(thinking)}` : ""}</div>` : ""}
         ${m.createdAt ? `<div class="message-time">${esc(fmtDate(m.createdAt))}</div>` : ""}
       </section>`;
@@ -324,7 +438,74 @@ window.OD = window.OD || {};
 
     $("main").scrollTop = 0;
     prepareLazyAttachments(renderedAttachments);
+    prepareLazySolVoice(renderedSolVoice);
     renderList();
+  }
+
+  function rebuildSolVoiceSession({ rerender = true } = {}) {
+    const currentId = state.current?.id || null;
+    try {
+      state.solVoiceSession?.dispose?.();
+    } catch (error) {
+      console.warn("Could not dispose the previous SolVoice session", error);
+    }
+    state.solVoiceSession = null;
+
+    if (state.archive && state.solVoiceMapping) {
+      state.solVoiceSession = OD.solVoiceSidecar.buildSession({
+        archive: state.archive,
+        mappingDocument: state.solVoiceMapping,
+        audioFiles: state.solVoiceAudioFiles,
+        urlAPI: URL
+      });
+    }
+    state.statusError = false;
+    if (rerender && currentId && state.archive) openConversation(currentId);
+    renderStatus();
+    return state.solVoiceSession;
+  }
+
+  async function loadSolVoiceMapping(file) {
+    const document = OD.solVoiceSidecar.parseMapping(await file.text());
+    state.solVoiceMapping = document;
+    const session = rebuildSolVoiceSession();
+    state.statusText = state.archiveStatusText;
+    renderStatus();
+    return session;
+  }
+
+  async function loadSolVoiceFolder(files) {
+    const selected = [...files];
+    const mappingFile = OD.solVoiceSidecar.findMappingFile(selected);
+    if (mappingFile) {
+      state.solVoiceMapping = OD.solVoiceSidecar.parseMapping(await mappingFile.text());
+    }
+    state.solVoiceAudioFiles = selected.filter(file =>
+      /\.(?:mp3|m4a|aac|wav|ogg|oga|flac|opus)$/i.test(
+        OD.solVoiceSidecar.normalizePath(file.webkitRelativePath || file.name)
+      )
+    );
+    const session = rebuildSolVoiceSession();
+    state.statusText = state.archiveStatusText;
+    renderStatus();
+    return session;
+  }
+
+  function clearSolVoice() {
+    const currentId = state.current?.id || null;
+    releaseRenderedAssets();
+    try {
+      state.solVoiceSession?.dispose?.();
+    } catch (error) {
+      console.warn("Could not clear SolVoice session", error);
+    }
+    state.solVoiceSession = null;
+    state.solVoiceMapping = null;
+    state.solVoiceAudioFiles = [];
+    state.statusText = state.archiveStatusText;
+    state.statusError = false;
+    if (currentId && state.archive) openConversation(currentId);
+    renderStatus();
   }
 
   function loadArchive(archive, adapterLabel, assetSession=null, importDetails="") {
@@ -333,8 +514,10 @@ window.OD = window.OD || {};
     state.assetSession = assetSession;
     state.archive = archive;
     state.current = null;
+    rebuildSolVoiceSession({ rerender: false });
     const detail = importDetails ? ` · ${importDetails}` : "";
-    setStatus(`已识别：${adapterLabel} · ${archive.conversations.length} 段对话${detail}`);
+    state.archiveStatusText = `已识别：${adapterLabel} · ${archive.conversations.length} 段对话${detail}`;
+    setStatus(state.archiveStatusText);
     renderList();
     const first = OD.conversationOrder.sortConversations(archive.conversations, state.sortMode)[0];
     openConversation(first.id);
@@ -416,6 +599,34 @@ window.OD = window.OD || {};
     }
   });
 
+  $("voiceMappingInput").addEventListener("change", async event => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    try {
+      await loadSolVoiceMapping(file);
+    } catch (error) {
+      console.error(error);
+      setStatus(error?.message || String(error), true);
+    } finally {
+      event.target.value = "";
+    }
+  });
+
+  $("voiceArchiveInput").addEventListener("change", async event => {
+    const files = [...event.target.files];
+    if (!files.length) return;
+    try {
+      await loadSolVoiceFolder(files);
+    } catch (error) {
+      console.error(error);
+      setStatus(error?.message || String(error), true);
+    } finally {
+      event.target.value = "";
+    }
+  });
+
+  $("clearSolVoice").addEventListener("click", clearSolVoice);
+
   $("search").addEventListener("input", renderList);
   for (const button of document.querySelectorAll("[data-sort-mode]")) {
     button.addEventListener("click", () => setSortMode(button.dataset.sortMode));
@@ -433,12 +644,17 @@ window.OD = window.OD || {};
   OD.app = {
     loadChatGPTFolder,
     loadArchive,
+    loadSolVoiceMapping,
+    loadSolVoiceFolder,
+    clearSolVoice,
     openConversation,
     getState: () => ({
       archive: state.archive,
       current: state.current,
       sortMode: state.sortMode,
       hasLocalAssets: !!state.assetSession,
+      hasSolVoice: !!state.solVoiceSession,
+      solVoiceStats: state.solVoiceSession?.stats || null,
       filteredCount: state.filtered.length,
       filteredIds: state.filtered.map(conversation => conversation.id)
     })
@@ -452,4 +668,5 @@ window.OD = window.OD || {};
 
   renderSortControl();
   setStatus("文件只在本机浏览器中解析，不会上传。");
+  state.archiveStatusText = state.statusText;
 })(window.OD);

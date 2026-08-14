@@ -7,6 +7,8 @@ data/
 downloads/
 VoiceArchive/
 voice-archive/
+sol/audio/
+**/sol/audio/
 
 # Local voice-to-export mappings (contain private conversation associations)
 mappings/
@@ -14,6 +16,7 @@ mappings/
 chatgpt-solvoice.json
 chatgpt-solvoice-summary.json
 *.mapping.local.json
+reader-solvoice-verification*.json
 
 # Local credentials
 .env.local

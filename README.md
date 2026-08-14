@@ -19,6 +19,7 @@ Currently included:
 - Local JSON / ZIP / browser folder import
 - Manifest-driven shard merging and lazy local or ZIP-backed attachment loading
 - Inline images, native audio/video controls, and other-file attachment cards
+- Optional local SolVoice sidecar playback for exact, strong message mappings
 - Conversation list, title/full-text search, message rendering
 - Hide-my-messages toggle
 - Thinking/reasoning expand toggle when an export actually contains it
@@ -69,10 +70,10 @@ For GitHub Pages, publish the repository root.
 
 For local testing, opening `index.html` directly works in modern browsers because scripts are classic scripts rather than ES modules.
 
-The Ciel ZIP, manifest, lazy-asset, conversation-order, and JSON/ZIP regression checks use Node's built-in test runner and have no package dependencies:
+The Ciel ZIP, manifest, lazy-asset, SolVoice sidecar, conversation-order, and JSON/ZIP regression checks use Node's built-in test runner and have no package dependencies:
 
 ```text
-node --test --test-isolation=none tests/conversation-order.test.mjs tests/ciel-house-zip.test.mjs tests/chatgpt-export-folder.test.mjs
+node --test --test-isolation=none tests/*.test.mjs
 ```
 
 ## Supported inputs
@@ -82,6 +83,7 @@ node --test --test-isolation=none tests/conversation-order.test.mjs tests/ciel-h
 | Ciel House Export v1 | JSON and lazy-asset ZIP import verified |
 | Mufy `_原始数据.json` | implemented from current known schema |
 | ChatGPT official export | JSON, ZIP, and manifest-driven Export Folder import implemented; folder structure validated against a real 2026 export |
+| SolVoice local sidecar | optional mapping v2 + VoiceArchive or `sol/audio` folder; strong mappings only |
 | Claude official / plugin exporters | pending real samples |
 | Already-normalized Our Dialogues archive | implemented |
 
@@ -100,6 +102,18 @@ The folder importer:
 5. keeps binary files unread until an attachment is actually rendered, then creates a temporary object URL for that local file
 
 Images render inline, audio and video use native browser controls, and other files remain attachment cards. Selecting a folder does not copy its contents into the repository or browser storage.
+
+### Optional local SolVoice playback
+
+SolVoice playback is an optional sidecar. Without it, Reader behaves exactly as before.
+
+1. Load the ChatGPT official Export Folder.
+2. Choose the whole local `VoiceArchive` folder. Reader discovers `mappings/chatgpt-solvoice.json` and indexes `sol/audio` automatically.
+3. Alternatively, choose the `sol/audio` folder and the mapping JSON separately. Individual MP3 selection is not required.
+
+Reader v1 attaches only `confidence === "strong"` mappings, using the normalized assistant `messageId` as an exact key. It never falls back to a title, timestamp, text, or fuzzy match. Multiple strong clips for one assistant message are shown oldest first. Missing message IDs and missing audio files remain out of the reading surface and are summarized as counts in the status area.
+
+The official ChatGPT export, MP3 files, and mapping JSON are not modified, copied into the normalized archive, persisted by Reader, or uploaded. Audio object URLs are created lazily for visible players, cached only for the current render session, and revoked when the conversation, archive, or sidecar changes.
 
 ## ChatGPT 2026 export notes
 
@@ -122,7 +136,7 @@ Real private export files are never committed. The public folder fixture is whol
 
 Never commit real conversation exports to this repository.
 
-The `.gitignore` blocks common export names and private fixture folders. Public fixtures must be synthetic.
+The `.gitignore` blocks common export names, VoiceArchive audio/mappings, local verification output, and private fixture folders. Public fixtures must be synthetic.
 
 ## Project layout
 
@@ -144,10 +158,12 @@ fixtures/
     file_synthetic_*.dat
 src/
   core/
+    solvoice-sidecar.js
   adapters/
   app.js
 tests/
   chatgpt-export-folder.test.mjs
+  solvoice-sidecar.test.mjs
 index.html
 styles.css
 ```

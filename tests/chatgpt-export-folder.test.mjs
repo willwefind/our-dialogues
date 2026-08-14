@@ -269,6 +269,15 @@ test("gitignore blocks private export files except exact synthetic fixtures", as
     .map(line => line.trim())
     .filter(line => line && !line.startsWith("#"));
   const privatePatterns = [
+    "VoiceArchive/",
+    "voice-archive/",
+    "sol/audio/",
+    "**/sol/audio/",
+    "mappings/",
+    "**/mappings/",
+    "chatgpt-solvoice.json",
+    "chatgpt-solvoice-summary.json",
+    "reader-solvoice-verification*.json",
     "conversations.json",
     "conversations-*.json",
     "*.dat",

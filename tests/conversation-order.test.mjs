@@ -53,7 +53,8 @@ async function loadAppRuntime(savedSortMode="asc") {
   const ids = [
     "status", "search", "conversationList", "archiveMeta", "welcome", "reader",
     "currentTitle", "readerTitle", "readerMeta", "messages", "main", "fileInput",
-    "folderInput", "hideUser", "showThinking", "theme", "sidebarToggle", "sidebar"
+    "folderInput", "voiceMappingInput", "voiceArchiveInput", "clearSolVoice",
+    "hideUser", "showThinking", "theme", "sidebarToggle", "sidebar"
   ];
   const elements = new Map(ids.map(id => [id, fakeElement(id)]));
   const sortAscending = fakeElement("sortAscending");

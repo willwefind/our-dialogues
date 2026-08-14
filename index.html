@@ -29,6 +29,19 @@
         </label>
       </div>
 
+      <div class="sidecar-picks" aria-label="Optional local SolVoice sidecar">
+        <div class="sidecar-title">Optional SolVoice sidecar</div>
+        <label class="sidecar-pick">
+          <input id="voiceArchiveInput" type="file" webkitdirectory directory multiple hidden>
+          <span>Choose VoiceArchive / sol/audio folder</span>
+        </label>
+        <label class="sidecar-pick">
+          <input id="voiceMappingInput" type="file" accept=".json,application/json" hidden>
+          <span>Choose mapping JSON</span>
+        </label>
+        <button id="clearSolVoice" class="sidecar-clear" type="button">Clear SolVoice</button>
+      </div>
+
       <div id="status" class="status" role="status" aria-live="polite">文件只在本机浏览器中解析。</div>
     </header>
 
@@ -81,6 +94,7 @@
   <script src="src/core/conversation-order.js"></script>
   <script src="src/core/zip.js"></script>
   <script src="src/core/chatgpt-export-folder.js"></script>
+  <script src="src/core/solvoice-sidecar.js"></script>
   <script src="src/adapters/normalized.js"></script>
   <script src="src/adapters/ciel-house.js"></script>
   <script src="src/adapters/mufy.js"></script>
