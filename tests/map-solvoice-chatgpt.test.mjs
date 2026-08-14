@@ -25,7 +25,11 @@ function voice(id, seconds, text = "") {
   };
 }
 
-function assistant(id, seconds, text = "", { apiTool = false, voiceSummary = false } = {}) {
+function assistant(id, seconds, text = "", {
+  apiTool = false,
+  voiceSummary = false,
+  reasoningSources = []
+} = {}) {
   return {
     id,
     role: "assistant",
@@ -35,6 +39,7 @@ function assistant(id, seconds, text = "", { apiTool = false, voiceSummary = fal
     metadata: {
       originalMetadata: { tool_icons: apiTool ? ["api_tool"] : [] },
       reasoningToolIcons: [],
+      reasoningSources,
       reasoningRecap: []
     }
   };
@@ -58,6 +63,33 @@ test("single exact time and text match is accepted as exact", () => {
   assert.equal(result.mappings[0].confidence, "exact");
   assert.equal(result.mappings[0].messageId, "message-exact");
   assert.equal(result.mappings[0].evidence.text.score, 1);
+  assert.equal(result.mappings[0].effectiveAnchorSource, "assistant_message");
+});
+
+test("effective anchor prefers a timestamped reasoning api_tool source", () => {
+  const result = mapSolVoiceRecords({
+    voiceRecords: [voice("voice-effective", 1_105, "spoken elsewhere")],
+    conversations: [conversation("conv-effective", [
+      assistant("message-effective", 1_000, "different visible text", {
+        voiceSummary: true,
+        reasoningSources: [{
+          messageId: "tool-source-effective",
+          createTime: 1_100,
+          contentType: "thoughts",
+          toolIcons: ["api_tool"]
+        }]
+      })
+    ])]
+  });
+  const mapping = result.mappings[0];
+  assert.equal(mapping.confidence, "strong");
+  assert.equal(mapping.effectiveAnchorSource, "reasoning_api_tool");
+  assert.equal(mapping.effectiveAnchorMessageId, "tool-source-effective");
+  assert.equal(mapping.effectiveAnchorAt, iso(1_100));
+  assert.equal(mapping.timeDeltaSec, 5);
+  assert.equal(mapping.evidence.time.visibleMessageDeltaSec, 105);
+  assert.equal(mapping.reasoningSources[0].createTime, 1_100);
+  assert.equal(mapping.reasoningSources[0].createdAt, iso(1_100));
 });
 
 test("near time without text or tool evidence stays ambiguous", () => {
@@ -203,6 +235,20 @@ test("folder integration reuses the official adapter and retains reasoning api_t
   assert.equal(result.mappings[0].messageId, "visible-message");
   assert.equal(result.mappings[0].evidence.tool.apiTool, true);
   assert.equal(result.mappings[0].confidence, "exact");
+  assert.equal(result.mappings[0].effectiveAnchorSource, "reasoning_api_tool");
+  assert.equal(result.mappings[0].effectiveAnchorMessageId, "thought-message");
+  assert.equal(result.mappings[0].effectiveAnchorAt, iso(1_009));
+  assert.equal(result.mappings[0].timeDeltaSec, 1);
+  assert.equal(result.mappings[0].evidence.time.visibleMessageDeltaSec, 2);
+  assert.equal(result.mappings[0].reasoningSources[0].createTime, 1_009);
   assert.ok(logs.every(message => !message.includes("Synthetic spoken text")));
-  assert.equal(JSON.parse(await readFile(reportPath, "utf8")).summary.total, 1);
+  const mappingFile = JSON.parse(await readFile(outputPath, "utf8"));
+  assert.equal(mappingFile.version, 2);
+  assert.equal(mappingFile.policy.visibleMessageTimestampPreserved, true);
+  const report = JSON.parse(await readFile(reportPath, "utf8"));
+  assert.equal(report.summary.total, 1);
+  assert.equal(report.summary.timeDeltaSec.basis, "effectiveAnchorTime");
+  assert.equal(report.summary.timeDeltaSec.medianAbsolute, 1);
+  assert.equal(report.summary.visibleMessageTimeDeltaSec.medianAbsolute, 2);
+  assert.equal(report.summary.effectiveAnchorUsage.reasoningApiTool, 1);
 });

@@ -92,6 +92,15 @@ OD.adapters = OD.adapters || [];
       .filter(Boolean);
   }
 
+  function reasoningSource(msg, contentType) {
+    return {
+      messageId: msg?.id || null,
+      createTime: msg?.create_time ?? null,
+      contentType: contentType || null,
+      toolIcons: asArray(msg?.metadata?.tool_icons).filter(Boolean)
+    };
+  }
+
   function attachmentType(mime) {
     const m = String(mime || "").toLowerCase();
     if (m.startsWith("image/")) return "image";
@@ -199,6 +208,7 @@ OD.adapters = OD.adapters || [];
         reasoningRecap: extra.reasoningRecap || [],
         reasoningToolIcons: extra.reasoningToolIcons || [],
         reasoningSourceMessageIds: extra.reasoningSourceMessageIds || [],
+        reasoningSources: extra.reasoningSources || [],
         originalMetadata: metadata
       }
     };
@@ -210,6 +220,7 @@ OD.adapters = OD.adapters || [];
     let pendingRecaps = [];
     let pendingReasoningToolIcons = [];
     let pendingReasoningSourceMessageIds = [];
+    let pendingReasoningSources = [];
     let pendingReasoningTime = null;
 
     function flushReasoningOnly() {
@@ -227,6 +238,7 @@ OD.adapters = OD.adapters || [];
           reasoningRecap: pendingRecaps,
           reasoningToolIcons: pendingReasoningToolIcons,
           reasoningSourceMessageIds: pendingReasoningSourceMessageIds,
+          reasoningSources: pendingReasoningSources,
           reasoningOnly: true
         }
       });
@@ -234,6 +246,7 @@ OD.adapters = OD.adapters || [];
       pendingRecaps = [];
       pendingReasoningToolIcons = [];
       pendingReasoningSourceMessageIds = [];
+      pendingReasoningSources = [];
       pendingReasoningTime = null;
     }
 
@@ -249,6 +262,7 @@ OD.adapters = OD.adapters || [];
         pendingThinking.push(...thinkingItems(content));
         pendingReasoningToolIcons.push(...asArray(msg?.metadata?.tool_icons).filter(Boolean));
         if (msg?.id) pendingReasoningSourceMessageIds.push(msg.id);
+        pendingReasoningSources.push(reasoningSource(msg, type));
         continue;
       }
 
@@ -258,6 +272,7 @@ OD.adapters = OD.adapters || [];
         if (recap) pendingRecaps.push(recap);
         pendingReasoningToolIcons.push(...asArray(msg?.metadata?.tool_icons).filter(Boolean));
         if (msg?.id) pendingReasoningSourceMessageIds.push(msg.id);
+        pendingReasoningSources.push(reasoningSource(msg, type));
         continue;
       }
 
@@ -268,12 +283,14 @@ OD.adapters = OD.adapters || [];
           thinking: pendingThinking,
           reasoningRecap: pendingRecaps,
           reasoningToolIcons: [...new Set(pendingReasoningToolIcons)],
-          reasoningSourceMessageIds: pendingReasoningSourceMessageIds
+          reasoningSourceMessageIds: pendingReasoningSourceMessageIds,
+          reasoningSources: pendingReasoningSources
         }));
         pendingThinking = [];
         pendingRecaps = [];
         pendingReasoningToolIcons = [];
         pendingReasoningSourceMessageIds = [];
+        pendingReasoningSources = [];
         pendingReasoningTime = null;
       } else {
         out.push(makeMessage(msg, node, out.length));

@@ -175,6 +175,7 @@ test("merged folder conversations pass through the official adapter", async () =
   assert.equal(parsed.archive.conversations[0].messages[1].thinking.length, 1);
   assert.equal(parsed.archive.conversations[0].messages[1].metadata.reasoningRecap.length, 1);
   assert.ok(Array.isArray(parsed.archive.conversations[0].messages[1].metadata.reasoningToolIcons));
+  assert.ok(Array.isArray(parsed.archive.conversations[0].messages[1].metadata.reasoningSources));
 });
 
 test("library metadata wrappers are traversed instead of mistaken for file records", async () => {

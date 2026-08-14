@@ -7,7 +7,7 @@ import { fileURLToPath } from "node:url";
 const SCRIPT_PATH = fileURLToPath(import.meta.url);
 const REPOSITORY_ROOT = path.resolve(path.dirname(SCRIPT_PATH), "..");
 const FORMAT = "our-dialogues.solvoice-chatgpt-mapping";
-const VERSION = 1;
+const VERSION = 2;
 const VOICE_PATTERN = /\b(?:voice|speech|synthesi[sz](?:e|ed|ing|er|ation)?|audio|speak(?:ing|s|er)?|spoken|tts|text[ -]?to[ -]?speech)\b|语音|合成|朗读|声音|说话|音声|発話|読み上げ|スピーチ/giu;
 const NORMALIZED_TEXT_CACHE = new Map();
 
@@ -276,6 +276,26 @@ function unixSeconds(value) {
   return Number.isFinite(parsed) ? parsed / 1000 : null;
 }
 
+function isoFromUnix(seconds) {
+  if (!Number.isFinite(seconds)) return null;
+  return new Date(seconds * 1000).toISOString();
+}
+
+function normalizeReasoningSource(source) {
+  if (!source || typeof source !== "object") return null;
+  const createdUnix = unixSeconds(source.createTime ?? source.createdAt);
+  const toolIcons = asStringArray(source.toolIcons);
+  return {
+    messageId: source.messageId == null ? null : String(source.messageId),
+    createTime: source.createTime ?? null,
+    createdAt: isoFromUnix(createdUnix),
+    createdUnix,
+    contentType: source.contentType == null ? null : String(source.contentType),
+    toolIcons,
+    apiTool: toolIcons.includes("api_tool")
+  };
+}
+
 export function buildAssistantAnchors(conversations) {
   const anchors = [];
   for (const conversation of conversations || []) {
@@ -289,9 +309,13 @@ export function buildAssistantAnchors(conversations) {
         ...asStringArray(metadata.reasoningRecap),
         ...(message.thinking || []).map(item => item?.summary || "")
       ].filter(Boolean).join("\n");
+      const reasoningSources = (Array.isArray(metadata.reasoningSources) ? metadata.reasoningSources : [])
+        .map(normalizeReasoningSource)
+        .filter(Boolean);
       const icons = new Set([
         ...asStringArray(metadata.originalMetadata?.tool_icons),
-        ...asStringArray(metadata.reasoningToolIcons)
+        ...asStringArray(metadata.reasoningToolIcons),
+        ...reasoningSources.flatMap(source => source.toolIcons)
       ]);
       const createdUnix = unixSeconds(message.createdAt);
       if (createdUnix != null && (visibleText || reasoningText || icons.size)) {
@@ -307,13 +331,54 @@ export function buildAssistantAnchors(conversations) {
           apiTool: icons.has("api_tool"),
           voiceKeywords: voiceKeywords(reasoningText),
           reasoningOnly: metadata.reasoningOnly === true,
-          reasoningSourceMessageIds: asStringArray(metadata.reasoningSourceMessageIds)
+          reasoningSourceMessageIds: asStringArray(metadata.reasoningSourceMessageIds),
+          reasoningSources
         });
       }
       assistantIndex += 1;
     }
   }
   return anchors;
+}
+
+function closestReasoningSource(sources, voiceUnix) {
+  return [...sources].sort((left, right) => Math.abs(voiceUnix - left.createdUnix)
+    - Math.abs(voiceUnix - right.createdUnix)
+    || left.createdUnix - right.createdUnix
+    || String(left.messageId).localeCompare(String(right.messageId)))[0] || null;
+}
+
+export function effectiveAnchorTime(anchor, voiceUnix) {
+  const timedSources = (anchor.reasoningSources || []).filter(source => Number.isFinite(source.createdUnix));
+  const toolSource = closestReasoningSource(timedSources.filter(source => source.apiTool), voiceUnix);
+  if (toolSource) {
+    return {
+      unix: toolSource.createdUnix,
+      at: toolSource.createdAt,
+      source: "reasoning_api_tool",
+      sourceMessageId: toolSource.messageId,
+      sourceContentType: toolSource.contentType
+    };
+  }
+  if (anchor.voiceKeywords?.length) {
+    const reasoningSource = closestReasoningSource(timedSources, voiceUnix);
+    if (reasoningSource) {
+      return {
+        unix: reasoningSource.createdUnix,
+        at: reasoningSource.createdAt,
+        source: "reasoning_voice_summary",
+        sourceMessageId: reasoningSource.messageId,
+        sourceContentType: reasoningSource.contentType
+      };
+    }
+  }
+  return {
+    unix: anchor.messageCreatedUnix,
+    at: anchor.messageCreatedAt,
+    source: "assistant_message",
+    sourceMessageId: anchor.messageId,
+    sourceContentType: null
+  };
 }
 
 function timePoints(absDeltaSec) {
@@ -340,8 +405,10 @@ function textPoints(similarity) {
 export function scoreCandidate(voice, anchor) {
   const voiceUnix = unixSeconds(voice.createdAt ?? voice.dateUnix);
   if (voiceUnix == null) return null;
-  const deltaSec = voiceUnix - anchor.messageCreatedUnix;
+  const effectiveAnchor = effectiveAnchorTime(anchor, voiceUnix);
+  const deltaSec = voiceUnix - effectiveAnchor.unix;
   const absDeltaSec = Math.abs(deltaSec);
+  const visibleMessageDeltaSec = voiceUnix - anchor.messageCreatedUnix;
   const text = absDeltaSec <= 24 * 3600
     ? textSimilarity(voice.text, anchor.visibleText)
     : farTextSimilarity(voice.text, anchor.visibleText);
@@ -365,7 +432,17 @@ export function scoreCandidate(voice, anchor) {
     orderAligned: false,
     orderMethod: "independent",
     evidence: {
-      time: { deltaSec, absDeltaSec, points: timeScore },
+      time: {
+        deltaSec,
+        absDeltaSec,
+        points: timeScore,
+        effectiveAnchorAt: effectiveAnchor.at,
+        effectiveAnchorSource: effectiveAnchor.source,
+        effectiveAnchorMessageId: effectiveAnchor.sourceMessageId,
+        effectiveAnchorContentType: effectiveAnchor.sourceContentType,
+        visibleMessageAt: anchor.messageCreatedAt,
+        visibleMessageDeltaSec
+      },
       text: { ...text, points: textScore },
       tool: { apiTool: anchor.apiTool, points: toolScore },
       voiceSummary: { matched: anchor.voiceKeywords.length > 0, keywords: anchor.voiceKeywords, points: voiceScore },
@@ -492,7 +569,11 @@ function publicCandidate(candidate, selected = false) {
     messageId: candidate.messageId,
     messageIndex: candidate.messageIndex,
     messageCreatedAt: candidate.messageCreatedAt,
+    effectiveAnchorAt: candidate.evidence.time.effectiveAnchorAt,
+    effectiveAnchorSource: candidate.evidence.time.effectiveAnchorSource,
+    effectiveAnchorMessageId: candidate.evidence.time.effectiveAnchorMessageId,
     timeDeltaSec: Number(candidate.deltaSec.toFixed(3)),
+    reasoningSources: candidate.reasoningSources,
     score: candidate.score,
     selected,
     evidence: candidate.evidence
@@ -534,7 +615,11 @@ export function mapSolVoiceRecords({ voiceRecords, conversations, topN = 5 }) {
       messageId: accepted ? selected?.messageId || null : null,
       messageIndex: accepted ? selected?.messageIndex ?? null : null,
       messageCreatedAt: accepted ? selected?.messageCreatedAt || null : null,
+      effectiveAnchorAt: accepted ? selected?.evidence.time.effectiveAnchorAt || null : null,
+      effectiveAnchorSource: accepted ? selected?.evidence.time.effectiveAnchorSource || null : null,
+      effectiveAnchorMessageId: accepted ? selected?.evidence.time.effectiveAnchorMessageId || null : null,
       timeDeltaSec: accepted && selected ? Number(selected.deltaSec.toFixed(3)) : null,
+      reasoningSources: accepted ? selected?.reasoningSources || [] : [],
       confidence,
       score: selected?.score ?? 0,
       evidence: selected?.evidence || null,
@@ -556,6 +641,9 @@ export function summarizeMappings(mappings, { anchorHistoryItemId, anchorConvers
   for (const mapping of mappings) confidence[mapping.confidence] += 1;
   const accepted = mappings.filter(mapping => !["ambiguous", "unmatched"].includes(mapping.confidence));
   const deltas = accepted.map(mapping => Math.abs(mapping.timeDeltaSec)).filter(Number.isFinite);
+  const visibleDeltas = accepted
+    .map(mapping => Math.abs(mapping.evidence?.time?.visibleMessageDeltaSec))
+    .filter(Number.isFinite);
   const grouped = new Map();
   for (const mapping of accepted) {
     const current = grouped.get(mapping.conversationId) || { conversationId: mapping.conversationId, count: 0 };
@@ -573,7 +661,11 @@ export function summarizeMappings(mappings, { anchorHistoryItemId, anchorConvers
     messageId: targetCandidate.messageId,
     messageIndex: targetCandidate.messageIndex,
     messageCreatedAt: targetCandidate.messageCreatedAt,
+    effectiveAnchorAt: targetCandidate.effectiveAnchorAt,
+    effectiveAnchorSource: targetCandidate.effectiveAnchorSource,
+    effectiveAnchorMessageId: targetCandidate.effectiveAnchorMessageId,
     timeDeltaSec: targetCandidate.timeDeltaSec,
+    reasoningSources: targetCandidate.reasoningSources,
     score: targetCandidate.score,
     selected: targetCandidate.selected,
     evidence: targetCandidate.evidence
@@ -585,8 +677,18 @@ export function summarizeMappings(mappings, { anchorHistoryItemId, anchorConvers
     byConversation: [...grouped.values()].sort((left, right) => right.count - left.count
       || left.conversationId.localeCompare(right.conversationId)),
     timeDeltaSec: {
+      basis: "effectiveAnchorTime",
       maximumAbsolute: deltas.length ? Number(Math.max(...deltas).toFixed(3)) : null,
       medianAbsolute: deltas.length ? Number(median(deltas).toFixed(3)) : null
+    },
+    visibleMessageTimeDeltaSec: {
+      maximumAbsolute: visibleDeltas.length ? Number(Math.max(...visibleDeltas).toFixed(3)) : null,
+      medianAbsolute: visibleDeltas.length ? Number(median(visibleDeltas).toFixed(3)) : null
+    },
+    effectiveAnchorUsage: {
+      reasoningApiTool: accepted.filter(mapping => mapping.effectiveAnchorSource === "reasoning_api_tool").length,
+      reasoningVoiceSummary: accepted.filter(mapping => mapping.effectiveAnchorSource === "reasoning_voice_summary").length,
+      assistantMessage: accepted.filter(mapping => mapping.effectiveAnchorSource === "assistant_message").length
     },
     evidenceUsage: {
       text: accepted.filter(mapping => mapping.evidence?.text?.score >= 0.20).length,
@@ -600,6 +702,9 @@ export function summarizeMappings(mappings, { anchorHistoryItemId, anchorConvers
       confidence: target.confidence,
       selectedConversationId: target.conversationId,
       selectedMessageId: target.messageId,
+      effectiveAnchorAt: target.effectiveAnchorAt,
+      effectiveAnchorSource: target.effectiveAnchorSource,
+      effectiveAnchorMessageId: target.effectiveAnchorMessageId,
       timeDeltaSec: target.timeDeltaSec,
       score: target.score,
       expectedConversationCandidate: targetCandidateSummary,
@@ -651,7 +756,9 @@ export async function runMappingTool({
         acceptedConfidence: ["exact", "strong", "probable"],
         ambiguousAndUnmatchedHaveNoSelectedMapping: true,
         multipleVoiceClipsPerAssistantTurn: true,
-        orderStrategy: "conversation-monotonic-dp"
+        orderStrategy: "conversation-monotonic-dp",
+        timeStrategy: "reasoning_api_tool_then_voice_summary_then_assistant_message",
+        visibleMessageTimestampPreserved: true
       },
       summary,
       mappings

@@ -114,6 +114,8 @@ $all.counts
 
 The matcher combines UTC/Unix time distance, punctuation-insensitive multilingual text similarity, `api_tool` metadata, voice/speech wording in exported thoughts or reasoning recaps, and conversation-level monotonic dynamic programming. More than one clip may map to the same assistant turn. Conservative thresholds leave weak results as `ambiguous` or `unmatched`; those records have no accepted conversation or message ID, while their top candidates remain available for local review.
 
+The official adapter preserves every attached reasoning source's message ID, raw `create_time`, content type, and tool icons. For each clip, `effectiveAnchorTime` prefers the nearest timestamped reasoning source carrying `api_tool`, then a timestamped voice-summary reasoning source, and finally the visible assistant message time. Mapping evidence retains both the effective delta and the visible-message delta; the source timestamp never replaces or mutates the exported message timestamp.
+
 On Windows, the defaults read:
 
 ```text
