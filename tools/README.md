@@ -21,7 +21,21 @@ VoiceArchive/
   manifest-all.json
 ```
 
-Unknown `voice_id` records are written to `unknown/manifest.json` and `manifest-all.json`, but their audio is not downloaded. Every known record retains `historyItemId`, `voiceId`, `speaker`, `createdAt`, `text`, `requestId`, `modelId`, `source`, `audioPath`, and useful content metadata.
+The exporter supports both ElevenLabs History shapes: classic items with top-level `voice_id` / `voice_name` / `text`, and dialogue items where those top-level fields are null and the values live in `dialogue[]`. A non-empty top-level `voice_id` always wins. When it is absent, exactly one unique non-empty dialogue voice ID may classify the item. Multiple dialogue voice IDs are marked `mixed`, kept in the `unknown` metadata bucket, and never downloaded automatically.
+
+Unknown and mixed records are written to `unknown/manifest.json` and `manifest-all.json`, but their audio is not downloaded. Manifest schema version 2 keeps the complete raw `dialogue` array and adds these normalized fields:
+
+| Field | Meaning |
+| --- | --- |
+| `voiceId` | Top-level voice ID, or the sole unique dialogue voice ID; null for mixed/missing voices. |
+| `voiceIdSource` | `top-level`, `dialogue-single`, `dialogue-mixed`, or `none`. |
+| `dialogueVoiceIds` | Every unique non-empty `dialogue[].voice_id`, in source order. |
+| `speaker` | `sol`, `ciel`, `unknown`, or `mixed`. |
+| `voiceName` | Top-level name when present, otherwise the matching dialogue name for a resolved voice. |
+| `text` / `textSource` | Top-level text when present; otherwise non-empty dialogue texts joined with newlines. |
+| `dialogue` | The complete dialogue metadata returned by ElevenLabs, or null. |
+
+Version 1 `manifest-all.json` files remain valid resume inputs and are upgraded in place on the next run. In `counts`, `unknown` remains the complete non-downloaded bucket for backward compatibility; `mixed` is an additional subset count. Every record also retains `historyItemId`, `createdAt`, `requestId`, `modelId`, `source`, `audioPath`, and useful content metadata.
 
 Downloads use deterministic filenames and temporary `.part` files. On a repeated run, a non-empty existing audio file is kept rather than downloaded again. History pages and manifest records are de-duplicated by `historyItemId`. Network failures, HTTP 429, and server errors use exponential retries; the server's `Retry-After` header is honored.
 
@@ -79,9 +93,9 @@ Inspect the summary and compare each known manifest's item count with its audio 
 
 ```powershell
 $root = "D:\Our Dialogues\VoiceArchive"
-$all = Get-Content "$root\manifest-all.json" -Raw | ConvertFrom-Json
-$sol = Get-Content "$root\sol\manifest.json" -Raw | ConvertFrom-Json
-$ciel = Get-Content "$root\ciel\manifest.json" -Raw | ConvertFrom-Json
+$all = Get-Content "$root\manifest-all.json" -Raw -Encoding UTF8 | ConvertFrom-Json
+$sol = Get-Content "$root\sol\manifest.json" -Raw -Encoding UTF8 | ConvertFrom-Json
+$ciel = Get-Content "$root\ciel\manifest.json" -Raw -Encoding UTF8 | ConvertFrom-Json
 
 $all.counts
 [pscustomobject]@{
@@ -92,7 +106,7 @@ $all.counts
 }
 ```
 
-`SolManifest` should equal `SolAudio`, and `CielManifest` should equal `CielAudio`, unless the command reported failed downloads. Unknown records are metadata-only by design.
+`SolManifest` should equal `SolAudio`, and `CielManifest` should equal `CielAudio`, unless the command reported failed downloads. Unknown and mixed records are metadata-only by design. An interrupted or version 1 archive can be rerun with the same command: existing non-empty audio, including the already downloaded Sol MP3, is skipped.
 
 ## Test
 

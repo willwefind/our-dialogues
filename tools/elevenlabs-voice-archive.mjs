@@ -21,7 +21,7 @@ export const DEFAULT_VOICES = Object.freeze({
 
 const API_BASE_URL = "https://api.elevenlabs.io";
 const FORMAT = "our-dialogues-elevenlabs-voice-archive";
-const VERSION = 1;
+const VERSION = 2;
 const SCRIPT_PATH = fileURLToPath(import.meta.url);
 const REPOSITORY_ROOT = path.resolve(path.dirname(SCRIPT_PATH), "..");
 
@@ -200,6 +200,44 @@ function speakerForVoice(voiceId, voices) {
   return "unknown";
 }
 
+function nonEmptyString(value) {
+  if (value == null) return null;
+  const normalized = String(value).trim();
+  return normalized || null;
+}
+
+function dialogueMetadata(item) {
+  return Array.isArray(item.dialogue) ? item.dialogue : null;
+}
+
+function dialogueVoiceIds(dialogue) {
+  if (!dialogue) return [];
+  return [...new Set(dialogue
+    .map(entry => entry && typeof entry === "object" ? nonEmptyString(entry.voice_id) : null)
+    .filter(Boolean))];
+}
+
+function dialogueText(dialogue) {
+  if (!dialogue) return null;
+  const parts = dialogue
+    .map(entry => entry && typeof entry === "object" && typeof entry.text === "string"
+      ? entry.text
+      : null)
+    .filter(text => text != null && text.length > 0);
+  return parts.length ? parts.join("\n") : null;
+}
+
+function dialogueVoiceName(dialogue, voiceId) {
+  if (!dialogue || !voiceId) return null;
+  for (const entry of dialogue) {
+    if (!entry || typeof entry !== "object") continue;
+    if (nonEmptyString(entry.voice_id) !== voiceId) continue;
+    const voiceName = nonEmptyString(entry.voice_name);
+    if (voiceName) return voiceName;
+  }
+  return null;
+}
+
 function isoDate(dateUnix) {
   if (!Number.isFinite(Number(dateUnix))) return null;
   const date = new Date(Number(dateUnix) * 1000);
@@ -222,8 +260,35 @@ function safeSegment(value) {
 
 export function normalizeHistoryItem(item, voices = DEFAULT_VOICES) {
   const historyItemId = item.history_item_id == null ? null : String(item.history_item_id);
-  const voiceId = item.voice_id == null ? null : String(item.voice_id);
-  const speaker = speakerForVoice(voiceId, voices);
+  const dialogue = dialogueMetadata(item);
+  const uniqueDialogueVoiceIds = dialogueVoiceIds(dialogue);
+  const topLevelVoiceId = nonEmptyString(item.voice_id);
+  let voiceId = topLevelVoiceId;
+  let voiceIdSource = "top-level";
+  let speaker;
+
+  if (!topLevelVoiceId && uniqueDialogueVoiceIds.length === 1) {
+    [voiceId] = uniqueDialogueVoiceIds;
+    voiceIdSource = "dialogue-single";
+  } else if (!topLevelVoiceId && uniqueDialogueVoiceIds.length > 1) {
+    voiceId = null;
+    voiceIdSource = "dialogue-mixed";
+  } else if (!topLevelVoiceId) {
+    voiceId = null;
+    voiceIdSource = "none";
+  }
+
+  if (voiceIdSource === "dialogue-mixed") {
+    speaker = "mixed";
+  } else {
+    speaker = speakerForVoice(voiceId, voices);
+  }
+
+  const topLevelText = typeof item.text === "string" ? item.text : null;
+  const extractedDialogueText = dialogueText(dialogue);
+  const text = topLevelText ?? extractedDialogueText;
+  const topLevelVoiceName = nonEmptyString(item.voice_name);
+  const voiceName = topLevelVoiceName ?? dialogueVoiceName(dialogue, voiceId);
   const createdAt = isoDate(item.date_unix);
   const datePart = createdAt ? createdAt.replace(/:/g, "-") : "unknown-date";
   const filename = historyItemId
@@ -232,16 +297,20 @@ export function normalizeHistoryItem(item, voices = DEFAULT_VOICES) {
   return {
     historyItemId,
     voiceId,
+    voiceIdSource,
+    dialogueVoiceIds: uniqueDialogueVoiceIds,
     speaker,
     createdAt,
-    text: typeof item.text === "string" ? item.text : null,
+    text,
+    textSource: topLevelText != null ? "top-level" : extractedDialogueText != null ? "dialogue" : "none",
+    dialogue,
     requestId: item.request_id == null ? null : String(item.request_id),
     modelId: item.model_id == null ? null : String(item.model_id),
     source: item.source == null ? null : String(item.source),
-    audioPath: speaker === "unknown" || !filename ? null : `${speaker}/audio/${filename}`,
+    audioPath: !["sol", "ciel"].includes(speaker) || !filename ? null : `${speaker}/audio/${filename}`,
     contentType: item.content_type == null ? null : String(item.content_type),
     outputFormat: item.output_format == null ? null : String(item.output_format),
-    voiceName: item.voice_name == null ? null : String(item.voice_name),
+    voiceName,
     dateUnix: Number.isFinite(Number(item.date_unix)) ? Number(item.date_unix) : null
   };
 }
@@ -300,17 +369,24 @@ async function persistManifests(outputDir, records, voices) {
   const items = [...records.values()].sort(compareItems);
   const sol = items.filter(item => item.speaker === "sol");
   const ciel = items.filter(item => item.speaker === "ciel");
-  const unknown = items.filter(item => item.speaker === "unknown");
+  const mixed = items.filter(item => item.speaker === "mixed");
+  const unresolved = items.filter(item => !["sol", "ciel"].includes(item.speaker));
   await Promise.all([
     atomicJSON(path.join(outputDir, "sol", "manifest.json"), manifestFor(sol, generatedAt, "sol", voices.sol)),
     atomicJSON(path.join(outputDir, "ciel", "manifest.json"), manifestFor(ciel, generatedAt, "ciel", voices.ciel)),
-    atomicJSON(path.join(outputDir, "unknown", "manifest.json"), manifestFor(unknown, generatedAt, "unknown", null)),
+    atomicJSON(path.join(outputDir, "unknown", "manifest.json"), manifestFor(unresolved, generatedAt, "unknown", null)),
     atomicJSON(path.join(outputDir, "manifest-all.json"), {
       format: FORMAT,
       version: VERSION,
       generatedAt,
       voices,
-      counts: { all: items.length, sol: sol.length, ciel: ciel.length, unknown: unknown.length },
+      counts: {
+        all: items.length,
+        sol: sol.length,
+        ciel: ciel.length,
+        unknown: unresolved.length,
+        mixed: mixed.length
+      },
       items
     })
   ]);
@@ -414,7 +490,7 @@ export async function exportVoiceArchive({
   let skipped = 0;
   let failed = 0;
   const knownItems = [...records.values()]
-    .filter(item => item.speaker !== "unknown" && item.audioPath)
+    .filter(item => ["sol", "ciel"].includes(item.speaker) && item.audioPath)
     .sort(compareItems);
 
   for (let index = 0; index < knownItems.length; index += 1) {
@@ -446,8 +522,10 @@ export async function exportVoiceArchive({
   }
 
   for (const item of records.values()) {
-    if (item.speaker === "unknown") {
-      item.downloadStatus = "not-downloaded-unknown-voice";
+    if (!["sol", "ciel"].includes(item.speaker)) {
+      item.downloadStatus = item.speaker === "mixed"
+        ? "not-downloaded-mixed-voice"
+        : "not-downloaded-unknown-voice";
       item.downloadError = null;
     }
   }
@@ -457,7 +535,8 @@ export async function exportVoiceArchive({
     total: records.size,
     sol: [...records.values()].filter(item => item.speaker === "sol").length,
     ciel: [...records.values()].filter(item => item.speaker === "ciel").length,
-    unknown: [...records.values()].filter(item => item.speaker === "unknown").length,
+    unknown: [...records.values()].filter(item => !["sol", "ciel"].includes(item.speaker)).length,
+    mixed: [...records.values()].filter(item => item.speaker === "mixed").length,
     downloaded,
     skipped,
     failed
