@@ -5,6 +5,12 @@ private/
 private-fixtures/
 data/
 downloads/
+VoiceArchive/
+voice-archive/
+
+# Local credentials
+.env.local
+**/.env.local
 
 # Common AI export filenames
 conversations.json
