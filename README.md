@@ -17,7 +17,7 @@ Currently included:
 - Mufy raw-export adapter
 - ChatGPT official Export Folder import validated against a real 2026 export structure
 - Local JSON / ZIP / browser folder import
-- Manifest-driven shard merging and lazy local attachment loading
+- Manifest-driven shard merging and lazy local or ZIP-backed attachment loading
 - Inline images, native audio/video controls, and other-file attachment cards
 - Conversation list, title/full-text search, message rendering
 - Hide-my-messages toggle
@@ -69,17 +69,17 @@ For GitHub Pages, publish the repository root.
 
 For local testing, opening `index.html` directly works in modern browsers because scripts are classic scripts rather than ES modules.
 
-The manifest, lazy-asset, and JSON/ZIP regression checks use Node's built-in test runner and have no package dependencies:
+The Ciel ZIP, manifest, lazy-asset, and JSON/ZIP regression checks use Node's built-in test runner and have no package dependencies:
 
 ```text
-node --test --test-isolation=none tests/chatgpt-export-folder.test.mjs
+node --test --test-isolation=none tests/ciel-house-zip.test.mjs tests/chatgpt-export-folder.test.mjs
 ```
 
 ## Supported inputs
 
 | Source | State |
 |---|---|
-| Ciel House Export v1 | implemented from contract |
+| Ciel House Export v1 | JSON and lazy-asset ZIP import verified |
 | Mufy `_原始数据.json` | implemented from current known schema |
 | ChatGPT official export | JSON, ZIP, and manifest-driven Export Folder import implemented; folder structure validated against a real 2026 export |
 | Claude official / plugin exporters | pending real samples |

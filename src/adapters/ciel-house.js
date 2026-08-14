@@ -46,7 +46,19 @@ OD.adapters = OD.adapters || [];
         throw new Error("找到 manifest.json，但它不是 Ciel House Export v1。");
       }
       const dataFile = manifest.dataFile || "conversations.json";
-      return convert(await zip.readJSON(dataFile), manifest);
+      const archive = convert(await zip.readJSON(dataFile), manifest);
+      const attachments = [];
+      for (const conversation of archive.conversations || []) {
+        for (const message of conversation.messages || []) {
+          attachments.push(...(message.attachments || []));
+        }
+      }
+      const assetSession = OD.zip.createAssetSession(zip, attachments);
+      return {
+        archive,
+        assetSession,
+        importDetails: `${assetSession.assetIndex.records.filter(record => record.available).length} 个 ZIP 附件`
+      };
     }
   });
 })();

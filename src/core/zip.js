@@ -13,6 +13,133 @@ window.OD = window.OD || {};
     return new Uint8Array(await new Response(stream).arrayBuffer());
   }
 
+  function normalizePath(value) {
+    return String(value || "").replace(/\\/g, "/").replace(/^\.\//, "").replace(/^\/+/, "");
+  }
+
+  function baseName(value) {
+    const path = normalizePath(value);
+    return path.slice(path.lastIndexOf("/") + 1);
+  }
+
+  function assetPath(reference) {
+    if (typeof reference === "string") return normalizePath(reference);
+    return normalizePath(reference?.path || reference?.src);
+  }
+
+  function createAssetSession(zip, references = [], options = {}) {
+    const urlAPI = options.urlAPI || (typeof URL !== "undefined" ? URL : null);
+    const zipPaths = new Map((zip.names || []).map(path => [normalizePath(path), path]));
+    const recordsByPath = new Map();
+    const records = [];
+    const cachedURLs = new Map();
+    let generation = 0;
+    let disposed = false;
+
+    function resolve(reference) {
+      const path = assetPath(reference);
+      if (!path) return null;
+
+      let record = recordsByPath.get(path);
+      if (!record) {
+        const name = reference?.name || baseName(path) || "attachment";
+        const sizeValue = reference?.size;
+        const size = sizeValue == null || sizeValue === "" ? null : Number(sizeValue);
+        const zipPath = zipPaths.get(path) || null;
+        record = {
+          available: !!(zipPath && zip.has(zipPath)),
+          path,
+          name,
+          originalName: name,
+          exportedName: baseName(path),
+          mimeType: reference?.mimeType || reference?.mime || "application/octet-stream",
+          size: Number.isFinite(size) ? size : null,
+          type: reference?.type || "file",
+          source: "zip",
+          zipPath
+        };
+        recordsByPath.set(path, record);
+        records.push(record);
+      }
+      return record;
+    }
+
+    for (const reference of references) resolve(reference);
+
+    const assetIndex = {
+      records,
+      resolve,
+      get size() { return records.length; }
+    };
+
+    async function get(reference) {
+      if (disposed) return null;
+      const record = resolve(reference);
+      if (!record?.available || !record.zipPath) return null;
+
+      const cached = cachedURLs.get(record.path);
+      if (cached) return cached.promise;
+
+      const currentGeneration = generation;
+      const entry = { url: null, promise: null };
+      entry.promise = (async () => {
+        const bytes = await zip.readBytes(record.zipPath);
+        const blob = new Blob([bytes], { type: record.mimeType });
+        if (typeof urlAPI?.createObjectURL !== "function") {
+          throw new Error("这个浏览器无法为 ZIP 附件创建本地 URL。");
+        }
+        const url = urlAPI.createObjectURL(blob);
+        if (currentGeneration !== generation || cachedURLs.get(record.path) !== entry) {
+          urlAPI.revokeObjectURL?.(url);
+          return null;
+        }
+        entry.url = url;
+        return url;
+      })().catch(error => {
+        if (cachedURLs.get(record.path) === entry) cachedURLs.delete(record.path);
+        throw error;
+      });
+      cachedURLs.set(record.path, entry);
+      return entry.promise;
+    }
+
+    function revoke(reference) {
+      const path = assetPath(reference);
+      const entry = cachedURLs.get(path);
+      if (!entry) return false;
+      cachedURLs.delete(path);
+      if (entry.url) urlAPI?.revokeObjectURL?.(entry.url);
+      return true;
+    }
+
+    function revokeAll() {
+      generation += 1;
+      let count = 0;
+      for (const entry of cachedURLs.values()) {
+        if (!entry.url) continue;
+        urlAPI?.revokeObjectURL?.(entry.url);
+        count += 1;
+      }
+      cachedURLs.clear();
+      return count;
+    }
+
+    const objectURLs = {
+      get,
+      revoke,
+      revokeAll,
+      get size() { return [...cachedURLs.values()].filter(entry => entry.url).length; }
+    };
+    return {
+      assetIndex,
+      objectURLs,
+      dispose() {
+        disposed = true;
+        return revokeAll();
+      }
+    };
+  }
+
   async function readZip(file) {
     const buffer = await file.arrayBuffer();
     const view = new DataView(buffer);
@@ -66,5 +193,5 @@ window.OD = window.OD || {};
     };
   }
 
-  OD.zip = { readZip };
+  OD.zip = { readZip, createAssetSession };
 })(window.OD);

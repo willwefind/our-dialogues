@@ -58,7 +58,13 @@ window.OD = window.OD || {};
   }
 
   function releaseArchiveAssets() {
+    const assetSession = state.assetSession;
     releaseRenderedAssets();
+    try {
+      assetSession?.dispose?.();
+    } catch (error) {
+      console.warn("Could not dispose attachment session", error);
+    }
     state.assetSession = null;
   }
 
@@ -130,7 +136,7 @@ window.OD = window.OD || {};
 
   function attachmentMarkup(attachment, index) {
     const info = attachmentInfo(attachment);
-    const canOpen = !!(info.file && state.assetSession?.objectURLs?.get);
+    const canOpen = !!(info.resolved?.available && state.assetSession?.objectURLs?.get);
     const availability = canOpen ? "滚动到此处时载入" : "仅显示附件信息";
 
     if (info.kind === "file") {
@@ -164,7 +170,7 @@ window.OD = window.OD || {};
     const manager = state.assetSession?.objectURLs;
     if (!manager?.get || element.dataset.attachmentState) return;
     const info = attachmentInfo(attachment);
-    if (!info.file) return;
+    if (!info.resolved?.available) return;
 
     const token = state.renderToken;
     element.dataset.attachmentState = "loading";
@@ -172,7 +178,7 @@ window.OD = window.OD || {};
 
     try {
       const url = await Promise.resolve(manager.get(attachment));
-      if (!url) throw new Error("所选文件夹中没有找到这个附件文件。");
+      if (!url) throw new Error("本地归档中没有找到这个附件文件。");
       if (token !== state.renderToken || !element.isConnected) {
         // The render transition already revoked its previous URL set. Revoking
         // by attachment here could accidentally revoke a newer render's URL
@@ -319,7 +325,12 @@ window.OD = window.OD || {};
     setStatus(`正在本地解析：${file.name}`);
     if (/\.zip$/i.test(file.name) || file.type === "application/zip") {
       const result = await OD.registry.parseZIP(file);
-      loadArchive(result.archive, result.adapter.label);
+      loadArchive(
+        result.archive,
+        result.adapter.label,
+        result.assetSession || null,
+        result.importDetails || ""
+      );
       return;
     }
     const text = await file.text();
@@ -333,9 +344,10 @@ window.OD = window.OD || {};
       OD.chatgptExportFolder.parse(File[]) ->
         { conversations, shardPaths, assetIndex, objectURLs, stats }
 
-    assetIndex.resolve(attachment) returns metadata and its File without reading
-    bytes. objectURLs.get(attachment) is the only operation that creates a blob
-    URL, and is called by the viewport observer above.
+    assetIndex.resolve(attachment) returns availability and metadata without
+    reading bytes. The backing asset may be a browser File or a lazy ZIP entry.
+    objectURLs.get(attachment) is the only operation that creates a blob URL,
+    and is called by the viewport observer above.
   */
   async function loadChatGPTFolder(files) {
     if (typeof OD.chatgptExportFolder?.parse !== "function") {

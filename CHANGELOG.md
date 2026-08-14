@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.1.4-dev — 2026-08-14
+
+- Added lazy playback and downloads for path-backed assets inside Ciel House Export ZIPs
+- Generalized Reader attachment availability beyond browser `File` objects
+- Cached and revoked ZIP-backed object URLs without eagerly decompressing media
+
 ## v0.1.3-dev — 2026-08-14
 
 - Hardened ignore rules against accidental commits of private ChatGPT export metadata and `.dat` assets

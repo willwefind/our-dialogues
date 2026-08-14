@@ -16,7 +16,11 @@ window.OD = window.OD || {};
     const zip = await OD.zip.readZip(file);
     for (const adapter of adapters()) {
       if (adapter.detectZIP && await adapter.detectZIP(zip)) {
-        return { archive: await adapter.parseZIP(zip), adapter };
+        const parsed = await adapter.parseZIP(zip);
+        if (parsed && typeof parsed === "object" && parsed.archive) {
+          return { ...parsed, adapter };
+        }
+        return { archive: parsed, adapter };
       }
     }
 
