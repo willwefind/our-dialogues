@@ -1,0 +1,120 @@
+[
+  {
+    "conversation_id": "synthetic-conversation-001",
+    "conversation_template_id": null,
+    "create_time": 1786665600.0,
+    "current_node": "assistant-final",
+    "default_model_slug": "auto",
+    "id": "synthetic-conversation-001",
+    "is_archived": false,
+    "is_do_not_remember": false,
+    "is_read_only": null,
+    "is_starred": false,
+    "is_study_mode": false,
+    "mapping": {
+      "client-created-root": {
+        "id": "client-created-root",
+        "message": null,
+        "parent": null
+      },
+      "user-message": {
+        "id": "user-message",
+        "message": {
+          "author": {"name": null, "role": "user"},
+          "content": {
+            "content_type": "multimodal_text",
+            "parts": [
+              {
+                "asset_pointer": "sediment://file_synthetic_image",
+                "content_type": "image_asset_pointer",
+                "height": 800,
+                "size_bytes": 12345,
+                "width": 1200
+              },
+              "Do old conversations feel different when you can read them like books?"
+            ]
+          },
+          "create_time": 1786665601.0,
+          "id": "user-message",
+          "metadata": {
+            "attachments": [
+              {
+                "height": 800,
+                "id": "file_synthetic_image",
+                "mime_type": "image/png",
+                "name": "synthetic-moon.png",
+                "size": 12345,
+                "source": "local",
+                "width": 1200
+              }
+            ]
+          }
+        },
+        "parent": "client-created-root"
+      },
+      "assistant-thoughts": {
+        "id": "assistant-thoughts",
+        "message": {
+          "author": {"name": null, "role": "assistant"},
+          "content": {
+            "content_type": "thoughts",
+            "source_analysis_msg_id": "synthetic-analysis",
+            "thoughts": [
+              {
+                "chunks": [],
+                "content": "Synthetic fixture reasoning for parser tests only.",
+                "finished": true,
+                "summary": "Synthetic reasoning"
+              }
+            ]
+          },
+          "create_time": 1786665602.0,
+          "id": "assistant-thoughts",
+          "metadata": {
+            "content_references": [],
+            "model_slug": "synthetic-model",
+            "tool_icons": ["thoughts"]
+          }
+        },
+        "parent": "user-message"
+      },
+      "assistant-recap": {
+        "id": "assistant-recap",
+        "message": {
+          "author": {"name": null, "role": "assistant"},
+          "content": {
+            "content": "Worked for 2s",
+            "content_type": "reasoning_recap"
+          },
+          "create_time": 1786665603.0,
+          "id": "assistant-recap",
+          "metadata": {"model_slug": "synthetic-model"}
+        },
+        "parent": "assistant-thoughts"
+      },
+      "assistant-final": {
+        "id": "assistant-final",
+        "message": {
+          "author": {"name": null, "role": "assistant"},
+          "content": {
+            "content_type": "text",
+            "parts": ["Maybe. A backup proves the words survived; a reader lets them become part of your life again."]
+          },
+          "create_time": 1786665604.0,
+          "id": "assistant-final",
+          "metadata": {
+            "content_references": [],
+            "model_slug": "synthetic-model"
+          }
+        },
+        "parent": "assistant-recap"
+      }
+    },
+    "memory_scope": "global_enabled",
+    "pinned_time": null,
+    "plugin_ids": null,
+    "title": "A synthetic conversation",
+    "update_time": 1786665604.0,
+    "voice": null
+  }
+]
