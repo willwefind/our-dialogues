@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.1.5-dev — 2026-08-14
+
+- Added persistent oldest-first / newest-first conversation sorting, including sorted search results and stable undated fallbacks
+
 ## v0.1.4-dev — 2026-08-14
 
 - Added lazy playback and downloads for path-backed assets inside Ciel House Export ZIPs

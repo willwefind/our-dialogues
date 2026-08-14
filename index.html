@@ -36,7 +36,13 @@
       <input id="search" type="search" placeholder="搜索标题或正文…">
     </div>
 
-    <div id="archiveMeta" class="archive-meta"></div>
+    <div class="archive-tools">
+      <div id="archiveMeta" class="archive-meta"></div>
+      <div class="sort-control" role="group" aria-label="按对话创建时间排序">
+        <button id="sortAscending" type="button" data-sort-mode="asc" title="正序：最早到最新" aria-label="正序：最早到最新">正序</button>
+        <button id="sortDescending" type="button" data-sort-mode="desc" title="倒序：最新到最早" aria-label="倒序：最新到最早">倒序</button>
+      </div>
+    </div>
     <nav id="conversationList" class="conversation-list"></nav>
   </aside>
 
@@ -72,6 +78,7 @@
   </main>
 
   <script src="src/core/schema.js"></script>
+  <script src="src/core/conversation-order.js"></script>
   <script src="src/core/zip.js"></script>
   <script src="src/core/chatgpt-export-folder.js"></script>
   <script src="src/adapters/normalized.js"></script>

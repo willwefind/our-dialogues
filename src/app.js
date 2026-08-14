@@ -6,6 +6,7 @@ window.OD = window.OD || {};
     archive: null,
     filtered: [],
     current: null,
+    sortMode: OD.conversationOrder.readStoredMode(window.localStorage),
     assetSession: null,
     mediaObserver: null,
     renderToken: 0
@@ -69,9 +70,13 @@ window.OD = window.OD || {};
   }
 
   function renderList() {
-    const q = $("search").value.trim().toLowerCase();
     const all = state.archive?.conversations || [];
-    state.filtered = q ? all.filter(c => conversationHaystack(c).includes(q)) : all;
+    state.filtered = OD.conversationOrder.filterAndSort(
+      all,
+      $("search").value,
+      conversationHaystack,
+      state.sortMode
+    );
 
     $("conversationList").innerHTML = state.filtered.map(c => {
       const active = state.current?.id === c.id ? " on" : "";
@@ -87,6 +92,19 @@ window.OD = window.OD || {};
     });
 
     $("archiveMeta").textContent = `${state.filtered.length} / ${all.length} 段对话`;
+    return state.filtered;
+  }
+
+  function renderSortControl() {
+    for (const button of document.querySelectorAll("[data-sort-mode]")) {
+      button.setAttribute("aria-pressed", String(button.dataset.sortMode === state.sortMode));
+    }
+  }
+
+  function setSortMode(mode) {
+    state.sortMode = OD.conversationOrder.persistMode(window.localStorage, mode);
+    renderSortControl();
+    renderList();
   }
 
   function resolveAttachment(attachment) {
@@ -318,7 +336,8 @@ window.OD = window.OD || {};
     const detail = importDetails ? ` · ${importDetails}` : "";
     setStatus(`已识别：${adapterLabel} · ${archive.conversations.length} 段对话${detail}`);
     renderList();
-    openConversation(archive.conversations[0].id);
+    const first = OD.conversationOrder.sortConversations(archive.conversations, state.sortMode)[0];
+    openConversation(first.id);
   }
 
   async function loadFile(file) {
@@ -398,6 +417,9 @@ window.OD = window.OD || {};
   });
 
   $("search").addEventListener("input", renderList);
+  for (const button of document.querySelectorAll("[data-sort-mode]")) {
+    button.addEventListener("click", () => setSortMode(button.dataset.sortMode));
+  }
   $("hideUser").addEventListener("change", event => document.body.classList.toggle("hide-user", event.target.checked));
   $("showThinking").addEventListener("change", event => document.body.classList.toggle("show-thinking", event.target.checked));
   $("theme").addEventListener("change", event => {
@@ -415,8 +437,10 @@ window.OD = window.OD || {};
     getState: () => ({
       archive: state.archive,
       current: state.current,
+      sortMode: state.sortMode,
       hasLocalAssets: !!state.assetSession,
-      filteredCount: state.filtered.length
+      filteredCount: state.filtered.length,
+      filteredIds: state.filtered.map(conversation => conversation.id)
     })
   };
 
@@ -426,5 +450,6 @@ window.OD = window.OD || {};
     document.documentElement.dataset.theme = savedTheme;
   }
 
+  renderSortControl();
   setStatus("文件只在本机浏览器中解析，不会上传。");
 })(window.OD);

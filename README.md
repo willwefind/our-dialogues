@@ -69,10 +69,10 @@ For GitHub Pages, publish the repository root.
 
 For local testing, opening `index.html` directly works in modern browsers because scripts are classic scripts rather than ES modules.
 
-The Ciel ZIP, manifest, lazy-asset, and JSON/ZIP regression checks use Node's built-in test runner and have no package dependencies:
+The Ciel ZIP, manifest, lazy-asset, conversation-order, and JSON/ZIP regression checks use Node's built-in test runner and have no package dependencies:
 
 ```text
-node --test --test-isolation=none tests/ciel-house-zip.test.mjs tests/chatgpt-export-folder.test.mjs
+node --test --test-isolation=none tests/conversation-order.test.mjs tests/ciel-house-zip.test.mjs tests/chatgpt-export-folder.test.mjs
 ```
 
 ## Supported inputs
