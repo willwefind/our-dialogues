@@ -1,0 +1,18 @@
+{
+  "schema": "our-dialogues.normalized.v1",
+  "source": {"platform": "demo", "exporter": "synthetic", "formatVersion": 1},
+  "exportedAt": "2026-08-14T09:55:00+08:00",
+  "conversations": [
+    {
+      "id": "demo-1",
+      "title": "A tiny synthetic archive",
+      "createdAt": "2026-08-14T01:00:00Z",
+      "context": {},
+      "participants": [],
+      "messages": [
+        {"id": "1", "role": "user", "speaker": "User", "content": [{"type": "text", "text": "Can old conversations feel like books?"}]},
+        {"id": "2", "role": "assistant", "speaker": "Assistant", "content": [{"type": "text", "text": "Only if the margins are wide enough."}]}
+      ]
+    }
+  ]
+}
