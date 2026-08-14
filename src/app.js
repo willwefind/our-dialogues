@@ -64,10 +64,16 @@ window.OD = window.OD || {};
     $("messages").innerHTML = (c.messages || []).map(m => {
       const text = OD.schema.textOf(m.content);
       const thinking = OD.schema.textOf(m.thinking);
-      return `<section class="message" data-role="${esc(m.role)}">
+      const recaps = Array.isArray(m.metadata?.reasoningRecap) ? m.metadata.reasoningRecap.filter(Boolean) : [];
+      const attachments = Array.isArray(m.attachments) ? m.attachments : [];
+      const reasoningOnly = !!m.metadata?.reasoningOnly;
+      return `<section class="message${reasoningOnly ? " reasoning-only" : ""}" data-role="${esc(m.role)}">
         <div class="message-who">${esc(m.speaker || m.role)}</div>
-        <div class="message-body">${esc(text)}</div>
-        ${thinking ? `<div class="thinking"><strong>Thinking / reasoning exported by source</strong>\n\n${esc(thinking)}</div>` : ""}
+        ${text ? `<div class="message-body">${esc(text)}</div>` : ""}
+        ${attachments.length ? `<div class="attachments">${attachments.map(a =>
+          `<div class="attachment"><span class="attachment-icon">${a.type === "image" ? "▧" : a.type === "audio" ? "♪" : "↗"}</span><span>${esc(a.name || a.id || "attachment")}</span>${a.mimeType ? `<small>${esc(a.mimeType)}</small>` : ""}</div>`
+        ).join("")}</div>` : ""}
+        ${(thinking || recaps.length) ? `<div class="thinking"><strong>Thinking / reasoning exported by source</strong>${recaps.length ? `\n${esc(recaps.join(" · "))}` : ""}${thinking ? `\n\n${esc(thinking)}` : ""}</div>` : ""}
         ${m.createdAt ? `<div class="message-time">${esc(fmtDate(m.createdAt))}</div>` : ""}
       </section>`;
     }).join("");
