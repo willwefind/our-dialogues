@@ -1,0 +1,18 @@
+{
+  "version": 1,
+  "files": [
+    {
+      "name": "conversations.json",
+      "shards": [
+        {"name": "conversations-000.json"},
+        {"name": "conversations-001.json"}
+      ]
+    },
+    {"name": "conversation_asset_file_names.json"},
+    {"name": "library_files.json"},
+    {"name": "file_synthetic_image.dat"},
+    {"name": "file_synthetic_audio.dat"},
+    {"name": "file_synthetic_video.dat"},
+    {"name": "file_synthetic_document.dat"}
+  ]
+}

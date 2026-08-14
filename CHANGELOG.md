@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.1.2-dev — 2026-08-14
+
+- Implemented local-first ChatGPT official Export Folder selection
+- Validated the manifest, shard, filename-map, and library metadata flow against a real 2026 export structure
+- Resolved logical `conversations.json` from manifest-listed shards and merged them into one archive
+- Built a lazy asset index from selected local files, `conversation_asset_file_names.json`, and `library_files.json`
+- Deferred binary reads and object-URL creation until attachments are rendered
+- Added inline images, native audio/video controls, and other-file attachment cards
+- Kept existing JSON and ZIP imports working
+- Added a wholly synthetic two-shard folder fixture with image, audio, video, and generic-file asset cases
+- Preserved the Dawn × Sol co-creator credits
+
 ## v0.1.1-dev — 2026-08-14
 
 - Validated ChatGPT official-export schema against a real 2026 JSON shard

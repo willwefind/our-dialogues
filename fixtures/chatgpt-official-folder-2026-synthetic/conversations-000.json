@@ -1,0 +1,106 @@
+[
+  {
+    "conversation_id": "synthetic-folder-conversation-001",
+    "create_time": 1786665600.0,
+    "current_node": "assistant-image-reply",
+    "default_model_slug": "synthetic-model",
+    "id": "synthetic-folder-conversation-001",
+    "mapping": {
+      "image-root": {
+        "id": "image-root",
+        "message": null,
+        "parent": null
+      },
+      "user-image-message": {
+        "id": "user-image-message",
+        "message": {
+          "author": {"name": null, "role": "user"},
+          "content": {
+            "content_type": "multimodal_text",
+            "parts": [
+              {
+                "asset_pointer": "sediment://file_synthetic_image",
+                "content_type": "image_asset_pointer",
+                "height": 120,
+                "size_bytes": 512,
+                "width": 180
+              },
+              "What does this entirely fictional moon remind you of?"
+            ]
+          },
+          "create_time": 1786665601.0,
+          "id": "user-image-message",
+          "metadata": {
+            "attachments": [
+              {
+                "height": 120,
+                "id": "file_synthetic_image",
+                "library_file_id": "libfile_synthetic_image",
+                "mime_type": "image/svg+xml",
+                "name": "synthetic-moon.svg",
+                "size": 512,
+                "source": "local",
+                "width": 180
+              }
+            ]
+          }
+        },
+        "parent": "image-root"
+      },
+      "assistant-image-thoughts": {
+        "id": "assistant-image-thoughts",
+        "message": {
+          "author": {"name": null, "role": "assistant"},
+          "content": {
+            "content_type": "thoughts",
+            "source_analysis_msg_id": "synthetic-image-analysis",
+            "thoughts": [
+              {
+                "chunks": [],
+                "content": "Synthetic fixture reasoning; no real model trace is included.",
+                "finished": true,
+                "summary": "A fictional visual association"
+              }
+            ]
+          },
+          "create_time": 1786665602.0,
+          "id": "assistant-image-thoughts",
+          "metadata": {"model_slug": "synthetic-model"}
+        },
+        "parent": "user-image-message"
+      },
+      "assistant-image-recap": {
+        "id": "assistant-image-recap",
+        "message": {
+          "author": {"name": null, "role": "assistant"},
+          "content": {
+            "content": "Compared shape, colour, and atmosphere in the synthetic image.",
+            "content_type": "reasoning_recap"
+          },
+          "create_time": 1786665603.0,
+          "id": "assistant-image-recap",
+          "metadata": {"model_slug": "synthetic-model"}
+        },
+        "parent": "assistant-image-thoughts"
+      },
+      "assistant-image-reply": {
+        "id": "assistant-image-reply",
+        "message": {
+          "author": {"name": null, "role": "assistant"},
+          "content": {
+            "content_type": "text",
+            "parts": [
+              "It feels like a bookmark for a night sky: small, quiet, and easy to find again."
+            ]
+          },
+          "create_time": 1786665604.0,
+          "id": "assistant-image-reply",
+          "metadata": {"model_slug": "synthetic-model"}
+        },
+        "parent": "assistant-image-recap"
+      }
+    },
+    "title": "Synthetic moon bookmark",
+    "update_time": 1786665604.0
+  }
+]

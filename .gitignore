@@ -9,6 +9,9 @@ downloads/
 # Common AI export filenames
 conversations.json
 conversations-*.json
+# Only these two named public synthetic shards are allowed through.
+!fixtures/chatgpt-official-folder-2026-synthetic/conversations-000.json
+!fixtures/chatgpt-official-folder-2026-synthetic/conversations-001.json
 chat.html
 messages.json
 history.json

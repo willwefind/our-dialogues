@@ -1,0 +1,34 @@
+[
+  {
+    "file_id": "file_synthetic_image",
+    "file_name": "synthetic-moon.svg",
+    "mime_type": "image/svg+xml",
+    "library_file_id": "libfile_synthetic_image",
+    "origination_message_id": "user-image-message",
+    "origination_thread_id": "synthetic-folder-conversation-001"
+  },
+  {
+    "file_id": "file_synthetic_audio",
+    "file_name": "synthetic-chime.wav",
+    "mime_type": "audio/wav",
+    "library_file_id": "libfile_synthetic_audio",
+    "origination_message_id": "user-media-message",
+    "origination_thread_id": "synthetic-folder-conversation-002"
+  },
+  {
+    "file_id": "file_synthetic_video",
+    "file_name": "synthetic-orbit.webm",
+    "mime_type": "video/webm",
+    "library_file_id": "libfile_synthetic_video",
+    "origination_message_id": "user-media-message",
+    "origination_thread_id": "synthetic-folder-conversation-002"
+  },
+  {
+    "file_id": "file_synthetic_document",
+    "file_name": "synthetic-notes.txt",
+    "mime_type": "text/plain",
+    "library_file_id": "libfile_synthetic_document",
+    "origination_message_id": "user-media-message",
+    "origination_thread_id": "synthetic-folder-conversation-002"
+  }
+]

@@ -1,0 +1,89 @@
+[
+  {
+    "conversation_id": "synthetic-folder-conversation-002",
+    "create_time": 1786752000.0,
+    "current_node": "assistant-media-reply",
+    "default_model_slug": "synthetic-model",
+    "id": "synthetic-folder-conversation-002",
+    "mapping": {
+      "media-root": {
+        "id": "media-root",
+        "message": null,
+        "parent": null
+      },
+      "user-media-message": {
+        "id": "user-media-message",
+        "message": {
+          "author": {"name": null, "role": "user"},
+          "content": {
+            "content_type": "text",
+            "parts": ["Please keep these synthetic media examples together."]
+          },
+          "create_time": 1786752001.0,
+          "id": "user-media-message",
+          "metadata": {
+            "attachments": [
+              {
+                "id": "file_synthetic_audio",
+                "library_file_id": "libfile_synthetic_audio",
+                "mime_type": "audio/wav",
+                "name": "synthetic-chime.wav",
+                "size": 96,
+                "source": "local"
+              },
+              {
+                "id": "file_synthetic_video",
+                "library_file_id": "libfile_synthetic_video",
+                "mime_type": "video/webm",
+                "name": "synthetic-orbit.webm",
+                "size": 96,
+                "source": "local"
+              },
+              {
+                "id": "file_synthetic_document",
+                "library_file_id": "libfile_synthetic_document",
+                "mime_type": "text/plain",
+                "name": "synthetic-notes.txt",
+                "size": 128,
+                "source": "local"
+              }
+            ]
+          }
+        },
+        "parent": "media-root"
+      },
+      "assistant-media-alternate": {
+        "id": "assistant-media-alternate",
+        "message": {
+          "author": {"name": null, "role": "assistant"},
+          "content": {
+            "content_type": "text",
+            "parts": ["This deliberately inactive branch checks graph traversal."]
+          },
+          "create_time": 1786752002.0,
+          "id": "assistant-media-alternate",
+          "metadata": {"model_slug": "synthetic-model"}
+        },
+        "parent": "user-media-message"
+      },
+      "assistant-media-reply": {
+        "id": "assistant-media-reply",
+        "message": {
+          "author": {"name": null, "role": "assistant"},
+          "content": {
+            "content_type": "text",
+            "parts": [
+              "They belong to one fictional archive, but each can still keep its own filename and media type."
+            ]
+          },
+          "create_time": 1786752003.0,
+          "id": "assistant-media-reply",
+          "metadata": {"model_slug": "synthetic-model"}
+        },
+        "parent": "user-media-message"
+      }
+    },
+    "title": "Synthetic media shelf",
+    "update_time": 1786752003.0
+  }
+]

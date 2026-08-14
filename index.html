@@ -14,12 +14,22 @@
       <h1>Our Dialogues</h1>
       <p>把曾经说过的话，重新翻出来。</p>
 
-      <label class="pick">
-        <input id="fileInput" type="file" accept=".json,.zip,application/json,application/zip" multiple hidden>
-        <span>选择 JSON / ZIP</span>
-      </label>
+      <div class="import-picks">
+        <label class="pick pick-folder">
+          <input id="folderInput" type="file" webkitdirectory directory multiple hidden>
+          <span>选择 ChatGPT Export 文件夹</span>
+          <small>官方完整导出 · 附件按需读取</small>
+        </label>
 
-      <div id="status" class="status">文件只在本机浏览器中解析。</div>
+        <div class="pick-divider"><span>或</span></div>
+
+        <label class="pick pick-secondary">
+          <input id="fileInput" type="file" accept=".json,.zip,application/json,application/zip" multiple hidden>
+          <span>选择 JSON / ZIP</span>
+        </label>
+      </div>
+
+      <div id="status" class="status" role="status" aria-live="polite">文件只在本机浏览器中解析。</div>
     </header>
 
     <div class="search-wrap">
@@ -47,8 +57,8 @@
       <div class="welcome-card">
         <div class="mark">“</div>
         <h2>I knew the conversation existed.<br>I just wanted to find it again.</h2>
-        <p>选择一个 AI 对话导出 JSON 或 ZIP。Reader 会自动识别格式，并在本地转换为统一阅读结构。</p>
-        <p class="small">当前是 v0.1 骨架。Ciel House / Mufy 已有适配器；ChatGPT 官方导出已用真实 2026 JSON 分片校准。</p>
+        <p>选择 ChatGPT 官方 Export 文件夹，或载入已有的 AI 对话 JSON / ZIP。Reader 会在本地识别并转换为统一阅读结构。</p>
+        <p class="small">文件不会上传。官方导出的对话分片会自动合并，图片、音频、视频和其他附件只在滚动到附近时才从本地文件创建临时地址。</p>
       </div>
     </section>
 
@@ -63,6 +73,7 @@
 
   <script src="src/core/schema.js"></script>
   <script src="src/core/zip.js"></script>
+  <script src="src/core/chatgpt-export-folder.js"></script>
   <script src="src/adapters/normalized.js"></script>
   <script src="src/adapters/ciel-house.js"></script>
   <script src="src/adapters/mufy.js"></script>
