@@ -1,0 +1,20 @@
+# Private exports / archives
+*.zip
+exports/
+private/
+private-fixtures/
+data/
+downloads/
+
+# Common AI export filenames
+conversations.json
+conversations-*.json
+chat.html
+messages.json
+history.json
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
