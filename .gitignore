@@ -12,6 +12,23 @@ conversations-*.json
 # Only these two named public synthetic shards are allowed through.
 !fixtures/chatgpt-official-folder-2026-synthetic/conversations-000.json
 !fixtures/chatgpt-official-folder-2026-synthetic/conversations-001.json
+*.dat
+export_manifest.json
+conversation_asset_file_names.json
+library_files.json
+user.json
+user_settings.json
+message_feedback.json
+shared_conversations.json
+ads.json
+# Only the known public synthetic export metadata and assets are allowed through.
+!fixtures/chatgpt-official-folder-2026-synthetic/export_manifest.json
+!fixtures/chatgpt-official-folder-2026-synthetic/conversation_asset_file_names.json
+!fixtures/chatgpt-official-folder-2026-synthetic/library_files.json
+!fixtures/chatgpt-official-folder-2026-synthetic/file_synthetic_image.dat
+!fixtures/chatgpt-official-folder-2026-synthetic/file_synthetic_audio.dat
+!fixtures/chatgpt-official-folder-2026-synthetic/file_synthetic_video.dat
+!fixtures/chatgpt-official-folder-2026-synthetic/file_synthetic_document.dat
 chat.html
 messages.json
 history.json

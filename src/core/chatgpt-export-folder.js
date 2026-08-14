@@ -163,13 +163,6 @@ window.OD = window.OD || {};
       if (!value || typeof value !== "object" || visited.has(value)) return;
       visited.add(value);
       if (Array.isArray(value)) {
-        if (value.length >= 2 && typeof value[0] === "string" && typeof value[1] === "string") {
-          if (/\.dat$/i.test(baseName(value[0])) || /^file[-_]/i.test(baseName(value[0]))) {
-            add(value[0], value[1]);
-          } else if (/\.dat$/i.test(baseName(value[1]))) {
-            add(value[1], value[0]);
-          }
-        }
         for (const item of value) visit(item);
         return;
       }
@@ -288,9 +281,13 @@ window.OD = window.OD || {};
 
   function normalizeLibraryRecord(value, fallbackId) {
     const genericId = firstValue(value, ["id"]);
+    const nestedId = genericId && typeof genericId === "object" && !Array.isArray(genericId)
+      ? firstValue(genericId, ["id"])
+      : null;
     const fileId = firstValue(value, ["file_id", "fileId", "asset_id", "assetId"]) ||
       (/^file[-_]/i.test(String(genericId || "")) ? genericId : null);
     const libraryFileId = firstValue(value, ["library_file_id", "libraryFileId", "libfile_id", "libfileId"]) ||
+      (/^libfile[-_]/i.test(String(nestedId || "")) ? nestedId : null) ||
       (/^libfile[-_]/i.test(String(genericId || "")) ? genericId : null);
     const fileName = firstValue(value, [
       "file_name", "fileName", "original_file_name", "originalFileName", "filename", "name"

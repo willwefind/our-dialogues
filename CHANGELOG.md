@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.1.3-dev — 2026-08-14
+
+- Hardened ignore rules against accidental commits of private ChatGPT export metadata and `.dat` assets
+- Matched the 2026 nested library-file ID shape while preserving legacy ID forms
+- Removed a manifest array-path `ReferenceError` and added regression coverage for logical conversation shards
+
 ## v0.1.2-dev — 2026-08-14
 
 - Implemented local-first ChatGPT official Export Folder selection

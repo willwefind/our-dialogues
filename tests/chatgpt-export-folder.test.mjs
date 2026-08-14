@@ -124,11 +124,14 @@ test("folder import follows the manifest and leaves binary assets unread", async
   }
 
   const image = folder.assetIndex.resolve({ src: "sediment://file_synthetic_image" });
+  assert.equal(image.fileId, "file_synthetic_image");
   assert.equal(image.originalName, "synthetic-moon.svg");
   assert.equal(image.mimeType, "image/svg+xml");
   assert.equal(image.libraryFileId, "libfile_synthetic_image");
   assert.equal(image.originationMessageId, "user-image-message");
   assert.equal(image.originationThreadId, "synthetic-folder-conversation-001");
+  assert.equal(folder.assetIndex.resolve({ file_id: "file_synthetic_image" }), image);
+  assert.equal(folder.assetIndex.resolve({ libraryFileId: "libfile_synthetic_image" }), image);
 
   const firstURL = folder.objectURLs.get({ id: "file_synthetic_image" });
   assert.equal(firstURL, "blob:synthetic/1");
@@ -190,6 +193,110 @@ test("library metadata wrappers are traversed instead of mistaken for file recor
   assert.equal(records[0].fileId, "file_wrapped_example");
   assert.equal(records[0].fileName, "wrapped-example.png");
   assert.equal(records[0].mimeType, "image/png");
+});
+
+test("real 2026 nested library IDs retain attachment metadata", async () => {
+  const OD = await loadReaderRuntime();
+  const fixture = JSON.parse(
+    await readFile(path.join(fixtureRoot, "library_files.json"), "utf8")
+  );
+  const records = OD.chatgptExportFolder._internals.extractLibraryRecords(fixture);
+  const image = records.find(record => record.fileId === "file_synthetic_image");
+
+  assert.ok(image);
+  assert.equal(image.fileId, "file_synthetic_image");
+  assert.equal(image.libraryFileId, "libfile_synthetic_image");
+  assert.equal(image.mimeType, "image/svg+xml");
+  assert.equal(image.fileName, "synthetic-moon.svg");
+  assert.equal(image.originationMessageId, "user-image-message");
+  assert.equal(image.originationThreadId, "synthetic-folder-conversation-001");
+});
+
+test("simple library ID fields remain compatible", async () => {
+  const OD = await loadReaderRuntime();
+  const records = OD.chatgptExportFolder._internals.extractLibraryRecords([
+    {
+      file_id: "file_legacy_snake",
+      library_file_id: "libfile_legacy_snake",
+      file_name: "legacy-snake.png",
+      mime_type: "image/png"
+    },
+    {
+      fileId: "file_legacy_camel",
+      libraryFileId: "libfile_legacy_camel",
+      fileName: "legacy-camel.png",
+      mimeType: "image/png"
+    }
+  ]);
+
+  assert.deepEqual(
+    [...records.map(record => [record.fileId, record.libraryFileId])],
+    [
+      ["file_legacy_snake", "libfile_legacy_snake"],
+      ["file_legacy_camel", "libfile_legacy_camel"]
+    ]
+  );
+});
+
+test("manifest logical files accept shards and unrelated array pairs", async () => {
+  const OD = await loadReaderRuntime();
+  const references = OD.chatgptExportFolder._internals.collectManifestConversationRefs({
+    logical_files: {
+      "conversations.json": {
+        files: ["conversations-001.json", "conversations-000.json"]
+      }
+    },
+    unrelated_pairs: [["file_asset.dat", "private-name.png"]]
+  });
+
+  assert.deepEqual(
+    [...references],
+    ["conversations-000.json", "conversations-001.json"]
+  );
+  assert.deepEqual(
+    [...OD.chatgptExportFolder._internals.collectManifestConversationRefs({
+      files: ["conversations.json"]
+    })],
+    ["conversations.json"]
+  );
+});
+
+test("gitignore blocks private export files except exact synthetic fixtures", async () => {
+  const lines = (await readFile(path.join(repositoryRoot, ".gitignore"), "utf8"))
+    .split(/\r?\n/)
+    .map(line => line.trim())
+    .filter(line => line && !line.startsWith("#"));
+  const privatePatterns = [
+    "conversations.json",
+    "conversations-*.json",
+    "*.dat",
+    "export_manifest.json",
+    "conversation_asset_file_names.json",
+    "library_files.json",
+    "user.json",
+    "user_settings.json",
+    "message_feedback.json",
+    "shared_conversations.json",
+    "ads.json"
+  ];
+  const fixtureExceptions = [
+    "!fixtures/chatgpt-official-folder-2026-synthetic/conversations-000.json",
+    "!fixtures/chatgpt-official-folder-2026-synthetic/conversations-001.json",
+    "!fixtures/chatgpt-official-folder-2026-synthetic/export_manifest.json",
+    "!fixtures/chatgpt-official-folder-2026-synthetic/conversation_asset_file_names.json",
+    "!fixtures/chatgpt-official-folder-2026-synthetic/library_files.json",
+    "!fixtures/chatgpt-official-folder-2026-synthetic/file_synthetic_image.dat",
+    "!fixtures/chatgpt-official-folder-2026-synthetic/file_synthetic_audio.dat",
+    "!fixtures/chatgpt-official-folder-2026-synthetic/file_synthetic_video.dat",
+    "!fixtures/chatgpt-official-folder-2026-synthetic/file_synthetic_document.dat"
+  ];
+
+  for (const pattern of privatePatterns) {
+    assert.ok(lines.includes(pattern), `${pattern} must be ignored globally`);
+  }
+  assert.deepEqual(lines.filter(line => line.startsWith("!")), fixtureExceptions);
+  assert.ok(lines.indexOf("*.dat") < lines.indexOf(fixtureExceptions.at(-1)));
+  assert.ok(lines.indexOf("conversations-*.json") < lines.indexOf(fixtureExceptions[0]));
 });
 
 test("asset filename maps accept object, nested-object, and pair-list shapes", async () => {
