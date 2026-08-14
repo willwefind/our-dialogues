@@ -1,0 +1,45 @@
+{
+  "format": "ciel-house-export",
+  "version": 1,
+  "exportedAt": "2026-08-14T09:55:00+08:00",
+  "conversations": [
+    {
+      "id": "living-room-001",
+      "title": "今晚在客厅",
+      "room": {"id": "living-room", "name": "客厅"},
+      "createdAt": "2026-08-14T01:00:00Z",
+      "updatedAt": "2026-08-14T01:03:00Z",
+      "participants": [
+        {"id": "user", "name": "Dawn", "role": "user"},
+        {"id": "ciel", "name": "Ciel", "role": "assistant"}
+      ],
+      "messages": [
+        {
+          "id": "m1",
+          "role": "user",
+          "speaker": "Dawn",
+          "createdAt": "2026-08-14T01:00:00Z",
+          "content": [{"type": "text", "text": "今天月亮很好看。"}]
+        },
+        {
+          "id": "m2",
+          "role": "assistant",
+          "speaker": "Ciel",
+          "createdAt": "2026-08-14T01:01:00Z",
+          "content": [{"type": "text", "text": "嗯，像有人忘记关掉的一盏灯。"}],
+          "thinking": [{"type": "text", "text": "这是公开 fixture 里的虚构 thinking，仅用于测试展开 UI。"}]
+        }
+      ]
+    },
+    {
+      "id": "travel-001",
+      "title": "一段不存在的旅行",
+      "room": {"id": "travel", "name": "TRAVEL"},
+      "createdAt": "2026-08-13T10:00:00Z",
+      "messages": [
+        {"id": "t1", "role": "user", "speaker": "Dawn", "content": [{"type": "text", "text": "如果这里会下雪呢？"}]},
+        {"id": "t2", "role": "assistant", "speaker": "Ciel", "content": [{"type": "text", "text": "那就把脚印留在回程之前。"}]}
+      ]
+    }
+  ]
+}
