@@ -1,0 +1,29 @@
+{
+  "messages": [
+    {
+      "role": "human",
+      "say": "Synthetic question for adapter validation.",
+      "time": "6/27/2026 9:01:02"
+    },
+    {
+      "role": "assistant",
+      "say": "Synthetic response with **Markdown** retained as text.",
+      "time": "6/27/2026 9:01:05"
+    },
+    {
+      "role": "human",
+      "say": "A final synthetic turn.",
+      "time": "6/27/2026 10:11:12"
+    }
+  ],
+  "metadata": {
+    "title": "Synthetic Claude plugin conversation",
+    "link": "https://claude.ai/chat/00000000-0000-4000-8000-000000000001",
+    "powered_by": "Claude Exporter (https://www.ai-chat-exporter.net)",
+    "dates": {
+      "created": "6/27/2026 9:01:02",
+      "updated": "6/27/2026 10:11:12",
+      "exported": "6/28/2026 3:04:05"
+    }
+  }
+}

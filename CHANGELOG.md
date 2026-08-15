@@ -5,7 +5,8 @@
 - Converted Mufy HTML into readable normalized text while preserving raw source metadata and explicit thinking
 - Added strict adapter capability declarations and mutually exclusive JSON/ZIP detection
 - Added metadata-only unknown-format diagnostics without field values or conversation text
-- Documented source compatibility and kept Claude plugin support blocked on a real sample
+- Added strict support for `ai-chat-exporter.net` Claude webpage-plugin JSON from two real local samples
+- Kept Claude official export and other plugins separate and pending their own samples
 - Added synthetic source-fidelity tests and a counts-only real Mufy smoke tool
 
 ## v0.1.6-dev — 2026-08-15

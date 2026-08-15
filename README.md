@@ -15,6 +15,7 @@ Currently included:
 - Ciel House Export v1 contract
 - Ciel House adapter
 - Mufy raw-export adapter
+- Claude Exporter (`ai-chat-exporter.net`) webpage-plugin JSON adapter
 - ChatGPT official Export Folder import validated against a real 2026 export structure
 - Local JSON / ZIP / browser folder import
 - Manifest-driven shard merging and lazy local or ZIP-backed attachment loading
@@ -28,7 +29,7 @@ Currently included:
 
 Planned next:
 
-- Add Claude exporter adapters from real samples
+- Add Claude official-export and other exporter adapters from real samples
 - EPUB / Markdown / HTML export
 - Tags, favorites, timeline, richer full-text search
 - Vendored ZIP fallback for browsers without `DecompressionStream`
@@ -85,7 +86,8 @@ node --test --test-isolation=none tests/*.test.mjs
 | Mufy `_原始数据.json` | implemented from current known schema |
 | ChatGPT official export | JSON, ZIP, and manifest-driven Export Folder import implemented; folder structure validated against a real 2026 export |
 | SolVoice local sidecar | optional mapping v2 + VoiceArchive or `sol/audio` folder; strong mappings only |
-| Claude official / plugin exporters | pending real samples |
+| Claude Exporter webpage-plugin JSON | implemented from two real `ai-chat-exporter.net` samples; public fixture is synthetic |
+| Claude official export and other plugins | pending real samples |
 | Already-normalized Our Dialogues archive | implemented |
 
 See [`docs/source-compatibility.md`](docs/source-compatibility.md) for the capability contract, fidelity notes, diagnostics privacy boundary, and Claude sample status.

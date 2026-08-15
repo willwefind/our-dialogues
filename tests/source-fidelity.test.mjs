@@ -18,6 +18,7 @@ async function loadRuntime() {
     "src/adapters/normalized.js",
     "src/adapters/ciel-house.js",
     "src/adapters/mufy.js",
+    "src/adapters/claude-web-exporter.js",
     "src/adapters/chatgpt-official.js",
     "src/adapters/registry.js"
   ]) {
@@ -121,6 +122,7 @@ test("known JSON adapters detect mutually exclusively", async () => {
     [syntheticMufy(), "mufy-raw"],
     [JSON.parse(await readFile(path.join(repositoryRoot, "fixtures/ciel-house-v1.json"), "utf8")), "ciel-house-v1"],
     [JSON.parse(await readFile(path.join(repositoryRoot, "fixtures/normalized-v1.json"), "utf8")), "normalized-v1"],
+    [JSON.parse(await readFile(path.join(repositoryRoot, "fixtures/claude-web-exporter-synthetic.json"), "utf8")), "claude-web-exporter"],
     [JSON.parse(await readFile(path.join(repositoryRoot, "fixtures/chatgpt-official-2026.json"), "utf8")), "chatgpt-official-2026"]
   ];
 
@@ -134,8 +136,52 @@ test("known JSON adapters detect mutually exclusively", async () => {
 
   assert.deepEqual(
     [...OD.registry.capabilities().map(capability => capability.id)],
-    ["normalized-v1", "ciel-house-v1", "mufy-raw", "chatgpt-official-2026"]
+    ["normalized-v1", "ciel-house-v1", "mufy-raw", "claude-web-exporter", "chatgpt-official-2026"]
   );
+});
+
+test("Claude webpage-plugin JSON normalizes one conversation without inventing thinking", async () => {
+  const OD = await loadRuntime();
+  const source = JSON.parse(
+    await readFile(path.join(repositoryRoot, "fixtures/claude-web-exporter-synthetic.json"), "utf8")
+  );
+  const result = await OD.registry.parseJSON(source);
+
+  assert.equal(result.recognized, true);
+  assert.equal(result.adapter.id, "claude-web-exporter");
+  assert.equal(result.archive.source.platform, "claude");
+  assert.equal(result.archive.source.exporter, "ai-chat-exporter.net");
+  assert.equal(result.archive.conversations.length, 1);
+
+  const conversation = result.archive.conversations[0];
+  assert.equal(conversation.id, "00000000-0000-4000-8000-000000000001");
+  assert.equal(conversation.title, "Synthetic Claude plugin conversation");
+  assert.equal(conversation.createdAt, new Date(2026, 5, 27, 9, 1, 2).toISOString());
+  assert.equal(conversation.updatedAt, new Date(2026, 5, 27, 10, 11, 12).toISOString());
+  assert.deepEqual([...conversation.messages.map(message => message.role)], ["user", "assistant", "user"]);
+  assert.equal(OD.schema.textOf(conversation.messages[1].content), "Synthetic response with **Markdown** retained as text.");
+  assert.deepEqual([...conversation.messages[1].thinking], []);
+  assert.equal(conversation.messages[0].metadata.original, source.messages[0]);
+  assert.equal(conversation.context.sourceMetadata.original, source.metadata);
+});
+
+test("Claude webpage-plugin detection requires exporter and claude.ai fingerprints", async () => {
+  const OD = await loadRuntime();
+  const adapter = OD.adapters.find(item => item.id === "claude-web-exporter");
+  const source = JSON.parse(
+    await readFile(path.join(repositoryRoot, "fixtures/claude-web-exporter-synthetic.json"), "utf8")
+  );
+
+  assert.equal(adapter.detectJSON(source), true);
+  assert.equal(adapter.detectJSON({ messages: source.messages, metadata: { dates: {}, title: "generic" } }), false);
+  assert.equal(adapter.detectJSON({
+    ...source,
+    metadata: { ...source.metadata, link: "https://example.com/chat/not-claude" }
+  }), false);
+  assert.equal(adapter.detectJSON({
+    ...source,
+    messages: [{ role: "tool", say: "not this exporter", time: "6/27/2026 9:01:02" }]
+  }), false);
 });
 
 test("unknown JSON returns schema-only diagnostics without leaking values", async () => {

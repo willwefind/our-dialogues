@@ -1,5 +1,13 @@
 # Local verification tools
 
+## Claude webpage-plugin smoke
+
+`smoke-claude-web-exporter.mjs` strictly detects one or more local `ai-chat-exporter.net` JSON files and reports only message/role/timestamp counts and preservation booleans. It never prints filenames, links, titles, or conversation text.
+
+```text
+node tools/smoke-claude-web-exporter.mjs path/to/claude-plugin.json
+```
+
 ## Mufy source-fidelity smoke
 
 `smoke-mufy-source-fidelity.mjs` compares the legacy visible-text path with the current Mufy adapter for one local ZIP. It prints only archive/message counts and literal `<div`, `<details`, and `<think` counts; it never prints conversation text.
