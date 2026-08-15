@@ -8,6 +8,8 @@
 - Added strict support for `ai-chat-exporter.net` Claude webpage-plugin JSON from two real local samples
 - Kept Claude official export and other plugins separate and pending their own samples
 - Added synthetic source-fidelity tests and a counts-only real Mufy smoke tool
+- Added strict source-folder routing for ChatGPT official folders and Mufy ZIP collections
+- Added multi-ZIP Mufy batch import with conservative `characterId + sessionId` merging and stable-ID deduplication
 
 ## v0.1.6-dev — 2026-08-15
 

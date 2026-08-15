@@ -10,10 +10,18 @@ node tools/smoke-claude-web-exporter.mjs path/to/claude-plugin.json
 
 ## Mufy source-fidelity smoke
 
-`smoke-mufy-source-fidelity.mjs` compares the legacy visible-text path with the current Mufy adapter for one local ZIP. It prints only archive/message counts and literal `<div`, `<details`, and `<think` counts; it never prints conversation text.
+`smoke-mufy-source-fidelity.mjs` compares the legacy visible-text path with the current Mufy adapter for one local ZIP. It prints only archive/message IDs and counts plus literal `<div`, `<details`, `<think`, and `<strong` counts; it never prints conversation text.
 
 ```text
 node tools/smoke-mufy-source-fidelity.mjs path/to/mufy.zip
+```
+
+## Metadata-only JSON source inspection
+
+`inspect-json-source.mjs` runs strict adapter detection and prints only adapter IDs, counts, booleans, and the same bounded structural diagnostics used by Reader. It never prints filenames, paths, titles, links, or conversation text.
+
+```text
+node tools/inspect-json-source.mjs path/to/source.json
 ```
 
 ## ElevenLabs Voice Archive Exporter

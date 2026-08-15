@@ -206,10 +206,15 @@ OD.adapters = OD.adapters || [];
         updatedAt: session.updatedTime ?? session.updatedAt ?? null,
         context: {
           sourceMetadata: {
+            characterId: pack.characterId ?? null,
+            sessionId: session.sessionId ?? null,
+            batchFrom: pack.batchFrom ?? null,
+            totalSessions: pack.totalSessions ?? null,
             archives: session.archives || [],
             isCurrent: session.isCurrent ?? null,
             messageCount: session.messageCount ?? null,
-            error: session.error ?? null
+            error: session.error ?? null,
+            original: session
           }
         },
         participants: [
@@ -236,7 +241,7 @@ OD.adapters = OD.adapters || [];
       contract: "our-dialogues.adapter-capabilities.v1",
       json: true,
       zip: true,
-      folder: false,
+      folder: true,
       thinking: "extract-explicit-only",
       attachments: "none",
       sourceMarkup: "html-to-readable-text"

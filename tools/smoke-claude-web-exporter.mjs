@@ -41,9 +41,11 @@ async function main() {
     sources.push({
       sourceIndex: index + 1,
       bytes: bytes.length,
-      detected,
+      detectedAdapterId: detected ? adapter.id : null,
       conversationCount: archive.conversations.length,
       messageCount: messages.length,
+      titlePresent: typeof data.metadata?.title === "string" && data.metadata.title.trim().length > 0,
+      datesPresent: !!(data.metadata?.dates && typeof data.metadata.dates === "object"),
       roleCounts,
       emptyVisibleTextCount: messages.filter(message => !OD.schema.textOf(message.content)).length,
       thinkingItemCount: messages.reduce((total, message) => total + (message.thinking?.length || 0), 0),

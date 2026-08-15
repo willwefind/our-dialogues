@@ -1,0 +1,105 @@
+{
+  "format": "our-dialogues.synthetic-mufy-folder-fixture.v1",
+  "packages": [
+    {
+      "filename": "same-character-batch-001.zip",
+      "data": {
+        "name": "Synthetic Same Name",
+        "characterId": "character-alpha",
+        "archiveCount": 3,
+        "batchFrom": 0,
+        "totalSessions": 3,
+        "greeting": "<div>Synthetic greeting</div>",
+        "sessions": [
+          {
+            "sessionId": "session-shared",
+            "dialogs": [
+              { "dialogsId": "alpha-shared-1", "role": "assistant", "content": "<div>Alpha shared one</div>" }
+            ]
+          },
+          {
+            "sessionId": "session-alpha-2",
+            "dialogs": [
+              { "dialogsId": "alpha-two-1", "role": "user", "content": "<strong>Alpha two</strong>" }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "filename": "same-character-batch-002.zip",
+      "data": {
+        "name": "Synthetic Same Name",
+        "characterId": "character-alpha",
+        "archiveCount": 3,
+        "batchFrom": 1,
+        "totalSessions": 3,
+        "greeting": "<div>Synthetic greeting</div>",
+        "sessions": [
+          {
+            "sessionId": "session-shared",
+            "dialogs": [
+              { "dialogsId": "alpha-shared-1", "role": "assistant", "content": "<div>Alpha shared one</div>" },
+              { "dialogsId": "alpha-shared-1", "role": "assistant", "content": "<div>Conflicting stable ID remains visible</div>" },
+              { "dialogsId": "alpha-shared-2", "role": "user", "content": "<details>Alpha shared two</details>" }
+            ]
+          },
+          {
+            "sessionId": "session-alpha-3",
+            "dialogs": [
+              { "dialogsId": "alpha-three-1", "role": "assistant", "content": "Visible<think>Synthetic thought</think>" }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "filename": "different-character-same-name.zip",
+      "data": {
+        "name": "Synthetic Same Name",
+        "characterId": "character-beta",
+        "archiveCount": 1,
+        "batchFrom": 0,
+        "totalSessions": 1,
+        "sessions": [
+          {
+            "sessionId": "session-shared",
+            "dialogs": [
+              { "dialogsId": "beta-shared-1", "role": "assistant", "content": "<div>Beta remains separate</div>" }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "filename": "missing-character-id-001.zip",
+      "data": {
+        "name": "Synthetic Unknown Identity",
+        "archiveCount": 1,
+        "sessions": [
+          {
+            "sessionId": "session-without-character",
+            "dialogs": [
+              { "dialogsId": "unknown-1", "role": "assistant", "content": "First unknown identity" }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "filename": "missing-character-id-002.zip",
+      "data": {
+        "name": "Synthetic Unknown Identity",
+        "archiveCount": 1,
+        "sessions": [
+          {
+            "sessionId": "session-without-character",
+            "dialogs": [
+              { "dialogsId": "unknown-1", "role": "assistant", "content": "Second unknown identity" }
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

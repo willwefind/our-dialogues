@@ -184,6 +184,19 @@ test("Claude webpage-plugin detection requires exporter and claude.ai fingerprin
   }), false);
 });
 
+test("Reader HTML loads Claude, diagnostics, and source-folder routing before the app", async () => {
+  const html = await readFile(path.join(repositoryRoot, "index.html"), "utf8");
+  const claude = html.indexOf('src/adapters/claude-web-exporter.js');
+  const registry = html.indexOf('src/adapters/registry.js');
+  const sourceFolder = html.indexOf('src/core/source-folder.js');
+  const app = html.indexOf('src/app.js');
+
+  assert.ok(claude >= 0 && claude < registry, "Claude adapter must register before diagnostics registry");
+  assert.ok(registry < sourceFolder && sourceFolder < app, "folder routing must load after registry and before app");
+  assert.match(html, /选择来源文件夹/);
+  assert.match(html, /多个 Mufy ZIP/);
+});
+
 test("unknown JSON returns schema-only diagnostics without leaking values", async () => {
   const OD = await loadRuntime();
   const secret = "PRIVATE CONVERSATION BODY MUST NEVER APPEAR";

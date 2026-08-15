@@ -18,7 +18,7 @@ function legacyText(content) {
 }
 
 function counts(text) {
-  return Object.fromEntries(["div", "details", "think"].map(tag => [
+  return Object.fromEntries(["div", "details", "think", "strong"].map(tag => [
     `<${tag}`,
     (String(text).match(new RegExp(`<\\s*${tag}\\b`, "gi")) || []).length
   ]));
@@ -64,10 +64,14 @@ async function main() {
 
   const normalized = await adapter.parseZIP(zip);
   const currentVisible = [];
+  const conversationIds = [];
+  const messageIds = [];
   let messageCount = 0;
   for (const conversation of normalized.conversations || []) {
+    conversationIds.push(conversation.id);
     for (const message of conversation.messages || []) {
       messageCount += 1;
+      messageIds.push(message.id);
       currentVisible.push(OD.schema.textOf(message.content));
     }
   }
@@ -76,13 +80,20 @@ async function main() {
     format: "our-dialogues.mufy-source-fidelity-smoke.v1",
     zipBytes: bytes.length,
     sourceEntry: rawName,
+    sourceIdentity: {
+      characterIdPresent: pack.characterId != null && String(pack.characterId).trim() !== "",
+      batchFromPresent: pack.batchFrom != null,
+      totalSessionsPresent: pack.totalSessions != null
+    },
     conversationCount: normalized.conversations.length,
     messageCount,
+    conversationIds,
+    messageIds,
     literalMarkupInVisibleText: {
       before: counts(legacyVisible.join("\n")),
       after: counts(currentVisible.join("\n"))
     },
-    privacy: "counts only; no conversation text printed"
+    privacy: "counts and source IDs only; no conversation text printed"
   }, null, 2)}\n`);
 }
 

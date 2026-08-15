@@ -550,36 +550,29 @@ window.OD = window.OD || {};
   }
 
   /*
-    Folder importer boundary (implemented by src/core/chatgpt-export-folder.js):
-      OD.chatgptExportFolder.parse(File[]) ->
-        { conversations, shardPaths, assetIndex, objectURLs, stats }
+    Source-folder boundary (implemented by src/core/source-folder.js):
+      OD.sourceFolder.parse(File[]) -> normalized archive plus optional assets.
 
-    assetIndex.resolve(attachment) returns availability and metadata without
-    reading bytes. The backing asset may be a browser File or a lazy ZIP entry.
-    objectURLs.get(attachment) is the only operation that creates a blob URL,
-    and is called by the viewport observer above.
+    ChatGPT attachment File objects remain lazy. Mufy ZIP folders are combined
+    in memory using stable source IDs and never persisted or uploaded.
   */
-  async function loadChatGPTFolder(files) {
-    if (typeof OD.chatgptExportFolder?.parse !== "function") {
-      throw new Error("当前版本缺少 ChatGPT Export 文件夹导入器。");
+  async function loadSourceFolder(files) {
+    if (typeof OD.sourceFolder?.parse !== "function") {
+      throw new Error("当前版本缺少来源文件夹导入器。");
     }
 
-    setStatus(`正在读取 ChatGPT Export 文件夹索引（${files.length} 个文件）…`);
-    const folder = await OD.chatgptExportFolder.parse(files);
-    const parsed = requireRecognized(await OD.registry.parseJSON(folder.conversations));
-    const objectURLs = folder.objectURLs || (folder.assetIndex?.createObjectURL ? {
-      get: ref => folder.assetIndex.createObjectURL(ref),
-      revoke: ref => folder.assetIndex.revokeObjectURL?.(ref),
-      revokeAll: () => folder.assetIndex.revokeAllObjectURLs?.()
-    } : null);
-    const assetSession = { assetIndex: folder.assetIndex, objectURLs };
-    const details = [];
-    if (folder.shardPaths?.length) details.push(`${folder.shardPaths.length} 个分片`);
-    const assetCount = folder.stats?.availableAssetCount ?? folder.stats?.assetCount ??
-      folder.stats?.indexedAssets ?? folder.assetIndex?.size;
-    if (Number.isFinite(assetCount)) details.push(`${assetCount} 个本地附件`);
-    loadArchive(parsed.archive, parsed.adapter.label, assetSession, details.join(" · "));
+    setStatus(`正在识别来源文件夹（${files.length} 个文件）…`);
+    const result = await OD.sourceFolder.parse(files);
+    loadArchive(
+      result.archive,
+      result.adapter.label,
+      result.assetSession || null,
+      result.importDetails || ""
+    );
   }
+
+  // Backward-compatible public seam for existing browser tests and integrations.
+  const loadChatGPTFolder = loadSourceFolder;
 
   $("fileInput").addEventListener("change", async event => {
     const files = [...event.target.files];
@@ -598,7 +591,7 @@ window.OD = window.OD || {};
     const files = [...event.target.files];
     if (!files.length) return;
     try {
-      await loadChatGPTFolder(files);
+      await loadSourceFolder(files);
     } catch (error) {
       console.error(error);
       setStatus(error?.message || String(error), true);
@@ -651,6 +644,7 @@ window.OD = window.OD || {};
   // Small public seam for browser smoke tests; import data remains in memory only.
   OD.app = {
     loadChatGPTFolder,
+    loadSourceFolder,
     loadArchive,
     loadSolVoiceMapping,
     loadSolVoiceFolder,

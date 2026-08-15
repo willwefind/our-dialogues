@@ -27,10 +27,13 @@ async function loadReaderRuntime() {
 
   for (const relativePath of [
     "src/core/schema.js",
+    "src/core/zip.js",
     "src/core/chatgpt-export-folder.js",
     "src/adapters/contract.js",
+    "src/adapters/mufy.js",
     "src/adapters/chatgpt-official.js",
-    "src/adapters/registry.js"
+    "src/adapters/registry.js",
+    "src/core/source-folder.js"
   ]) {
     const source = await readFile(path.join(repositoryRoot, relativePath), "utf8");
     vm.runInContext(source, runtime, { filename: relativePath });
@@ -177,6 +180,19 @@ test("merged folder conversations pass through the official adapter", async () =
   assert.equal(parsed.archive.conversations[0].messages[1].metadata.reasoningRecap.length, 1);
   assert.ok(Array.isArray(parsed.archive.conversations[0].messages[1].metadata.reasoningToolIcons));
   assert.ok(Array.isArray(parsed.archive.conversations[0].messages[1].metadata.reasoningSources));
+});
+
+test("source folder registry routes the existing ChatGPT fixture without Mufy interception", async () => {
+  const OD = await loadReaderRuntime();
+  const { files } = await fixtureFiles();
+  const inspection = await OD.sourceFolder.inspect(files);
+  assert.equal(inspection.recognized, true);
+  assert.equal(inspection.handler.id, "chatgpt-official-folder");
+
+  const result = await OD.sourceFolder.parse(files);
+  assert.equal(result.folderSourceId, "chatgpt-official-folder");
+  assert.equal(result.adapter.id, "chatgpt-official-2026");
+  assert.equal(result.archive.conversations.length, 2);
 });
 
 test("library metadata wrappers are traversed instead of mistaken for file records", async () => {

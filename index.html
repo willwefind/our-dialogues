@@ -17,8 +17,8 @@
       <div class="import-picks">
         <label class="pick pick-folder">
           <input id="folderInput" type="file" webkitdirectory directory multiple hidden>
-          <span>选择 ChatGPT Export 文件夹</span>
-          <small>官方完整导出 · 附件按需读取</small>
+          <span>选择来源文件夹</span>
+          <small>ChatGPT 官方 Export · 多个 Mufy ZIP</small>
         </label>
 
         <div class="pick-divider"><span>或</span></div>
@@ -76,7 +76,7 @@
       <div class="welcome-card">
         <div class="mark">“</div>
         <h2>I knew the conversation existed.<br>I just wanted to find it again.</h2>
-        <p>选择 ChatGPT 官方 Export 文件夹，或载入已有的 AI 对话 JSON / ZIP。Reader 会在本地识别并转换为统一阅读结构。</p>
+        <p>选择 ChatGPT 官方 Export 文件夹、包含多个 Mufy ZIP 的文件夹，或载入已有的 AI 对话 JSON / ZIP。Reader 会在本地识别并转换为统一阅读结构。</p>
         <p class="small">文件不会上传。官方导出的对话分片会自动合并，图片、音频、视频和其他附件只在滚动到附近时才从本地文件创建临时地址。</p>
       </div>
     </section>
@@ -102,6 +102,7 @@
   <script src="src/adapters/claude-web-exporter.js"></script>
   <script src="src/adapters/chatgpt-official.js"></script>
   <script src="src/adapters/registry.js"></script>
+  <script src="src/core/source-folder.js"></script>
   <script src="src/app.js"></script>
 </body>
 </html>

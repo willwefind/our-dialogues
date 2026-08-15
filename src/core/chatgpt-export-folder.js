@@ -676,7 +676,26 @@ window.OD = window.OD || {};
     };
   }
 
+  async function detect(fileList) {
+    try {
+      const catalog = buildFileCatalog(fileList);
+      const manifestCandidates = catalog.entries.filter(
+        entry => entry.name.toLowerCase() === MANIFEST_NAME
+      );
+      if (manifestCandidates.length !== 1) return false;
+
+      const manifestEntry = manifestCandidates[0];
+      const rootDir = dirName(manifestEntry.path);
+      const manifest = await readJSON(manifestEntry, MANIFEST_NAME);
+      const shardRefs = collectManifestConversationRefs(manifest);
+      return shardRefs.length > 0 && shardRefs.every(reference => !!catalog.find(reference, rootDir));
+    } catch (_) {
+      return false;
+    }
+  }
+
   OD.chatgptExportFolder = {
+    detect,
     parse,
     createObjectURLPool,
     _internals: {

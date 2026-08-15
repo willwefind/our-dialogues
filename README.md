@@ -14,7 +14,7 @@ Currently included:
 - Normalized conversation schema v1
 - Ciel House Export v1 contract
 - Ciel House adapter
-- Mufy raw-export adapter
+- Mufy raw-export adapter with multi-ZIP folder batching
 - Claude Exporter (`ai-chat-exporter.net`) webpage-plugin JSON adapter
 - ChatGPT official Export Folder import validated against a real 2026 export structure
 - Local JSON / ZIP / browser folder import
@@ -83,7 +83,7 @@ node --test --test-isolation=none tests/*.test.mjs
 | Source | State |
 |---|---|
 | Ciel House Export v1 | JSON and lazy-asset ZIP import verified |
-| Mufy `_原始数据.json` | implemented from current known schema |
+| Mufy `_原始数据.json` | JSON, single ZIP, and folder-of-ZIPs import; stable `characterId + sessionId` batch merging |
 | ChatGPT official export | JSON, ZIP, and manifest-driven Export Folder import implemented; folder structure validated against a real 2026 export |
 | SolVoice local sidecar | optional mapping v2 + VoiceArchive or `sol/audio` folder; strong mappings only |
 | Claude Exporter webpage-plugin JSON | implemented from two real `ai-chat-exporter.net` samples; public fixture is synthetic |
@@ -92,13 +92,13 @@ node --test --test-isolation=none tests/*.test.mjs
 
 See [`docs/source-compatibility.md`](docs/source-compatibility.md) for the capability contract, fidelity notes, diagnostics privacy boundary, and Claude sample status.
 
-ZIP import uses browser-native decompression where available. JSON can always be imported directly. Existing JSON and ZIP workflows remain available beside folder import.
+ZIP import uses browser-native decompression where available. JSON can always be imported directly. Existing JSON and single-ZIP workflows remain available beside source-folder import.
 
-### Import a ChatGPT Export Folder
+### Import a source folder
 
-Use **选择 ChatGPT Export 文件夹** and select the unzipped official export directory. The browser passes local `File` references to the reader; nothing is uploaded.
+Use **选择来源文件夹** and select either an unzipped ChatGPT official export or a folder containing Mufy ZIP files. The browser passes local `File` references to the reader; nothing is uploaded. A valid ChatGPT manifest is decisive, so its ZIP attachments stay unread and are never probed as Mufy. Without that manifest, Reader looks for strictly detected Mufy ZIPs; a pure Mufy folder is never sent through the ChatGPT importer.
 
-The folder importer:
+For ChatGPT, the folder importer:
 
 1. finds and parses `export_manifest.json`
 2. resolves every shard declared for logical `conversations.json`
@@ -107,6 +107,8 @@ The folder importer:
 5. keeps binary files unread until an attachment is actually rendered, then creates a temporary object URL for that local file
 
 Images render inline, audio and video use native browser controls, and other files remain attachment cards. Selecting a folder does not copy its contents into the repository or browser storage.
+
+For Mufy, every strictly detected ZIP in the selected folder is parsed, including ZIPs that contain multiple sessions. Reader combines all sessions into one archive view while retaining single-ZIP import compatibility. Overlapping batches are merged only when both `characterId` and `sessionId` are present and equal. Repeated messages use stable exported dialog IDs (or exact identical source records) for deduplication. The same character name with different `characterId` values stays separate; when either stable identity field is missing, conversations stay separate rather than being merged by title.
 
 ### Optional local SolVoice playback
 
@@ -161,13 +163,16 @@ fixtures/
     conversations-000.json
     conversations-001.json
     file_synthetic_*.dat
+  mufy-folder-batch-synthetic.json
 src/
   core/
+    source-folder.js
     solvoice-sidecar.js
   adapters/
   app.js
 tests/
   chatgpt-export-folder.test.mjs
+  mufy-folder-import.test.mjs
   solvoice-sidecar.test.mjs
 index.html
 styles.css

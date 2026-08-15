@@ -10,7 +10,7 @@ The compatibility rule is conservative: an unknown or ambiguous input stays unkn
 |---|---:|---:|---|---|---|---|
 | ChatGPT official export (2026 observed) | Yes | ZIP and manifest-driven folder | Official text plus source-token cleanup | Exported `thoughts` and `reasoning_recap` | Metadata plus lazy local/ZIP assets | Implemented and regression-tested |
 | Ciel House Export v1 | Yes | ZIP | Contract text fields | Preserved when exported | Lazy ZIP assets | Implemented and regression-tested |
-| Mufy raw export | Yes | `_原始数据.json` ZIP | Source HTML becomes readable normalized text; comments and script/style content are excluded | Explicit, paired `<think>` and typed thinking parts only | Not present in the calibrated raw schema | Implemented from synthetic tests and real local schema metadata |
+| Mufy raw export | Yes | Single `_原始数据.json` ZIP and folder of multiple Mufy ZIPs | Source HTML becomes readable normalized text; comments and script/style content are excluded | Explicit, paired `<think>` and typed thinking parts only | Not present in the calibrated raw schema | Implemented with synthetic multi-ZIP batch coverage and real local schema metadata |
 | Our Dialogues normalized v1 | Yes | No direct ZIP adapter | Already normalized | Preserved | Preserved | Implemented and regression-tested |
 | SolVoice sidecar | Mapping JSON | `VoiceArchive` or `sol/audio` folder | Not a conversation source | Not applicable | Lazy local audio linked by strong exact message ID mapping | Implemented and regression-tested |
 | Claude official export | No | No | Unknown | Unknown | Unknown | Pending a real export sample |
@@ -40,6 +40,12 @@ capabilities: {
 - Registry detection evaluates every eligible adapter. Exactly one match is required. Multiple matches return an ambiguity diagnostic instead of choosing by registration order.
 
 The live declarations are available through `OD.registry.capabilities()`.
+
+## Folder source registry
+
+The browser folder entry is source-aware. `chatgpt-official-folder` requires one valid `export_manifest.json` whose declared conversation shards are present. That strict manifest match is decisive and prevents ZIP attachments in the official export from being opened during source detection. When no ChatGPT manifest matches, `mufy-zip-folder` requires at least one ZIP that strictly matches the Mufy adapter; unrelated or corrupt ZIP files are skipped and reported as counts. A pure Mufy folder is therefore never handed to the ChatGPT importer.
+
+Mufy folder import parses every matching ZIP and combines all contained sessions into one normalized archive. A session can merge across split/overlapping packages only when the raw data supplies both the same `characterId` and the same `sessionId`. Stable dialog IDs deduplicate repeated messages; an exact identical source record is the only fallback dedupe. Conflicting records with the same dialog ID are both preserved and marked. Character names and conversation titles never participate in identity. Missing stable identity keeps conversations separate, and the same display name with different `characterId` values always stays separate.
 
 ## Metadata-only diagnostics
 
