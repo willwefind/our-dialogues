@@ -58,6 +58,7 @@ window.OD = window.OD || {};
       createdAt: ISO(input.createdAt ?? input.create_time ?? null),
       updatedAt: ISO(input.updatedAt ?? input.update_time ?? null),
       context: input.context && typeof input.context === "object" ? input.context : {},
+      metadata: input.metadata && typeof input.metadata === "object" ? input.metadata : {},
       participants: asArray(input.participants),
       messages: asArray(input.messages).map((m, i) => message(m, `${input.id || index}-m${i}`))
     };

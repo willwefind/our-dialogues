@@ -26,6 +26,10 @@ window.OD = window.OD || {};
     saveTimer: null,
     pendingReconnectSourceId: null,
     restoredPosition: null,
+    readerPrefs: OD.readerParity.normalizePreferences(),
+    pages: [[]],
+    pageIndex: 0,
+    titleLabels: new Map(),
     booted: false
   };
 
@@ -116,11 +120,13 @@ window.OD = window.OD || {};
       conversationSort: state.sortMode,
       hideUser: !!$("hideUser").checked,
       showThinking: !!$("showThinking").checked,
-      theme: $("theme").value || document.documentElement.dataset.theme || "paper",
+      ...state.readerPrefs,
+      theme: $("theme").value || state.readerPrefs.theme,
       recentConversationId: state.current?.id || null,
       readingPosition: state.current ? {
         conversationId: state.current.id,
         messageId: messageAnchor(),
+        page: state.pageIndex,
         scrollTop: Number($("main").scrollTop || 0),
         timestamp: new Date().toISOString()
       } : null,
@@ -128,8 +134,57 @@ window.OD = window.OD || {};
     };
   }
 
+  function diagnosticToken(value) {
+    let hash = 0x811c9dc5;
+    for (const character of String(value ?? "")) {
+      hash ^= character.codePointAt(0);
+      hash = Math.imul(hash, 0x01000193) >>> 0;
+    }
+    return hash.toString(16).padStart(8, "0");
+  }
+
+  function readingPositionDiagnostic(position) {
+    return position ? {
+      conversationToken: diagnosticToken(position.conversationId),
+      messageToken: diagnosticToken(position.messageId),
+      page: Number(position.page || 0),
+      scrollTop: Math.round(Number(position.scrollTop || 0))
+    } : null;
+  }
+
+  function updateAcceptanceReadingPosition(position) {
+    const element = $("acceptanceAudit");
+    if (!element) return;
+    let current = {};
+    try { current = JSON.parse(element.textContent || "{}"); } catch (_) {}
+    element.textContent = JSON.stringify({
+      ...current,
+      readerPreferences: { ...state.readerPrefs },
+      readingPosition: readingPositionDiagnostic(position)
+    });
+  }
+
+  function applyReaderPreferences(value = state.readerPrefs) {
+    state.readerPrefs = OD.readerParity.normalizePreferences(value);
+    const root = document.documentElement;
+    root.style?.setProperty?.("--reader-font-size", `${state.readerPrefs.fontSize}px`);
+    root.style?.setProperty?.("--reader-line-height", String(state.readerPrefs.lineHeight));
+    root.style?.setProperty?.("--cw", `${state.readerPrefs.contentWidth}px`);
+    root.style?.setProperty?.("--reader-font-family", OD.readerParity.FONT_FAMILIES[state.readerPrefs.fontFamily]);
+    root.dataset.theme = state.readerPrefs.theme;
+    $("theme").value = state.readerPrefs.theme;
+    $("lineHeight").value = String(state.readerPrefs.lineHeight);
+    $("contentWidth").value = String(state.readerPrefs.contentWidth);
+    $("fontFamily").value = state.readerPrefs.fontFamily;
+    $("readingMode").value = state.readerPrefs.readingMode;
+    $("pageLength").value = state.readerPrefs.pageLength;
+    $("pageLength").disabled = state.readerPrefs.readingMode !== "page";
+    document.body.classList.toggle("page-mode", state.readerPrefs.readingMode === "page");
+  }
+
   function saveReaderState({ immediate = false } = {}) {
     const settings = readerSettings();
+    updateAcceptanceReadingPosition(settings.readingPosition);
     try { localStorage.setItem(SETTINGS_MIRROR_KEY, JSON.stringify(settings)); } catch (_) {}
     if (!state.persistence?.supported) return Promise.resolve();
     const write = async () => {
@@ -162,6 +217,43 @@ window.OD = window.OD || {};
       state.persistenceError = error?.message || "保存失败；当前页面内容仍可继续阅读";
     }
     renderLocalLibraryStatus();
+  }
+
+  function currentTitleSourceCounts() {
+    const counts = {};
+    let mufyConversations = 0;
+    for (const source of state.library.sources()) {
+      if (source.source?.platform !== "mufy") continue;
+      for (const conversation of source.conversations) {
+        mufyConversations += 1;
+        const value = conversation.metadata?.titleSource || conversation.context?.sourceMetadata?.titleSource || "missing";
+        counts[value] = (counts[value] || 0) + 1;
+      }
+    }
+    return { mufyConversations, titleSourceCounts: counts };
+  }
+
+  async function refreshAcceptanceAudit() {
+    const element = $("acceptanceAudit");
+    if (!element) return null;
+    try {
+      const persistence = await state.persistence?.audit?.();
+      const titles = currentTitleSourceCounts();
+      const result = {
+        ...persistence,
+        ...titles,
+        fallbackRatio: titles.mufyConversations
+          ? (titles.titleSourceCounts.fallback || 0) / titles.mufyConversations
+          : 0,
+        readerPreferences: { ...state.readerPrefs },
+        readingPosition: readingPositionDiagnostic(readerSettings().readingPosition)
+      };
+      element.textContent = JSON.stringify(result);
+      return result;
+    } catch (error) {
+      element.textContent = JSON.stringify({ error: error?.message || String(error) });
+      return null;
+    }
   }
 
   function conversationHaystack(c) {
@@ -204,11 +296,15 @@ window.OD = window.OD || {};
     state.solVoiceSession = null;
   }
 
+  function displayConversationTitle(conversation) {
+    return state.titleLabels.get(String(conversation?.id)) || String(conversation?.title || "");
+  }
+
   function conversationMarkup(c) {
     const active = state.current?.id === c.id ? " on" : "";
     const room = c.context?.room?.name ? ` · ${esc(c.context.room.name)}` : "";
     return `<div class="conv${active}" data-id="${esc(c.id)}">
-      <div class="conv-title">${esc(c.title)}</div>
+      <div class="conv-title">${esc(displayConversationTitle(c))}</div>
       <div class="conv-meta">${c.messages.length} 条${room}${c.createdAt ? ` · ${esc(fmtDate(c.createdAt))}` : ""}</div>
     </div>`;
   }
@@ -275,6 +371,7 @@ window.OD = window.OD || {};
       ? allSources
       : allSources.filter(source => source.id === state.sourceFilter);
     const all = visibleSources.flatMap(source => source.conversations);
+    state.titleLabels = OD.mufyTitleResolver.disambiguate(all);
     state.filtered = OD.conversationOrder.filterAndSort(
       all,
       $("search").value,
@@ -616,7 +713,69 @@ window.OD = window.OD || {};
     }).join("");
   }
 
-  function openConversation(id, { restorePosition = null } = {}) {
+  function messageMarkup(message, renderedAttachments, renderedSolVoice) {
+    const contentHTML = messageContentMarkup(message.content);
+    const thinking = OD.schema.textOf(message.thinking);
+    const recaps = Array.isArray(message.metadata?.reasoningRecap) ? message.metadata.reasoningRecap.filter(Boolean) : [];
+    const sourceTrace = Array.isArray(message.metadata?.sourceTrace)
+      ? message.metadata.sourceTrace.filter(item => item?.text)
+      : [];
+    const attachments = Array.isArray(message.attachments) ? message.attachments : [];
+    const reasoningOnly = !!message.metadata?.reasoningOnly;
+    const attachmentHTML = attachments.map(attachment => {
+      const index = renderedAttachments.push(attachment) - 1;
+      return attachmentMarkup(attachment, index);
+    }).join("");
+    const solVoiceHTML = state.solVoiceSession?.clipsForMessage(message.id).map(clip => {
+      const index = renderedSolVoice.push(clip) - 1;
+      return solVoiceMarkup(clip, index);
+    }).join("") || "";
+    const sourceTraceHTML = sourceTrace.length ? `<div class="source-trace"><strong>Exporter source trace · heuristic, not official thinking</strong>\n${sourceTrace.map(item => item.type === "marker"
+      ? `<span class="source-trace-marker">[${esc(item.marker || "marker")}] ${esc(item.text)}</span>`
+      : esc(item.text)).join("\n\n")}</div>` : "";
+    return `<section class="message${reasoningOnly ? " reasoning-only" : ""}" data-role="${esc(message.role)}" data-message-id="${esc(message.id)}">
+      <div class="message-who">${esc(message.speaker || message.role)}</div>
+      ${contentHTML}
+      ${attachmentHTML ? `<div class="attachments">${attachmentHTML}</div>` : ""}
+      ${solVoiceHTML ? `<div class="solvoice-clips">${solVoiceHTML}</div>` : ""}
+      ${(thinking || recaps.length) ? `<div class="thinking"><strong>Thinking / reasoning exported by source</strong>${recaps.length ? `\n${esc(recaps.join(" · "))}` : ""}${thinking ? `\n\n${esc(thinking)}` : ""}</div>` : ""}
+      ${sourceTraceHTML}
+      ${message.createdAt ? `<div class="message-time">${esc(fmtDate(message.createdAt))}</div>` : ""}
+    </section>`;
+  }
+
+  function renderPageNavigation() {
+    const pageMode = state.readerPrefs.readingMode === "page";
+    const conversationIndex = state.filtered.findIndex(conversation => conversation.id === state.current?.id);
+    const hasPrevious = state.pageIndex > 0 || conversationIndex > 0;
+    const hasNext = state.pageIndex < state.pages.length - 1 || (conversationIndex >= 0 && conversationIndex < state.filtered.length - 1);
+    $("previousPage").disabled = !hasPrevious;
+    $("nextPage").disabled = !hasNext;
+    $("previousPage").textContent = state.pageIndex > 0 ? "← 上一页" : "← 上一段";
+    $("nextPage").textContent = state.pageIndex < state.pages.length - 1 ? "下一页 →" : "下一段 →";
+    $("pageIndicator").hidden = !pageMode;
+    $("pageJump").value = String(state.pageIndex + 1);
+    $("pageJump").max = String(state.pages.length);
+    $("pageCount").textContent = String(state.pages.length);
+  }
+
+  function restoreReadingPosition(position) {
+    const main = $("main");
+    main.scrollTop = 0;
+    if (!position) return;
+    const messageId = position.messageId == null ? "" : String(position.messageId);
+    const selector = `[data-message-id="${messageId.replace(/["\\]/g, "\\$&")}"]`;
+    const anchor = messageId && typeof $("messages").querySelector === "function"
+      ? $("messages").querySelector(selector)
+      : null;
+    if (anchor && Number.isFinite(Number(anchor.offsetTop))) {
+      main.scrollTop = Math.max(0, Number(anchor.offsetTop) - 72);
+    } else {
+      main.scrollTop = Math.max(0, Number(position.scrollTop || 0));
+    }
+  }
+
+  function openConversation(id, { restorePosition = null, page = null } = {}) {
     const c = (state.archive?.conversations || []).find(x => x.id === id);
     if (!c) return;
     releaseRenderedAssets();
@@ -625,8 +784,9 @@ window.OD = window.OD || {};
     state.current = c;
     $("welcome").classList.add("hidden");
     $("reader").classList.remove("hidden");
-    $("currentTitle").textContent = c.title;
-    $("readerTitle").textContent = c.title;
+    const displayedTitle = displayConversationTitle(c);
+    $("currentTitle").textContent = displayedTitle;
+    $("readerTitle").textContent = displayedTitle;
 
     const bits = [];
     if (source?.label) bits.push(`Source: ${source.label}`);
@@ -635,44 +795,50 @@ window.OD = window.OD || {};
     bits.push(`${c.messages.length} 条消息`);
     $("readerMeta").innerHTML = bits.map(x => `<span class="badge">${esc(x)}</span>`).join("");
 
+    state.pages = OD.readerParity.paginateMessages(c.messages, {
+      mode: state.readerPrefs.readingMode,
+      pageLength: state.readerPrefs.pageLength,
+      hideUser: !!$("hideUser").checked
+    });
+    const anchorPage = OD.readerParity.pageForMessage(state.pages, restorePosition?.messageId);
+    state.pageIndex = OD.readerParity.clampPage(
+      anchorPage >= 0 ? anchorPage : (page ?? restorePosition?.page ?? 0),
+      state.pages
+    );
     const renderedAttachments = [];
     const renderedSolVoice = [];
-    $("messages").innerHTML = (c.messages || []).map(m => {
-      const contentHTML = messageContentMarkup(m.content);
-      const thinking = OD.schema.textOf(m.thinking);
-      const recaps = Array.isArray(m.metadata?.reasoningRecap) ? m.metadata.reasoningRecap.filter(Boolean) : [];
-      const sourceTrace = Array.isArray(m.metadata?.sourceTrace)
-        ? m.metadata.sourceTrace.filter(item => item?.text)
-        : [];
-      const attachments = Array.isArray(m.attachments) ? m.attachments : [];
-      const reasoningOnly = !!m.metadata?.reasoningOnly;
-      const attachmentHTML = attachments.map(attachment => {
-        const index = renderedAttachments.push(attachment) - 1;
-        return attachmentMarkup(attachment, index);
-      }).join("");
-      const solVoiceHTML = state.solVoiceSession?.clipsForMessage(m.id).map(clip => {
-        const index = renderedSolVoice.push(clip) - 1;
-        return solVoiceMarkup(clip, index);
-      }).join("") || "";
-      const sourceTraceHTML = sourceTrace.length ? `<div class="source-trace"><strong>Exporter source trace · heuristic, not official thinking</strong>\n${sourceTrace.map(item => item.type === "marker"
-        ? `<span class="source-trace-marker">[${esc(item.marker || "marker")}] ${esc(item.text)}</span>`
-        : esc(item.text)).join("\n\n")}</div>` : "";
-      return `<section class="message${reasoningOnly ? " reasoning-only" : ""}" data-role="${esc(m.role)}" data-message-id="${esc(m.id)}">
-        <div class="message-who">${esc(m.speaker || m.role)}</div>
-        ${contentHTML}
-        ${attachmentHTML ? `<div class="attachments">${attachmentHTML}</div>` : ""}
-        ${solVoiceHTML ? `<div class="solvoice-clips">${solVoiceHTML}</div>` : ""}
-        ${(thinking || recaps.length) ? `<div class="thinking"><strong>Thinking / reasoning exported by source</strong>${recaps.length ? `\n${esc(recaps.join(" · "))}` : ""}${thinking ? `\n\n${esc(thinking)}` : ""}</div>` : ""}
-        ${sourceTraceHTML}
-        ${m.createdAt ? `<div class="message-time">${esc(fmtDate(m.createdAt))}</div>` : ""}
-      </section>`;
-    }).join("");
+    $("messages").innerHTML = state.pages[state.pageIndex]
+      .map(message => messageMarkup(message, renderedAttachments, renderedSolVoice))
+      .join("");
 
-    $("main").scrollTop = Number(restorePosition?.scrollTop || 0);
+    restoreReadingPosition(restorePosition);
     prepareLazyAttachments(renderedAttachments);
     prepareLazySolVoice(renderedSolVoice);
     renderList();
+    renderPageNavigation();
     void saveReaderState();
+  }
+
+  function goPrevious() {
+    if (!state.current) return;
+    if (state.pageIndex > 0) return openConversation(state.current.id, { page: state.pageIndex - 1 });
+    const index = state.filtered.findIndex(conversation => conversation.id === state.current.id);
+    const previous = state.filtered[index - 1];
+    if (!previous) return;
+    const pages = OD.readerParity.paginateMessages(previous.messages, {
+      mode: state.readerPrefs.readingMode,
+      pageLength: state.readerPrefs.pageLength,
+      hideUser: !!$("hideUser").checked
+    });
+    openConversation(previous.id, { page: pages.length - 1 });
+  }
+
+  function goNext() {
+    if (!state.current) return;
+    if (state.pageIndex < state.pages.length - 1) return openConversation(state.current.id, { page: state.pageIndex + 1 });
+    const index = state.filtered.findIndex(conversation => conversation.id === state.current.id);
+    const next = state.filtered[index + 1];
+    if (next) openConversation(next.id, { page: 0 });
   }
 
   function rebuildSolVoiceSession({ rerender = true } = {}) {
@@ -798,10 +964,12 @@ window.OD = window.OD || {};
       state.assetSession = null;
     }
     state.library.remove(source.id);
-    void state.persistence?.removeSource?.(source.id).catch(error => {
-      state.persistenceError = error?.message || "移除本地来源失败";
-      renderLocalLibraryStatus();
-    });
+    void state.persistence?.removeSource?.(source.id)
+      .then(() => refreshAcceptanceAudit())
+      .catch(error => {
+        state.persistenceError = error?.message || "移除本地来源失败";
+        renderLocalLibraryStatus();
+      });
     state.archive = state.library.size ? state.library.archive() : null;
     state.current = null;
     if (state.sourceFilter === source.id) state.sourceFilter = "all";
@@ -831,10 +999,12 @@ window.OD = window.OD || {};
     renderList();
     showEmptyLibrary();
     state.lastSavedAt = null;
-    void state.persistence?.clearSources?.().catch(error => {
-      state.persistenceError = error?.message || "清除本地书库失败";
-      renderLocalLibraryStatus();
-    });
+    void state.persistence?.clearSources?.()
+      .then(() => refreshAcceptanceAudit())
+      .catch(error => {
+        state.persistenceError = error?.message || "清除本地书库失败";
+        renderLocalLibraryStatus();
+      });
     state.archiveStatusText = count
       ? `已清空 ${count} 个来源；本地持久书库也已清除。`
       : "书库目前为空。";
@@ -957,11 +1127,8 @@ window.OD = window.OD || {};
     $("showThinking").checked = !!settings.showThinking;
     document.body.classList.toggle("hide-user", !!settings.hideUser);
     document.body.classList.toggle("show-thinking", !!settings.showThinking);
-    if (["paper", "night", "mist"].includes(settings.theme)) {
-      $("theme").value = settings.theme;
-      document.documentElement.dataset.theme = settings.theme;
-      localStorage.setItem("our-dialogues.theme", settings.theme);
-    }
+    applyReaderPreferences({ ...state.readerPrefs, ...settings });
+    localStorage.setItem("our-dialogues.theme", state.readerPrefs.theme);
     state.restoredPosition = settings.readingPosition || null;
   }
 
@@ -1087,6 +1254,7 @@ window.OD = window.OD || {};
   });
 
   $("clearSolVoice").addEventListener("click", clearSolVoice);
+  $("runAcceptanceAudit")?.addEventListener("click", () => void refreshAcceptanceAudit());
   $("clearSources").addEventListener("click", clearSources);
   $("clearLocalLibrary")?.addEventListener("click", async () => {
     if (state.persistenceError && state.persistence?.supported) {
@@ -1111,7 +1279,9 @@ window.OD = window.OD || {};
     button.addEventListener("click", () => setSortMode(button.dataset.sortMode));
   }
   $("hideUser").addEventListener("change", event => {
+    const position = readerSettings().readingPosition;
     document.body.classList.toggle("hide-user", event.target.checked);
+    if (state.current) openConversation(state.current.id, { restorePosition: position });
     void saveReaderState();
   });
   $("showThinking").addEventListener("change", event => {
@@ -1119,12 +1289,59 @@ window.OD = window.OD || {};
     void saveReaderState();
   });
   $("theme").addEventListener("change", event => {
-    document.documentElement.dataset.theme = event.target.value;
+    state.readerPrefs = OD.readerParity.normalizePreferences({ ...state.readerPrefs, theme: event.target.value });
+    applyReaderPreferences();
     localStorage.setItem("our-dialogues.theme", event.target.value);
     void saveReaderState();
   });
+  function updateReaderPreference(key, value, { rerender = true } = {}) {
+    const position = readerSettings().readingPosition;
+    state.readerPrefs = OD.readerParity.normalizePreferences({ ...state.readerPrefs, [key]: value });
+    applyReaderPreferences();
+    if (rerender && state.current) openConversation(state.current.id, { restorePosition: position });
+    void saveReaderState();
+  }
+  $("fontSmaller").addEventListener("click", () => updateReaderPreference("fontSize", state.readerPrefs.fontSize - 1, { rerender: false }));
+  $("fontLarger").addEventListener("click", () => updateReaderPreference("fontSize", state.readerPrefs.fontSize + 1, { rerender: false }));
+  $("lineHeight").addEventListener("change", event => updateReaderPreference("lineHeight", event.target.value, { rerender: false }));
+  $("contentWidth").addEventListener("change", event => updateReaderPreference("contentWidth", event.target.value, { rerender: false }));
+  $("fontFamily").addEventListener("change", event => updateReaderPreference("fontFamily", event.target.value, { rerender: false }));
+  $("readingMode").addEventListener("change", event => updateReaderPreference("readingMode", event.target.value));
+  $("pageLength").addEventListener("change", event => updateReaderPreference("pageLength", event.target.value));
+  $("previousPage").addEventListener("click", goPrevious);
+  $("nextPage").addEventListener("click", goNext);
+  const jumpToPage = () => {
+    if (!state.current) return;
+    const requested = Math.round(Number($("pageJump").value));
+    if (!Number.isFinite(requested)) return;
+    openConversation(state.current.id, { page: requested - 1 });
+  };
+  $("pageJump").addEventListener("change", jumpToPage);
+  $("pageJump").addEventListener("keydown", event => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      jumpToPage();
+    }
+  });
+  function scrollMain(target) {
+    const main = $("main");
+    const top = target === "end" ? Number(main.scrollHeight || 0) : 0;
+    if (typeof main.scrollTo === "function") main.scrollTo({ top, behavior: "smooth" });
+    else main.scrollTop = top;
+  }
+  $("toTop").addEventListener("click", () => scrollMain("top"));
+  $("toEnd").addEventListener("click", () => scrollMain("end"));
   $("sidebarToggle").addEventListener("click", () => $("sidebar").classList.toggle("closed"));
   $("main").addEventListener("scroll", () => void saveReaderState());
+  document.addEventListener?.("keydown", event => {
+    const target = event.target;
+    const tag = String(target?.tagName || "").toLowerCase();
+    if (["input", "textarea", "select"].includes(tag) || target?.isContentEditable) return;
+    if (event.key === "ArrowLeft") goPrevious();
+    else if (event.key === "ArrowRight") goNext();
+    else if (event.key === "Home") { event.preventDefault(); scrollMain("top"); }
+    else if (event.key === "End") { event.preventDefault(); scrollMain("end"); }
+  });
   document.addEventListener?.("visibilitychange", () => {
     if (document.visibilityState === "hidden") void saveReaderState({ immediate: true });
   });
@@ -1164,15 +1381,20 @@ window.OD = window.OD || {};
       filteredIds: state.filtered.map(conversation => conversation.id),
       lastSavedAt: state.lastSavedAt,
       persistenceSupported: !!state.persistence?.supported,
-      persistenceError: state.persistenceError
-    })
+      persistenceError: state.persistenceError,
+      readerPreferences: { ...state.readerPrefs },
+      page: state.pageIndex,
+      pageCount: state.pages.length,
+      readingPosition: readerSettings().readingPosition
+    }),
+    auditPersistentLibrary: refreshAcceptanceAudit
   };
 
   const savedTheme = localStorage.getItem("our-dialogues.theme");
   if (savedTheme) {
-    $("theme").value = savedTheme;
-    document.documentElement.dataset.theme = savedTheme;
+    state.readerPrefs = OD.readerParity.normalizePreferences({ ...state.readerPrefs, theme: savedTheme });
   }
+  applyReaderPreferences();
 
   renderSortControl();
   renderSourceControls();

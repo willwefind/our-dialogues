@@ -14,6 +14,7 @@ async function loadRuntime() {
   vm.createContext(runtime);
   for (const relativePath of [
     "src/core/schema.js",
+    "src/core/mufy-title-resolver.js",
     "src/core/chatgpt-export-folder.js",
     "src/adapters/contract.js",
     "src/adapters/mufy.js",
@@ -87,7 +88,8 @@ test("Mufy folder imports multiple ZIP batches with stable conservative merging"
     "same-name characters remain separate by stable character ID"
   );
   assert.equal(alphaShared.title, "Preferred later-batch archive remark");
-  assert.equal(alphaShared.context.sourceMetadata.titleSource, "archive-remark");
+  assert.equal(alphaShared.context.sourceMetadata.titleSource, "remark");
+  assert.equal(alphaShared.metadata.titleSource, "remark");
   const sharedStableIdMessages = alphaShared.messages.filter(
     message => message.metadata?.original?.dialogsId === "alpha-shared-1"
   );

@@ -24,6 +24,7 @@ async function loadRuntime() {
   for (const relativePath of [
     "src/core/schema.js",
     "src/core/zip.js",
+    "src/core/mufy-title-resolver.js",
     "src/adapters/contract.js",
     "src/adapters/mufy.js",
     "src/adapters/registry.js"
@@ -71,6 +72,9 @@ async function main() {
     emptyRichBlockCount: 0,
     richBlockKinds: {},
     richBlockVariants: {},
+    titleSourceCounts: {},
+    fallbackTitleCount: 0,
+    fallbackTitleRatio: 0,
     visibleRawTagCount: 0,
     privacy: "aggregate counts only; no paths, source IDs, titles, or conversation text printed"
   };
@@ -87,6 +91,9 @@ async function main() {
       summary.parsedZipCount += 1;
       summary.conversationCount += result.archive.conversations.length;
       for (const conversation of result.archive.conversations) {
+        const titleSource = conversation.metadata?.titleSource || conversation.context?.sourceMetadata?.titleSource || "missing";
+        increment(summary.titleSourceCounts, titleSource);
+        if (titleSource === "fallback") summary.fallbackTitleCount += 1;
         for (const message of conversation.messages || []) {
           summary.messageCount += 1;
           const visibleText = OD.schema.textOf(message.content);
@@ -106,6 +113,10 @@ async function main() {
       summary.rejectedZipCount += 1;
     }
   }
+
+  summary.fallbackTitleRatio = summary.conversationCount
+    ? summary.fallbackTitleCount / summary.conversationCount
+    : 0;
 
   process.stdout.write(`${JSON.stringify(summary, null, 2)}\n`);
 }

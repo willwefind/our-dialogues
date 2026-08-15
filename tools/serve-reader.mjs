@@ -7,8 +7,10 @@ import { fileURLToPath } from "node:url";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const host = "127.0.0.1";
-const port = Number(process.env.OUR_DIALOGUES_PORT || 4173);
-const url = `http://${host}:${port}/`;
+const requestedPort = Number(process.env.OUR_DIALOGUES_PORT || 4173);
+const fixedPort = process.env.OUR_DIALOGUES_PORT != null;
+let activePort = requestedPort;
+let url = `http://${host}:${activePort}/`;
 const types = new Map([
   [".html", "text/html; charset=utf-8"],
   [".css", "text/css; charset=utf-8"],
@@ -49,7 +51,21 @@ const server = createServer(async (request, response) => {
   }
 });
 
-server.listen(port, host, () => {
+server.on("error", error => {
+  if (error?.code === "EADDRINUSE" && !fixedPort && activePort < requestedPort + 10) {
+    activePort += 1;
+    url = `http://${host}:${activePort}/`;
+    console.warn(`Port ${activePort - 1} is busy; trying ${activePort}.`);
+    server.listen(activePort, host);
+    return;
+  }
+  console.error(error?.code === "EADDRINUSE"
+    ? `Our Dialogues could not start because port ${activePort} is already in use. Set OUR_DIALOGUES_PORT to another port.`
+    : `Our Dialogues could not start: ${error?.message || error}`);
+  process.exitCode = 1;
+});
+
+server.listen(activePort, host, () => {
   console.log(`Our Dialogues Reader is running at ${url}`);
   console.log("Keep this window open while reading. Press Ctrl+C to stop.");
   if (process.argv.includes("--open") && process.platform === "win32") {

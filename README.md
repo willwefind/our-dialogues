@@ -26,6 +26,8 @@ Currently included:
 - Conversation list, title/full-text search, message rendering
 - Hide-my-messages toggle
 - Thinking/reasoning and exporter source-trace expand toggle when a source actually contains them
+- Reader parity core: persistent font size, line height, content width, font family, theme, scroll/page modes, character-volume page sizes, page jumps, cross-conversation navigation, and keyboard/Home/End controls
+- Dedicated conservative Mufy title resolver with provenance and duplicate display disambiguation
 - Safe Mufy rich-block rendering for common status cards, details, rows, notes, and progress bars
 - Strict adapter capabilities and metadata-only diagnostics for unknown JSON/ZIP inputs
 - Fake fixtures only — no private conversations are committed
@@ -73,7 +75,7 @@ This is intentionally a no-build static site.
 
 For GitHub Pages, publish the repository root.
 
-For local reading on Windows, double-click **`Start Reader.bat`**. It starts a dependency-free Node static server at `http://127.0.0.1:4173/` and opens the Reader. This localhost origin is recommended because it gives IndexedDB and optional File System Access directory handles a stable origin.
+For local reading on Windows, double-click **`Start Reader.bat`**. It starts a dependency-free Node static server at `http://127.0.0.1:4173/` and opens the Reader. If that default port is busy, the launcher tries the next available port up to `4183`; an explicitly configured busy port exits with a clear error. This localhost origin is recommended because it gives IndexedDB and optional File System Access directory handles a stable origin.
 
 Opening `index.html` directly remains supported because scripts are classic scripts rather than ES modules. Browser persistence and remembered directory permissions can be less reliable on `file://`, so use the launcher for the best reopen/restore experience. Node.js must be available for the launcher.
 
@@ -107,7 +109,7 @@ The IndexedDB database is named `our-dialogues.library.v1` and currently uses sc
 
 - `sources`: source identity, fingerprint, adapter metadata, reconnect mode, save state, and optional structured-cloneable directory handle
 - `conversations`: one normalized conversation per record, keyed by source and conversation ID
-- `settings`: source filter, conversation sort, hide-user and trace toggles, theme, recent conversation, and reading position (`conversationId`, `messageId`, `scrollTop`, timestamp)
+- `settings`: source filter, conversation sort, hide-user and trace toggles, reading preferences, recent conversation, and reading position (`conversationId`, `messageId`, `page`, `scrollTop`, timestamp)
 
 Conversation records are written in small batches and incomplete batches are ignored during restore. Source removal and clear-all update IndexedDB as well as the active page. If the schema is damaged or an upgrade cannot complete, **清除本地书库** safely resets the database so the original source files can be imported again.
 
@@ -129,7 +131,13 @@ Images render inline, audio and video use native browser controls, and other fil
 
 For Mufy, every strictly detected ZIP in the selected folder is parsed, including ZIPs that contain multiple sessions. Reader combines all sessions into one archive view while retaining single-ZIP import compatibility. Overlapping batches are merged only when both `characterId` and `sessionId` are present and equal. Repeated messages use stable exported dialog IDs (or exact identical source records) for deduplication. The same character name with different `characterId` values stays separate; when either stable identity field is missing, conversations stay separate rather than being merged by title.
 
-Within a Mufy source, the sidebar renders `source → character → sessions`. Character grouping uses `characterId`, not the display name. Session titles prefer an archive remark, then the current-session marker, then the first readable assistant text, then a dated/generic fallback.
+Within a Mufy source, the sidebar renders `source → character → sessions`. Character grouping uses `characterId`, not the display name. A dedicated resolver selects session titles from archive remark, explicit exported title/name, current marker, first genuinely narrative assistant line, dialogue-derived text, then date + segment fallback. It skips rich status/HUD blocks, status labels, tool/UI markers, thinking, and source trace. `metadata.titleSource` records `remark|exported|current|assistant-first-line|dialogue-derived|fallback`; duplicate titles under one character gain a date or sequence only in the UI, without mutating the underlying title.
+
+### Reader parity core
+
+Reading preferences apply to every normalized source rather than only Mufy. The compact toolbar persists font size, line height, content width, font family, and theme. Scroll mode keeps the full conversation; page mode groups whole messages by approximate visible character volume (`2500`, `5000`, or `9000`) rather than message count. The footer supports page-number input and previous/next navigation that continues into adjacent conversations. Arrow keys navigate, Home/End move within the current reading surface, and the sidebar remains collapsible.
+
+Progress stores conversation ID, message anchor, page, and scroll offset. Restore chooses the page containing the message anchor first, then restores the nearby scroll position. Changing a reading preference or switching modes keeps the current conversation and anchor whenever that message remains visible.
 
 ### Claude webpage-exporter fidelity
 

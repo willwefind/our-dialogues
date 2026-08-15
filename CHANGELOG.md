@@ -8,6 +8,10 @@
 - Expand Mufy rich rendering with scene-heading, HUD/dashboard, folder/task, forum/list, and recurring `zc`/`xs`/`censy`/`nb`/compact template families.
 - Add a counts-only sequential Mufy rich-block smoke tool for real private ZIP collections.
 - Add the dependency-free Windows `Start Reader.bat` localhost launcher and recommend stable-origin local use.
+- Add automatic localhost port fallback with a clear fixed-port conflict error.
+- Add a dedicated Mufy title resolver, six-value `titleSource` provenance, status/trace filtering, Unicode-safe truncation, and duplicate display disambiguation.
+- Add normalized Reader font/spacing/width/font-family preferences, scroll and character-volume page modes, page jumps, cross-conversation navigation, keyboard controls, and anchor-first progress restore.
+- Add counts-only persistent-store auditing for schema, record totals, binary exclusion, directory handles, title-source distribution, and hashed reading-position acceptance checks.
 
 ## v0.1.8-dev — 2026-08-16
 

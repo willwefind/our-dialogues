@@ -42,6 +42,31 @@ window.OD = window.OD || {};
       typeof value.queryPermission === "function";
   }
 
+  function auditRecords({ sources = [], conversations = [], settings = [] } = {}) {
+    let binaryCount = 0;
+    const seen = new WeakSet();
+    const visit = value => {
+      if (!value || typeof value !== "object" || seen.has(value)) return;
+      seen.add(value);
+      if (isBinary(value)) {
+        binaryCount += 1;
+        return;
+      }
+      if (Array.isArray(value)) value.forEach(visit);
+      else Object.values(value).forEach(visit);
+    };
+    sources.forEach(visit);
+    conversations.forEach(visit);
+    settings.forEach(visit);
+    return {
+      sourceRecords: sources.length,
+      conversationRecords: conversations.length,
+      settingsRecords: settings.length,
+      binaryCount,
+      directoryHandleRecords: sources.filter(source => isDirectoryHandle(source?.directoryHandle)).length
+    };
+  }
+
   function lightweightClone(value, seen = new WeakMap()) {
     if (value == null || ["string", "number", "boolean"].includes(typeof value)) return value;
     if (["function", "symbol", "bigint"].includes(typeof value) || isBinary(value)) return undefined;
@@ -191,6 +216,14 @@ window.OD = window.OD || {};
         transaction.objectStore(SETTINGS_STORE).put({ id: READER_SETTINGS_KEY, value: lightweightClone(value) });
         await transactionDone(transaction);
       },
+      async audit() {
+        const db = await database();
+        const transaction = db.transaction([SOURCE_STORE, CONVERSATION_STORE, SETTINGS_STORE], "readonly");
+        const stores = [SOURCE_STORE, CONVERSATION_STORE, SETTINGS_STORE];
+        const results = await Promise.all(stores.map(store => requestResult(transaction.objectStore(store).getAll())));
+        await transactionDone(transaction);
+        return { name, version, ...auditRecords({ sources: results[0], conversations: results[1], settings: results[2] }) };
+      },
       async reset() {
         const db = await database().catch(() => null);
         db?.close();
@@ -229,6 +262,17 @@ window.OD = window.OD || {};
       async clearSources() { sourceMap.clear(); conversationMap.clear(); },
       async getSettings() { return lightweightClone(storedSettings); },
       async setSettings(value) { storedSettings = lightweightClone(value); },
+      async audit() {
+        return {
+          name: DB_NAME,
+          version: currentVersion,
+          ...auditRecords({
+            sources: [...sourceMap.values()],
+            conversations: [...conversationMap.values()],
+            settings: storedSettings == null ? [] : [{ id: READER_SETTINGS_KEY, value: storedSettings }]
+          })
+        };
+      },
       async reset() { sourceMap.clear(); conversationMap.clear(); storedSettings = null; currentVersion = DB_VERSION; },
       inspect() { return { version: currentVersion, sources: [...sourceMap.values()], conversations: [...conversationMap.values()], settings: storedSettings }; }
     };
@@ -281,6 +325,7 @@ window.OD = window.OD || {};
       async clearSources() { if (selectedDriver) await selectedDriver.clearSources(); },
       async loadSettings() { return selectedDriver ? selectedDriver.getSettings() : null; },
       async saveSettings(value) { if (selectedDriver) await selectedDriver.setSettings(value); },
+      async audit() { return selectedDriver?.audit ? selectedDriver.audit() : null; },
       async reset() { if (selectedDriver) await selectedDriver.reset(); }
     };
   }
@@ -288,6 +333,6 @@ window.OD = window.OD || {};
   OD.persistentLibrary = {
     create,
     constants: { DB_NAME, DB_VERSION, SOURCE_STORE, CONVERSATION_STORE, SETTINGS_STORE, BATCH_SIZE },
-    _internals: { lightweightClone, sourceRecords, isBinary, isDirectoryHandle, createIndexedDBDriver, createMemoryDriver }
+    _internals: { lightweightClone, sourceRecords, isBinary, isDirectoryHandle, auditRecords, createIndexedDBDriver, createMemoryDriver }
   };
 })(window.OD);

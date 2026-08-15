@@ -123,12 +123,13 @@ window.OD = window.OD || {};
 
   function titleSourceRank(value) {
     return ({
-      "archive-remark": 0,
-      "current-marker": 1,
-      "assistant-text": 2,
-      "date-fallback": 3,
-      "generic-fallback": 4
-    })[value] ?? 5;
+      "remark": 0,
+      "exported": 1,
+      "current": 2,
+      "assistant-first-line": 3,
+      "dialogue-derived": 4,
+      "fallback": 5
+    })[value] ?? 6;
   }
 
   function mergeMufyArchives(entries) {
@@ -170,6 +171,7 @@ window.OD = window.OD || {};
         const incoming = conversation.context?.sourceMetadata || {};
         if (titleSourceRank(incoming.titleSource) < titleSourceRank(current.titleSource)) {
           existing.title = conversation.title;
+          existing.metadata = { ...(existing.metadata || {}), titleSource: incoming.titleSource };
         }
         const batches = [
           ...(Array.isArray(current.sourceBatches) ? current.sourceBatches : []),

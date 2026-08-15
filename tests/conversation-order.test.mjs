@@ -66,7 +66,10 @@ async function loadAppRuntime(savedSortMode="asc", options={}) {
     "currentTitle", "readerTitle", "readerMeta", "messages", "main", "fileInput",
     "folderInput", "voiceMappingInput", "voiceArchiveInput", "clearSolVoice",
     "sourceFilter", "clearSources", "hideUser", "showThinking", "theme", "sidebarToggle", "sidebar",
-    "directoryPicker", "localLibraryStatus", "clearLocalLibrary"
+    "directoryPicker", "localLibraryStatus", "clearLocalLibrary", "acceptanceAudit", "runAcceptanceAudit",
+    "fontSmaller", "fontLarger", "lineHeight", "contentWidth", "fontFamily",
+    "readingMode", "pageLength", "pageNavigation", "previousPage", "nextPage",
+    "pageIndicator", "pageJump", "pageCount", "scrollJumpers", "toTop", "toEnd"
   ];
   const elements = new Map(ids.map(id => [id, fakeElement(id)]));
   const sortAscending = fakeElement("sortAscending");
@@ -92,7 +95,7 @@ async function loadAppRuntime(savedSortMode="asc", options={}) {
     },
     document: {
       body: fakeElement("body"),
-      documentElement: { dataset: {} },
+      documentElement: { dataset: {}, style: { setProperty() {} } },
       visibilityState: "visible",
       getElementById(id) { return elements.get(id); },
       addEventListener(type, listener) { documentListeners.set(type, listener); },
@@ -111,7 +114,12 @@ async function loadAppRuntime(savedSortMode="asc", options={}) {
   };
   vm.createContext(runtime);
 
-  const runtimeFiles = ["src/core/conversation-order.js", "src/core/source-library.js"];
+  const runtimeFiles = [
+    "src/core/conversation-order.js",
+    "src/core/source-library.js",
+    "src/core/reader-parity.js",
+    "src/core/mufy-title-resolver.js"
+  ];
   if (options.driver) runtimeFiles.push("src/core/persistent-library.js");
   for (const relativePath of runtimeFiles) {
     const source = await readFile(path.join(repositoryRoot, relativePath), "utf8");
@@ -413,6 +421,9 @@ test("app boot restores the persistent source, prefs, recent conversation, and s
   first.elements.get("theme").dispatch("change");
   first.elements.get("main").scrollTop = 222;
   first.elements.get("main").dispatch("scroll");
+  const acceptanceAudit = JSON.parse(first.elements.get("acceptanceAudit").textContent);
+  assert.equal(acceptanceAudit.readingPosition.scrollTop, 222);
+  assert.notEqual(acceptanceAudit.readingPosition.messageToken, "persistent-two");
   first.runtime.document.visibilityState = "hidden";
   await first.dispatchDocument("visibilitychange");
   await new Promise(resolve => setTimeout(resolve, 20));
@@ -429,6 +440,59 @@ test("app boot restores the persistent source, prefs, recent conversation, and s
   assert.equal(refreshed.elements.get("theme").value, "night");
   assert.match(refreshed.elements.get("status").textContent, /从本地书库恢复 1 个来源 \/ 1 段对话/);
   assert.equal(driver.inspect().settings.readingPosition.messageId, "persistent-two");
+});
+
+test("app reader parity paginates, jumps pages, crosses conversations, and keeps compact controls", async () => {
+  const { runtime, elements } = await loadAppRuntime("asc");
+  runtime.OD.app.loadArchive({
+    source: { platform: "normalized", exporter: "parity-synthetic" },
+    conversations: [{
+      id: "book-one",
+      title: "Book one",
+      createdAt: "2026-08-15T00:00:00Z",
+      messages: [
+        { id: "page-one", role: "assistant", content: "a".repeat(2600) },
+        { id: "page-two", role: "assistant", content: "b".repeat(2600) },
+        { id: "page-three", role: "assistant", content: "c".repeat(2600) }
+      ]
+    }, {
+      id: "book-two",
+      title: "Book two",
+      createdAt: "2026-08-16T00:00:00Z",
+      messages: [{ id: "next-conversation", role: "assistant", content: "next" }]
+    }]
+  }, "Parity synthetic");
+
+  elements.get("pageLength").value = "short";
+  await elements.get("pageLength").dispatch("change");
+  elements.get("readingMode").value = "page";
+  await elements.get("readingMode").dispatch("change");
+  assert.equal(runtime.OD.app.getState().pageCount, 3);
+  assert.equal(elements.get("pageIndicator").hidden, false);
+  elements.get("pageJump").value = "2";
+  await elements.get("pageJump").dispatch("change");
+  assert.equal(runtime.OD.app.getState().page, 1);
+  assert.match(elements.get("messages").innerHTML, /page-two/);
+
+  elements.get("fontLarger").click();
+  elements.get("lineHeight").value = "2.2";
+  await elements.get("lineHeight").dispatch("change");
+  assert.equal(runtime.OD.app.getState().readerPreferences.fontSize, 19);
+  assert.equal(runtime.OD.app.getState().readerPreferences.lineHeight, 2.2);
+
+  elements.get("nextPage").click();
+  assert.equal(runtime.OD.app.getState().page, 2);
+  elements.get("nextPage").click();
+  assert.equal(runtime.OD.app.getState().current.id, "book-two");
+  elements.get("previousPage").click();
+  assert.equal(runtime.OD.app.getState().current.id, "book-one");
+  assert.equal(runtime.OD.app.getState().page, 2);
+
+  elements.get("main").scrollHeight = 999;
+  elements.get("toEnd").click();
+  assert.equal(elements.get("main").scrollTop, 999);
+  elements.get("sidebarToggle").click();
+  assert.equal(elements.get("sidebar").classList.contains("closed"), true);
 });
 
 test("sidebar exposes exactly two clearly labelled conversation sort modes", async () => {

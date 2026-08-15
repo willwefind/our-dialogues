@@ -27,6 +27,7 @@ async function loadReaderRuntime() {
 
   for (const relativePath of [
     "src/core/schema.js",
+    "src/core/mufy-title-resolver.js",
     "src/core/zip.js",
     "src/core/chatgpt-export-folder.js",
     "src/adapters/contract.js",

@@ -14,6 +14,7 @@ async function loadRuntime() {
   vm.createContext(runtime);
   for (const relativePath of [
     "src/core/schema.js",
+    "src/core/mufy-title-resolver.js",
     "src/adapters/contract.js",
     "src/adapters/normalized.js",
     "src/adapters/ciel-house.js",
@@ -260,7 +261,8 @@ test("Mufy session title uses current marker before assistant text when no archi
   source.sessions[0].isCurrent = true;
   const parsed = await OD.registry.parseJSON(source);
 
-  assert.equal(parsed.archive.conversations[0].title, "Synthetic Character · current conversation");
+  assert.equal(parsed.archive.conversations[0].title, "Synthetic Character · 当前对话");
+  assert.equal(parsed.archive.conversations[0].metadata.titleSource, "current");
   assert.equal(parsed.archive.conversations[0].context.sourceMetadata.characterName, "Synthetic Character");
 });
 

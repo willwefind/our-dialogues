@@ -47,13 +47,15 @@ The browser folder entry is source-aware. `chatgpt-official-folder` requires one
 
 Mufy folder import parses every matching ZIP and combines all contained sessions into one normalized archive. A session can merge across split/overlapping packages only when the raw data supplies both the same `characterId` and the same `sessionId`. Stable dialog IDs deduplicate repeated messages; an exact identical source record is the only fallback dedupe. Conflicting records with the same dialog ID are both preserved and marked. Character names and conversation titles never participate in identity. Missing stable identity keeps conversations separate, and the same display name with different `characterId` values always stays separate.
 
-The Reader navigation then groups that archive as `source → characterId → sessions`. The display name is presentation only, so two characters with the same name remain separate. Session-title priority is archive remark, current-session marker, first readable assistant text, then a dated or generic fallback.
+The Reader navigation then groups that archive as `source → characterId → sessions`. The display name is presentation only, so two characters with the same name remain separate. The standalone title resolver prioritizes archive remark, explicit exported title/name, current-session marker, first narrative assistant text, dialogue-derived text, then date + segment fallback. Rich status blocks, time/location/status labels, tools/UI markers, thinking, and source trace are excluded. The normalized conversation records one of six `titleSource` values; same-character duplicates are disambiguated only at display time.
 
 ## Persistent source library
 
 Imports are registered as independent sources. The runtime library supplies source filtering, per-source removal, clear-all, unique runtime conversation addressing across sources, and a conservative normalized-content fingerprint that skips obvious repeat imports. Each source retains its own lazy attachment session while the page is open; removing or clearing it revokes that source's object URLs and disposes its local asset index.
 
 IndexedDB `our-dialogues.library.v1` stores lightweight source records, one normalized conversation per record, and Reader settings/position. `File`, `Blob`, asset sessions, object URLs, ZIP media, attachments, and SolVoice audio are excluded. Browser `File` references still disappear on close, while normalized text restores automatically. Supported browsers may retain a `FileSystemDirectoryHandle`; failure to clone that handle falls back to text-only persistence.
+
+Reader settings are source-neutral: font size, line height, content width, font family, theme, scroll/page mode, and page length persist beside the recent conversation. Page mode uses visible character volume, not message count. Progress records conversation, message anchor, page, and scroll; restore resolves the message anchor before the saved numeric page/offset.
 
 ## Mufy markup boundary
 

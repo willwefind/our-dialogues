@@ -48,6 +48,8 @@
       </div>
 
       <div id="status" class="status" role="status" aria-live="polite">文件只在本机浏览器中解析。</div>
+      <output id="acceptanceAudit" hidden aria-hidden="true"></output>
+      <button id="runAcceptanceAudit" type="button" hidden aria-hidden="true" tabindex="-1">Run acceptance audit</button>
       <div class="local-library" aria-live="polite">
         <div id="localLibraryStatus">本地书库：正在准备…</div>
         <button id="clearLocalLibrary" type="button" disabled>清除本地书库</button>
@@ -79,6 +81,35 @@
     <div class="toolbar">
       <button id="sidebarToggle" class="ghost" title="显示/隐藏侧栏">☰</button>
       <div id="currentTitle" class="current-title">尚未载入档案</div>
+      <div class="reader-preferences" aria-label="阅读设置">
+        <button id="fontSmaller" class="ghost" type="button" title="减小字号">A−</button>
+        <button id="fontLarger" class="ghost" type="button" title="增大字号">A+</button>
+        <select id="lineHeight" aria-label="行距">
+          <option value="1.7">行距紧</option>
+          <option value="1.95" selected>行距中</option>
+          <option value="2.2">行距松</option>
+        </select>
+        <select id="contentWidth" aria-label="正文宽度">
+          <option value="640">正文窄</option>
+          <option value="800" selected>正文中</option>
+          <option value="960">正文宽</option>
+        </select>
+        <select id="fontFamily" aria-label="正文字体">
+          <option value="serif" selected>默认衬线</option>
+          <option value="song">宋体</option>
+          <option value="kai">楷体</option>
+          <option value="sans">黑体</option>
+        </select>
+        <select id="readingMode" aria-label="阅读模式">
+          <option value="scroll" selected>滚动</option>
+          <option value="page">分页</option>
+        </select>
+        <select id="pageLength" aria-label="分页长度">
+          <option value="short">页短</option>
+          <option value="mid" selected>页中</option>
+          <option value="long">页长</option>
+        </select>
+      </div>
       <label><input id="hideUser" type="checkbox"> 隐藏我的发言</label>
       <label><input id="showThinking" type="checkbox"> 展开 Thinking / Trace</label>
       <select id="theme">
@@ -103,13 +134,24 @@
         <div id="readerMeta" class="reader-meta"></div>
       </header>
       <div id="messages"></div>
+      <nav id="pageNavigation" class="page-navigation" aria-label="翻页">
+        <button id="previousPage" type="button">← 上一段</button>
+        <label id="pageIndicator">第 <input id="pageJump" type="number" min="1" value="1" aria-label="跳到页码"> / <span id="pageCount">1</span> 页</label>
+        <button id="nextPage" type="button">下一段 →</button>
+      </nav>
     </article>
+    <div id="scrollJumpers" class="scroll-jumpers" aria-label="页内跳转">
+      <button id="toTop" type="button" title="回到顶部（Home）">↑</button>
+      <button id="toEnd" type="button" title="到最底部（End）">↓</button>
+    </div>
   </main>
 
   <script src="src/core/schema.js"></script>
   <script src="src/core/conversation-order.js"></script>
   <script src="src/core/source-library.js"></script>
   <script src="src/core/persistent-library.js"></script>
+  <script src="src/core/reader-parity.js"></script>
+  <script src="src/core/mufy-title-resolver.js"></script>
   <script src="src/core/zip.js"></script>
   <script src="src/core/chatgpt-export-folder.js"></script>
   <script src="src/core/solvoice-sidecar.js"></script>

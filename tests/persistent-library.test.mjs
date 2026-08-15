@@ -83,6 +83,13 @@ test("persistent library round-trips normalized sources without binary payloads"
   assert.equal(stored.conversations.length, 1);
   assert.equal(containsBinary(stored), false, "File and Blob objects must never enter persistent records");
   assert.equal(stored.sources[0].directoryHandle, directoryHandle, "a safe directory handle may be retained");
+  const audit = await persistence.audit();
+  assert.equal(audit.name, "our-dialogues.library.v1");
+  assert.equal(audit.version, 1);
+  assert.equal(audit.sourceRecords, 1);
+  assert.equal(audit.conversationRecords, 1);
+  assert.equal(audit.binaryCount, 0);
+  assert.equal(audit.directoryHandleRecords, 1);
 
   const restored = await persistence.restore();
   assert.equal(restored.sources.length, 1);
@@ -156,6 +163,7 @@ test("source add, remove, clear, reset, and duplicate-after-restore stay synchro
   assert.equal((await persistence.restore()).sources.length, 2);
   await persistence.clearSources();
   assert.equal((await persistence.restore()).sources.length, 0);
+  assert.equal((await persistence.audit()).conversationRecords, 0);
 
   await persistence.saveSettings({ theme: "mist" });
   await persistence.reset();

@@ -459,44 +459,19 @@ OD.adapters = OD.adapters || [];
     return value?.createdTime ?? value?.createdAt ?? value?.timestamp ?? null;
   }
 
-  function lineForTitle(value) {
-    const text = normalizeMufyContent(value).text.replace(/\s+/g, " ").trim();
-    if (!text) return "";
-    return text.length > 80 ? `${text.slice(0, 77).trimEnd()}…` : text;
-  }
-
-  function latestArchiveRemark(session) {
-    const archives = (Array.isArray(session?.archives) ? session.archives : [])
-      .filter(item => item && typeof item === "object" && String(item.remark || "").trim());
-    const marked = archives.find(item => item.isCurrent === true || item.current === true || item.selected === true);
-    if (marked) return lineForTitle(marked.remark);
-    return archives
-      .map((item, index) => ({ item, index, time: Date.parse(sourceTime(item) || "") }))
-      .sort((a, b) => {
-        const at = Number.isFinite(a.time) ? a.time : -Infinity;
-        const bt = Number.isFinite(b.time) ? b.time : -Infinity;
-        return bt - at || b.index - a.index;
-      })
-      .map(entry => lineForTitle(entry.item.remark))
-      .find(Boolean) || "";
-  }
-
   function sessionTitleInfo(pack, session, index) {
-    const archiveRemark = latestArchiveRemark(session);
-    if (archiveRemark) return { title: archiveRemark, source: "archive-remark" };
-    const name = lineForTitle(pack?.name) || "Mufy";
-    if (session?.isCurrent === true) return { title: `${name} · current conversation`, source: "current-marker" };
-    const firstAssistant = (session?.dialogs || []).find(dialog =>
-      ["assistant", "ai", "bot", "model", "character"].includes(String(dialog?.role || "").toLowerCase())
-    );
-    const assistantLine = lineForTitle(firstAssistant?.content);
-    if (assistantLine) return { title: assistantLine, source: "assistant-text" };
-    const time = sourceTime(session);
-    if (time) {
-      const date = new Date(time);
-      if (!Number.isNaN(date.getTime())) return { title: `${name} · ${date.toISOString().slice(0, 10)}`, source: "date-fallback" };
-    }
-    return { title: `${name} conversation ${index + 1}`, source: "generic-fallback" };
+    const messages = (session?.dialogs || []).map((dialog, dialogIndex) => {
+      const semantic = normalizeMufyContent(dialog?.content);
+      return {
+        id: dialog?.id || dialog?.dialogsId || `${session?.sessionId || index}-${dialogIndex}`,
+        role: dialog?.role,
+        content: semantic.content,
+        thinking: semantic.thinking,
+        metadata: { originalRole: dialog?.role }
+      };
+    });
+    const titleInfo = OD.mufyTitleResolver.resolve({ pack, session, index, messages });
+    return { title: titleInfo.title, source: titleInfo.titleSource };
   }
 
   function sessionTitle(pack, session, index) {
@@ -533,7 +508,6 @@ OD.adapters = OD.adapters || [];
 
   function convert(pack) {
     const conversations = (pack.sessions || []).map((session, index) => {
-      const titleInfo = sessionTitleInfo(pack, session, index);
       const messages = [];
       if (index === 0 && pack.greeting != null && String(pack.greeting).trim()) {
         const greeting = normalizeMufyContent(pack.greeting);
@@ -562,6 +536,12 @@ OD.adapters = OD.adapters || [];
           metadata: { originalRole, original: dialog }
         });
       }
+      const titleInfo = OD.mufyTitleResolver.resolve({
+        pack,
+        session,
+        index,
+        messages: messages.filter(message => message.metadata?.sourceField !== "greeting")
+      });
       return {
         id: session.sessionId || `mufy-session-${index}`,
         title: titleInfo.title,
@@ -571,7 +551,7 @@ OD.adapters = OD.adapters || [];
           sourceMetadata: {
             characterId: pack.characterId ?? null,
             characterName: pack.name ?? null,
-            titleSource: titleInfo.source,
+            titleSource: titleInfo.titleSource,
             sessionId: session.sessionId ?? null,
             batchFrom: pack.batchFrom ?? null,
             totalSessions: pack.totalSessions ?? null,
@@ -582,6 +562,7 @@ OD.adapters = OD.adapters || [];
             original: session
           }
         },
+        metadata: { titleSource: titleInfo.titleSource },
         participants: [
           { id: "user", name: "You", role: "user" },
           { id: pack.characterId || "assistant", name: pack.name || "Assistant", role: "assistant" }
