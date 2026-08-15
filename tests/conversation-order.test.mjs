@@ -335,6 +335,52 @@ test("app keeps consecutive sources, filters them, skips duplicates, and removes
   assert.equal(disposedAssets, 1, "removing a source disposes its lazy local assets");
 });
 
+test("app renders Mufy rich families with Reader-owned markup and escaped values", async () => {
+  const { runtime, elements } = await loadAppRuntime("asc");
+  runtime.OD.app.loadArchive({
+    source: { platform: "mufy", exporter: "mufy-synthetic" },
+    conversations: [{
+      id: "rich-session",
+      title: "Synthetic rich blocks",
+      context: { sourceMetadata: { characterId: "rich-character", characterName: "Synthetic" } },
+      participants: [],
+      messages: [{
+        id: "rich-message",
+        role: "assistant",
+        content: [{
+          type: "source-rich-block",
+          source: "mufy",
+          kind: "scene-heading",
+          variant: "zc",
+          eyebrow: "SAFE META",
+          title: "Synthetic <script> title",
+          subtitle: "Chapter subtitle",
+          text: "Synthetic title"
+        }, {
+          type: "source-rich-block",
+          source: "mufy",
+          kind: "task-card",
+          variant: "task",
+          title: "Task",
+          rows: [{ label: "Level", value: "2" }],
+          sections: [{ label: "State", value: "Ready" }],
+          items: [{ text: "One objective" }],
+          text: "Task Level 2 State Ready One objective"
+        }]
+      }]
+    }]
+  }, "Synthetic Mufy");
+  runtime.OD.app.openConversation("rich-session");
+
+  const markup = elements.get("messages").innerHTML;
+  assert.match(markup, /source-rich-heading source-rich-zc/);
+  assert.match(markup, /source-rich-kind-task-card source-rich-task/);
+  assert.match(markup, /source-rich-sections/);
+  assert.match(markup, /source-rich-items/);
+  assert.match(markup, /Synthetic &lt;script&gt; title/);
+  assert.doesNotMatch(markup, /<script>/i);
+});
+
 test("app boot restores the persistent source, prefs, recent conversation, and scroll position", async () => {
   const driver = await createMemoryPersistenceDriver();
   const stored = new Map([["our-dialogues.conversation-sort", "asc"]]);

@@ -112,6 +112,15 @@ OD.adapters = OD.adapters || [];
     return names.some(name => classes.has(name));
   }
 
+  function hasClassPattern(node, pattern) {
+    return [...classNames(node)].some(name => pattern.test(name));
+  }
+
+  function safeVariant(value) {
+    const normalized = String(value || "generic").toLowerCase().replace(/[^a-z0-9-]+/g, "-").replace(/^-+|-+$/g, "");
+    return normalized || "generic";
+  }
+
   function descendants(node, predicate, output = []) {
     for (const child of (node?.children || [])) {
       if (child.type !== "element") continue;
@@ -125,56 +134,227 @@ OD.adapters = OD.adapters || [];
     return descendants(node, predicate, [])[0] || null;
   }
 
+  function topLevelDescendants(node, predicate, output = []) {
+    for (const child of (node?.children || [])) {
+      if (child.type !== "element") continue;
+      if (predicate(child)) output.push(child);
+      else topLevelDescendants(child, predicate, output);
+    }
+    return output;
+  }
+
+  function directElementChildren(node) {
+    return (node?.children || []).filter(child => child.type === "element");
+  }
+
+  function textOfNode(node) {
+    return cleanText(nodeText(node));
+  }
+
+  function firstText(node, predicate) {
+    return textOfNode(firstDescendant(node, predicate));
+  }
+
+  function uniqueText(items) {
+    const seen = new Set();
+    return items.map(cleanText).filter(item => item && !seen.has(item) && seen.add(item));
+  }
+
+  const LABEL_CLASSES = [
+    "fog-label", "wg-label", "f-label", "p-label", "label", "xs-lbl",
+    "task-label-v1", "nb-label", "status-label", "meta-label", "k", "gl", "L"
+  ];
+  const VALUE_CLASSES = [
+    "fog-value", "wg-value", "f-value", "value", "xs-val", "task-value-v1",
+    "nb-value", "status-value", "meta-value", "v", "gv", "V"
+  ];
+  const ROW_CLASSES = [
+    "fog-status-row", "wg-row", "f-row", "xs-row-item", "task-row-v1",
+    "nb-row", "status-row", "meta-row", "R", "i", "h"
+  ];
+  const NOTE_CLASSES = [
+    "fog-comment-box", "wg-comment", "comment-box", "note", "f-note",
+    "xs-note-section", "xs-quote-block", "task-desc-box-v1", "status-note"
+  ];
+  const TITLE_CLASSES = [
+    "xs-status-summary", "zc-chapter-head", "censy-main-title-en", "task-title-main-v1",
+    "nb-folder-title", "forum-title", "post-title", "thread-title", "section-title"
+  ];
+
+  function classFamily(node) {
+    const names = [...classNames(node)].map(name => name.toLowerCase());
+    for (const family of ["zc", "xs", "censy", "nb", "zero", "mufy", "fog", "wg", "forum", "post", "thread", "task"]) {
+      if (names.some(name => name === family || name.startsWith(`${family}-`))) return family;
+    }
+    if (names.some(name => ["h", "b", "d", "s"].includes(name))) return "compact";
+    return "generic";
+  }
+
+  function isLabelNode(node) {
+    return hasClass(node, LABEL_CLASSES) || hasClassPattern(node, /(?:^|[-_])(label|lbl|key)(?:$|[-_])/i);
+  }
+
+  function isValueNode(node) {
+    return hasClass(node, VALUE_CLASSES) || hasClassPattern(node, /(?:^|[-_])(value|val)(?:$|[-_])/i);
+  }
+
+  function isRowNode(node) {
+    return hasClass(node, ROW_CLASSES) || hasClassPattern(node, /(?:^|[-_])(?:status|meta|task|info)[-_]row(?:$|[-_])/i);
+  }
+
   function progressFromNode(node) {
-    const bar = firstDescendant(node, child => hasClass(child, ["p-bar", "progress-bar"]));
+    const bar = firstDescendant(node, child => hasClass(child, ["p-bar", "progress-bar", "censy-progress-fill"])
+      || hasClassPattern(child, /(?:^|[-_])progress[-_](?:bar|fill)(?:$|[-_])/i));
     if (!bar) return null;
     const match = String(bar.attributes.style || "").match(/(?:^|;)\s*width\s*:\s*(-?\d+(?:\.\d+)?)\s*%/i);
     const rawValue = match ? Number(match[1]) : Number(bar.attributes["aria-valuenow"]);
     if (!Number.isFinite(rawValue)) return null;
     const value = Math.max(0, Math.min(100, rawValue));
     const container = firstDescendant(node, child => child.children?.includes(bar)) || node;
-    const labelNode = firstDescendant(container, child => hasClass(child, ["fog-label", "wg-label", "f-label", "p-label"]));
+    const labelNode = firstDescendant(container, isLabelNode)
+      || firstDescendant(node, child => hasClass(child, ["censy-progress-ps"]));
     return { label: cleanText(nodeText(labelNode)) || "进度", value };
   }
 
   function rowFromNode(row) {
-    const labelNode = firstDescendant(row, child => hasClass(child, ["fog-label", "wg-label", "f-label", "label"]));
+    const labelNode = firstDescendant(row, isLabelNode);
     if (!labelNode) return null;
+    const valueNode = firstDescendant(row, child => child !== labelNode && isValueNode(child));
     const label = cleanText(nodeText(labelNode));
-    const value = cleanText((row.children || []).filter(child => child !== labelNode).map(nodeText).join(""));
+    const value = valueNode
+      ? cleanText(nodeText(valueNode))
+      : cleanText((row.children || []).filter(child => child !== labelNode).map(nodeText).join(""));
     return label && value ? { label, value } : null;
   }
 
-  function richBlockFromNode(node) {
-    const isFog = hasClass(node, ["fog-status-card"]);
-    const isWG = hasClass(node, ["wg-box"]);
-    const isDetails = node.tag === "details";
-    if (!isFog && !isWG && !isDetails) return null;
+  function rowsFromNode(node) {
+    const rows = descendants(node, isRowNode).map(rowFromNode).filter(Boolean);
+    const seen = new Set();
+    return rows.filter(row => {
+      const key = `${row.label}\u0000${row.value}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  }
 
-    const summary = isDetails ? (node.children || []).find(child => child.type === "element" && child.tag === "summary") : null;
-    const heading = summary || firstDescendant(node, child => ["h1","h2","h3","h4","summary"].includes(child.tag));
-    const rowNodes = descendants(node, child => hasClass(child, ["fog-status-row", "wg-row", "f-row"]));
-    const rows = rowNodes.map(rowFromNode).filter(Boolean);
-    const commentNodes = descendants(node, child => hasClass(child, ["fog-comment-box", "wg-comment", "comment-box", "note", "f-note"]));
-    const notes = commentNodes.map(item => cleanText(nodeText(item))).filter(Boolean);
+  function sectionsFromNode(node) {
+    const sections = [];
+    const labels = descendants(node, child => hasClass(child, ["censy-sub-title", "xs-note-title"])
+      || hasClassPattern(child, /(?:^|[-_])sub[-_]title(?:$|[-_])/i));
+    for (const labelNode of labels) {
+      const parent = directElementChildren(node).includes(labelNode)
+        ? node
+        : descendants(node, child => directElementChildren(child).includes(labelNode))[0];
+      const siblings = directElementChildren(parent);
+      const valueNode = siblings[siblings.indexOf(labelNode) + 1] || null;
+      const label = textOfNode(labelNode);
+      const value = textOfNode(valueNode);
+      if (label && value) sections.push({ label, value });
+    }
+    return sections;
+  }
+
+  function listItemsFromNode(node) {
+    const candidates = topLevelDescendants(node, child => hasClass(child, [
+      "xs-list-item", "task-obj-item-v1", "thread-item", "reply-item", "post-item", "mission",
+      "censy-msg-row", "censy-bk-item", "task-reward-v1"
+    ]) || hasClassPattern(child, /(?:^|[-_])(?:objective|list|thread|reply|post|message|msg)[-_]item(?:$|[-_])/i));
+    return uniqueText(candidates.map(textOfNode)).map(text => ({ text }));
+  }
+
+  function noteTexts(node) {
+    return uniqueText(topLevelDescendants(node, child => hasClass(child, NOTE_CLASSES)
+      || hasClassPattern(child, /(?:^|[-_])(?:comment|note|quote|description|desc)[-_](?:box|section|text|content)(?:$|[-_])/i))
+      .map(textOfNode));
+  }
+
+  function titleText(node, summary = null) {
+    return textOfNode(summary)
+      || firstText(node, child => hasClass(child, TITLE_CLASSES))
+      || firstText(node, child => ["h1", "h2", "h3", "h4"].includes(child.tag))
+      || firstText(node, child => hasClassPattern(child, /(?:^|[-_])(?:main[-_])?(?:title|heading|header|head)(?:$|[-_])/i));
+  }
+
+  function structuralTemplate(node) {
+    if (hasClass(node, ["zc-status-wrapper", "zc-status-box"])) return { kind: "scene-heading", variant: "zc" };
+    if (hasClass(node, ["censy-hud-top"])) return { kind: "hud", variant: "censy" };
+    if (hasClass(node, ["censy-dashboard-wrapper"])) return { kind: "dashboard", variant: "censy" };
+    if (hasClass(node, ["task-card-v1-container"])) return { kind: "task-card", variant: "task" };
+    if (hasClass(node, ["forum-container"])) return { kind: "forum", variant: "forum" };
+    if (hasClass(node, ["nb-folder"])) return { kind: "folder-panel", variant: "nb" };
+    if (hasClass(node, ["xs-status-container"])) return { kind: "details", variant: "xs" };
+    if (hasClass(node, ["fog-status-card"])) return { kind: "status-card", variant: "fog" };
+    if (hasClass(node, ["wg-box"])) return { kind: "status-card", variant: "wg" };
+    if (node.tag === "details") return { kind: "details", variant: classFamily(node) === "generic" ? "details" : classFamily(node) };
+
+    const isNamedContainer = hasClassPattern(node,
+      /(?:^|[-_])(?:status|dashboard|hud|scene|info)[-_](?:container|wrapper|box|card|panel)(?:$|[-_])/i)
+      || hasClassPattern(node, /(?:^|[-_])(?:folder|forum)[-_](?:container|wrapper|box|panel)(?:$|[-_])/i);
+    if (!isNamedContainer) return null;
+    const family = classFamily(node);
+    const isHeading = hasClassPattern(node, /(?:^|[-_])scene[-_](?:heading|header|title)(?:$|[-_])/i);
+    return { kind: isHeading ? "scene-heading" : "status-card", variant: family };
+  }
+
+  function richBlockFromNode(node) {
+    const template = structuralTemplate(node);
+    if (!template) return null;
+    const summary = node.tag === "details"
+      ? directElementChildren(node).find(child => child.tag === "summary") || null
+      : null;
+    const rows = rowsFromNode(node);
+    if (template.kind === "hud") {
+      const location = firstText(node, child => hasClass(child, ["censy-location-scroll", "location", "scene-location"]));
+      const characters = firstText(node, child => hasClass(child, ["censy-char-list", "character-list"]));
+      if (location) rows.push({ label: "地点", value: location });
+      if (characters) rows.push({ label: "人物", value: characters });
+    }
+    const notes = noteTexts(node);
+    const sections = sectionsFromNode(node);
+    const items = listItemsFromNode(node);
     const progress = progressFromNode(node);
-    const title = cleanText(nodeText(heading));
+    const title = template.kind === "scene-heading" && template.variant === "zc"
+      ? firstText(node, child => hasClass(child, ["zc-chapter-head"]))
+      : (template.kind === "hud"
+          ? firstText(node, child => hasClass(child, ["censy-time-main", "hud-title"]))
+          : titleText(node, summary));
+    const eyebrow = template.kind === "scene-heading"
+      ? firstText(node, child => hasClass(child, ["zc-meta-info", "scene-meta", "scene-eyebrow"]))
+      : "";
+    const subtitle = template.kind === "scene-heading"
+      ? firstText(node, child => hasClass(child, ["zc-chapter-sub", "scene-subtitle"]))
+      : (template.kind === "hud" ? firstText(node, child => hasClass(child, ["censy-day-abbrev", "hud-subtitle"])) : "");
     let body = "";
-    if (isDetails) {
+    if (template.kind === "folder-panel" && !rows.length && !notes.length && !sections.length && !items.length) {
+      body = firstText(node, child => hasClass(child, ["nb-folder-content", "folder-content"]));
+    } else if (template.kind === "details" && !rows.length && !notes.length && !sections.length && !items.length) {
       body = cleanText((node.children || []).filter(child => child !== summary).map(nodeText).join(""));
-    } else if (!rows.length && !notes.length) {
+    } else if (!["scene-heading", "hud"].includes(template.kind)
+      && !rows.length && !notes.length && !sections.length && !items.length) {
       body = cleanText(nodeText(node));
     }
-    const text = cleanText([title, ...rows.map(row => `${row.label} ${row.value}`), ...notes, body, progress ? `${progress.label} ${progress.value}%` : ""].filter(Boolean).join("\n"));
+    const text = cleanText([
+      eyebrow, title, subtitle,
+      ...rows.map(row => `${row.label} ${row.value}`),
+      ...sections.map(section => `${section.label} ${section.value}`),
+      ...notes, ...items.map(item => item.text), body,
+      progress ? `${progress.label} ${progress.value}%` : ""
+    ].filter(Boolean).join("\n"));
+    if (!text) return null;
     return {
       type: "source-rich-block",
       source: "mufy",
-      kind: isDetails ? "details" : "status-card",
-      variant: isFog ? "fog" : (isWG ? "wg" : "details"),
+      kind: template.kind,
+      variant: safeVariant(template.variant),
       text,
+      eyebrow,
       title,
+      subtitle,
       rows,
+      sections,
       notes,
+      items,
       body,
       progress
     };

@@ -580,19 +580,31 @@ window.OD = window.OD || {};
   function richBlockMarkup(block) {
     if (block?.type !== "source-rich-block" || block.source !== "mufy") return "";
     const rows = Array.isArray(block.rows) ? block.rows.filter(row => row?.label || row?.value) : [];
+    const sections = Array.isArray(block.sections) ? block.sections.filter(section => section?.label || section?.value) : [];
     const notes = Array.isArray(block.notes) ? block.notes.filter(Boolean) : [];
+    const items = Array.isArray(block.items) ? block.items.filter(item => item?.text) : [];
     const progress = block.progress && Number.isFinite(Number(block.progress.value))
       ? { label: block.progress.label || "进度", value: Math.max(0, Math.min(100, Number(block.progress.value))) }
       : null;
+    const variant = /^[a-z0-9-]+$/.test(String(block.variant || "")) ? String(block.variant) : "generic";
+    const kind = /^[a-z0-9-]+$/.test(String(block.kind || "")) ? String(block.kind) : "status-card";
     const body = block.body ? `<div class="source-rich-body">${esc(block.body)}</div>` : "";
     const rowsHTML = rows.length ? `<dl class="source-rich-rows">${rows.map(row => `<div class="source-rich-row"><dt>${esc(row.label)}</dt><dd>${esc(row.value)}</dd></div>`).join("")}</dl>` : "";
+    const sectionsHTML = sections.length ? `<div class="source-rich-sections">${sections.map(section => `<section><h4>${esc(section.label)}</h4><div>${esc(section.value)}</div></section>`).join("")}</div>` : "";
     const notesHTML = notes.map(note => `<div class="source-rich-note">${esc(note)}</div>`).join("");
+    const itemsHTML = items.length ? `<ul class="source-rich-items">${items.map(item => `<li>${esc(item.text)}</li>`).join("")}</ul>` : "";
     const progressHTML = progress ? `<div class="source-rich-progress"><div class="source-rich-progress-copy"><span>${esc(progress.label)}</span><strong>${esc(progress.value)}%</strong></div><div class="source-rich-track" role="meter" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${esc(progress.value)}"><span style="width:${esc(progress.value)}%"></span></div></div>` : "";
-    const content = `${rowsHTML}${notesHTML}${body}${progressHTML}`;
-    if (block.kind === "details") {
-      return `<details class="source-rich-block source-rich-details"><summary>${esc(block.title || "详情")}</summary><div class="source-rich-details-body">${content}</div></details>`;
+    const content = `${rowsHTML}${sectionsHTML}${notesHTML}${itemsHTML}${body}${progressHTML}`;
+    if (block.kind === "scene-heading") {
+      return `<header class="source-rich-block source-rich-heading source-rich-${variant}">${block.eyebrow ? `<div class="source-rich-eyebrow">${esc(block.eyebrow)}</div>` : ""}${block.title ? `<h3>${esc(block.title)}</h3>` : ""}${block.subtitle ? `<p>${esc(block.subtitle)}</p>` : ""}</header>`;
     }
-    return `<section class="source-rich-block source-rich-status source-rich-${esc(block.variant || "status")}">${block.title ? `<header>${esc(block.title)}</header>` : ""}${content}</section>`;
+    if (block.kind === "hud") {
+      return `<section class="source-rich-block source-rich-hud source-rich-${variant}"><header><div>${block.title ? `<strong>${esc(block.title)}</strong>` : ""}${block.subtitle ? `<small>${esc(block.subtitle)}</small>` : ""}</div></header>${content}</section>`;
+    }
+    if (block.kind === "details") {
+      return `<details class="source-rich-block source-rich-details source-rich-${variant}"><summary>${esc(block.title || "详情")}</summary><div class="source-rich-details-body">${content}</div></details>`;
+    }
+    return `<section class="source-rich-block source-rich-status source-rich-kind-${kind} source-rich-${variant}">${block.title ? `<header>${esc(block.title)}</header>` : ""}${block.subtitle ? `<div class="source-rich-subtitle">${esc(block.subtitle)}</div>` : ""}${content}</section>`;
   }
 
   function messageContentMarkup(content) {

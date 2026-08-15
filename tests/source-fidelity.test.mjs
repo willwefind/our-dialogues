@@ -150,6 +150,85 @@ test("Mufy details, wg-box, and progress become safe source rich blocks", async 
   assert.deepEqual([...blocks[1].notes], ["记得带伞"]);
 });
 
+test("Mufy zc scene headings and xs status panels keep their distinct semantics", async () => {
+  const OD = await loadRuntime();
+  const adapter = OD.adapters.find(item => item.id === "mufy-raw");
+  const normalized = adapter._internals.normalizeMufyContent(`<div class="zc-status-wrapper">
+    <div class="zc-status-box">
+      <div class="zc-meta-info">2026 / SUMMER</div>
+      <div class="zc-chapter-head">Synthetic chapter</div>
+      <div class="zc-chapter-sub">A safe subtitle</div>
+    </div>
+  </div><details class="xs-status-container">
+    <summary class="xs-status-summary">角色面板</summary>
+    <div class="xs-row-item"><span class="xs-lbl">地点</span><span class="xs-val">合成场景</span></div>
+    <div class="xs-note-section"><div class="xs-note-title">备注</div><div class="xs-quote-block">合成备注</div></div>
+  </details>`);
+  const blocks = normalized.content.filter(item => item.type === "source-rich-block");
+
+  assert.equal(blocks.length, 2);
+  assert.deepEqual(
+    { kind: blocks[0].kind, variant: blocks[0].variant, eyebrow: blocks[0].eyebrow, title: blocks[0].title, subtitle: blocks[0].subtitle },
+    { kind: "scene-heading", variant: "zc", eyebrow: "2026 / SUMMER", title: "Synthetic chapter", subtitle: "A safe subtitle" }
+  );
+  assert.equal(blocks[1].kind, "details");
+  assert.equal(blocks[1].variant, "xs");
+  assert.deepEqual([...blocks[1].rows.map(row => [row.label, row.value])], [["地点", "合成场景"]]);
+  assert.ok(blocks[1].notes.some(note => note.includes("合成备注")));
+});
+
+test("Mufy censy HUD and dashboard normalize as reader-owned component families", async () => {
+  const OD = await loadRuntime();
+  const adapter = OD.adapters.find(item => item.id === "mufy-raw");
+  const normalized = adapter._internals.normalizeMufyContent(`<div class="censy-hud-top">
+    <div class="censy-hud-center"><span class="censy-time-main">22:30</span><span class="censy-day-abbrev">MON</span></div>
+    <div class="censy-location-scroll">Synthetic coast</div>
+  </div><div class="censy-dashboard-wrapper"><details class="censy-glass-panel">
+    <summary><div class="censy-main-title-en">PROFILE</div></summary>
+    <div class="censy-panel-body"><div><span class="censy-sub-title">Mood</span><div>Calm</div></div>
+      <div class="censy-progress-track"><div class="censy-progress-fill" style="width:44%;background:url(javascript:bad)"></div></div>
+      <div class="censy-msg-row"><span class="censy-msg-name">A</span><span class="censy-msg-cn">Synthetic message</span></div>
+    </div>
+  </details></div>`);
+  const blocks = normalized.content.filter(item => item.type === "source-rich-block");
+
+  assert.equal(blocks.length, 2);
+  assert.deepEqual(
+    { kind: blocks[0].kind, variant: blocks[0].variant, title: blocks[0].title, subtitle: blocks[0].subtitle },
+    { kind: "hud", variant: "censy", title: "22:30", subtitle: "MON" }
+  );
+  assert.deepEqual([...blocks[0].rows.map(row => [row.label, row.value])], [["地点", "Synthetic coast"]]);
+  assert.equal(blocks[1].kind, "dashboard");
+  assert.equal(blocks[1].title, "PROFILE");
+  assert.deepEqual([...blocks[1].sections.map(section => [section.label, section.value])], [["Mood", "Calm"]]);
+  assert.equal(blocks[1].progress.value, 44);
+  assert.ok(blocks[1].items.some(item => item.text.includes("Synthetic message")));
+  assert.doesNotMatch(JSON.stringify(blocks), /javascript|background/i);
+});
+
+test("Mufy task, folder, forum, and compact details templates stay structured", async () => {
+  const OD = await loadRuntime();
+  const adapter = OD.adapters.find(item => item.id === "mufy-raw");
+  const normalized = adapter._internals.normalizeMufyContent([
+    { type: "text", text: `<div class="task-card-v1-container"><div class="task-header-v1"><div class="task-title-main-v1">Synthetic mission</div></div><div class="task-row-v1"><span class="task-label-v1">Level</span><span class="task-value-v1">2</span></div><div class="task-desc-box-v1">Safe objective</div><div class="task-obj-item-v1">Check the archive</div></div>` },
+    { type: "text", text: `<div class="nb-folder"><div class="nb-folder-title">Case file</div><div class="nb-folder-content">Synthetic folder body</div></div>` },
+    { type: "text", text: `<div class="forum-container"><div class="forum-title">Synthetic forum</div><div class="thread-item"><div class="thread-title">First thread</div><div class="thread-preview">Preview</div></div></div>` },
+    { type: "text", text: `<details class="D"><summary class="S">Compact status</summary><div class="R"><span class="k">Key</span><span class="v">Value</span></div><div class="i"><span class="gl">Gauge</span><span class="gv">Stable</span></div></details>` }
+  ]);
+  const blocks = normalized.content.filter(item => item.type === "source-rich-block");
+
+  assert.deepEqual([...blocks.map(block => block.kind)], ["task-card", "folder-panel", "forum", "details"]);
+  assert.deepEqual([...blocks[0].rows.map(row => [row.label, row.value])], [["Level", "2"]]);
+  assert.ok(blocks[0].notes.includes("Safe objective"));
+  assert.ok(blocks[0].items.some(item => item.text === "Check the archive"));
+  assert.equal(blocks[1].title, "Case file");
+  assert.equal(blocks[1].body, "Synthetic folder body");
+  assert.equal(blocks[2].title, "Synthetic forum");
+  assert.ok(blocks[2].items.some(item => item.text.includes("First thread")));
+  assert.equal(blocks[3].variant, "compact");
+  assert.deepEqual([...blocks[3].rows.map(row => [row.label, row.value])], [["Key", "Value"], ["Gauge", "Stable"]]);
+});
+
 test("unknown Mufy HTML falls back to safe readable text without inventing a rich block", async () => {
   const OD = await loadRuntime();
   const adapter = OD.adapters.find(item => item.id === "mufy-raw");

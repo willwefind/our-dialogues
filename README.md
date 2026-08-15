@@ -137,9 +137,19 @@ Within a Mufy source, the sidebar renders `source → character → sessions`. C
 
 ### Mufy rich blocks
 
-Mufy source HTML is never assigned to `innerHTML`. The adapter strips comments and executable/non-content elements, parses only known semantic structures, and emits normalized `source-rich-block` content. Reader-owned components currently cover `fog-status-card`, `fog-status-row`, `fog-label`, `fog-comment-box`, `wg-box`, `details/summary`, common label/value rows, notes, and bounded percentage progress bars such as `p-bar` inline widths.
+Mufy source HTML is never assigned to `innerHTML`. The adapter strips comments and executable/non-content elements, parses only known semantic structures, and emits normalized `source-rich-block` content. Reader-owned components cover common status cards, scene headings, HUD/dashboard panels, folder/task panels, forum threads, `details/summary`, label/value rows, notes, lists, and bounded percentage progress bars.
+
+Recurring template families receive distinct but deliberately restrained Reader skins. Current families include `fog`, `wg`, `zc`, `xs`, `censy`, `nb`, `zero`, `mufy`, compact single-letter panels, and forum/post structures. For example, `zc-status-wrapper` becomes a three-level scene heading, `censy-*` HUD/dashboard markup stays separate from `nb-*` folder/task markup, and unclassified `details` remains a safe generic disclosure component. These skins preserve hierarchy and mood without claiming pixel-identical recovery when the export did not include the original site CSS.
 
 Unknown markup falls back to the existing safe readable-text conversion. The unmodified source record remains under `metadata.original` for fidelity work. Mufy status UI remains visible content and is never mixed with exported thinking or Claude `sourceTrace`.
+
+For a private, counts-only compatibility smoke across one ZIP or a directory of Mufy ZIPs, run:
+
+```powershell
+node tools/smoke-mufy-rich-blocks.mjs "D:\path\to\mufy-exports"
+```
+
+The smoke report prints aggregate component counts only; it does not print source paths, IDs, titles, or conversation text.
 
 If the splitter cannot identify a certain visible reply, it falls back to displaying the original `say`. Unmarked or ambiguous workflow text can therefore remain visible by design; preserving uncertain content takes priority over silently hiding it.
 
