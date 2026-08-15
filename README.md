@@ -18,7 +18,7 @@ Currently included:
 - Claude Exporter (`ai-chat-exporter.net`) webpage-plugin JSON adapter
 - ChatGPT official Export Folder import validated against a real 2026 export structure
 - Local JSON / ZIP / browser folder import
-- In-memory multi-source library: consecutive imports coexist, with source filtering, single-source removal, clear-all, and duplicate-import protection
+- Persistent local multi-source library: consecutive imports coexist and normalized text restores after refresh/reopen, with source filtering, single-source removal, clear-all, and duplicate-import protection
 - Hierarchical source navigation; Mufy sessions are grouped under stable character IDs rather than flattened
 - Manifest-driven shard merging and lazy local or ZIP-backed attachment loading
 - Inline images, native audio/video controls, and other-file attachment cards
@@ -26,6 +26,7 @@ Currently included:
 - Conversation list, title/full-text search, message rendering
 - Hide-my-messages toggle
 - Thinking/reasoning and exporter source-trace expand toggle when a source actually contains them
+- Safe Mufy rich-block rendering for common status cards, details, rows, notes, and progress bars
 - Strict adapter capabilities and metadata-only diagnostics for unknown JSON/ZIP inputs
 - Fake fixtures only — no private conversations are committed
 
@@ -62,7 +63,7 @@ Different platforms and exporters may all use JSON, while still using completely
 ```text
 ChatGPT export ──→ adapter ──┐
 Claude export  ──→ adapter ──┤
-Mufy export    ──→ adapter ──┤──→ normalized sources ──→ in-memory library ──→ reader
+Mufy export    ──→ adapter ──┤──→ normalized sources ──→ IndexedDB text library ──→ reader
 Ciel House     ──→ adapter ──┘
 ```
 
@@ -72,7 +73,9 @@ This is intentionally a no-build static site.
 
 For GitHub Pages, publish the repository root.
 
-For local testing, opening `index.html` directly works in modern browsers because scripts are classic scripts rather than ES modules.
+For local reading on Windows, double-click **`Start Reader.bat`**. It starts a dependency-free Node static server at `http://127.0.0.1:4173/` and opens the Reader. This localhost origin is recommended because it gives IndexedDB and optional File System Access directory handles a stable origin.
+
+Opening `index.html` directly remains supported because scripts are classic scripts rather than ES modules. Browser persistence and remembered directory permissions can be less reliable on `file://`, so use the launcher for the best reopen/restore experience. Node.js must be available for the launcher.
 
 The Ciel ZIP, manifest, lazy-asset, SolVoice sidecar, conversation-order, and JSON/ZIP regression checks use Node's built-in test runner and have no package dependencies:
 
@@ -96,11 +99,19 @@ See [`docs/source-compatibility.md`](docs/source-compatibility.md) for the capab
 
 ZIP import uses browser-native decompression where available. JSON can always be imported directly. Existing JSON and single-ZIP workflows remain available beside source-folder import.
 
-### In-memory multi-source library
+### Persistent local multi-source library
 
-Every successful import is added as a source instead of replacing the previous archive. Mufy, Claude, ChatGPT, Ciel, and normalized inputs can therefore coexist in one session. The sidebar groups conversations by source, offers a source filter, and supports removing one source or clearing all sources. Re-importing an obviously identical normalized archive is skipped using a content-and-structure fingerprint; any unused local attachment session from that duplicate import is released.
+Every successful import is added as a source instead of replacing the previous archive. Mufy, Claude, ChatGPT, Ciel, and normalized inputs can therefore coexist. The sidebar groups conversations by source, offers a source filter, and supports removing one source or clearing the local library. Re-importing an obviously identical normalized archive is skipped using a content-and-structure fingerprint; an unused local attachment session from a true duplicate is released, while a restored source can use the same fingerprint to reconnect its local assets without duplicating its text.
 
-This phase is intentionally memory-only. Refreshing or closing the page clears the library, and no conversations or file handles are written to IndexedDB. Binary attachments and SolVoice audio remain lazy local `File` references rather than being copied into the normalized text library.
+The IndexedDB database is named `our-dialogues.library.v1` and currently uses schema version `1`:
+
+- `sources`: source identity, fingerprint, adapter metadata, reconnect mode, save state, and optional structured-cloneable directory handle
+- `conversations`: one normalized conversation per record, keyed by source and conversation ID
+- `settings`: source filter, conversation sort, hide-user and trace toggles, theme, recent conversation, and reading position (`conversationId`, `messageId`, `scrollTop`, timestamp)
+
+Conversation records are written in small batches and incomplete batches are ignored during restore. Source removal and clear-all update IndexedDB as well as the active page. If the schema is damaged or an upgrade cannot complete, **清除本地书库** safely resets the database so the original source files can be imported again.
+
+`File`, `Blob`, asset indexes, object URLs, ChatGPT attachments, Ciel ZIP media, and SolVoice audio are never copied into IndexedDB. After a refresh the conversation text remains readable. An attachment card offers **重新连接来源** only when the original local files are needed. On supported localhost browsers, **添加来源文件夹** uses File System Access and stores the directory handle; permission may still need a user click after a browser restart. If the browser cannot persist that handle, Reader automatically falls back to saving the text library without it.
 
 ### Import a source folder
 
@@ -123,6 +134,12 @@ Within a Mufy source, the sidebar renders `source → character → sessions`. C
 ### Claude webpage-exporter fidelity
 
 `ai-chat-exporter.net` can flatten visible replies, workflow text, and UI/tool markers into one assistant `say`. The adapter retains the complete original record under `metadata.original` and the exact string under `metadata.rawSay`. A conservative marker-bounded splitter moves clear runs around `Done`, `Viewed file`, `Searching...`, reminder actions, and similar tool markers into `metadata.sourceTrace`; it never labels that material as Claude official thinking. Visible replies before, between, and after those runs remain in normalized `content`.
+
+### Mufy rich blocks
+
+Mufy source HTML is never assigned to `innerHTML`. The adapter strips comments and executable/non-content elements, parses only known semantic structures, and emits normalized `source-rich-block` content. Reader-owned components currently cover `fog-status-card`, `fog-status-row`, `fog-label`, `fog-comment-box`, `wg-box`, `details/summary`, common label/value rows, notes, and bounded percentage progress bars such as `p-bar` inline widths.
+
+Unknown markup falls back to the existing safe readable-text conversion. The unmodified source record remains under `metadata.original` for fidelity work. Mufy status UI remains visible content and is never mixed with exported thinking or Claude `sourceTrace`.
 
 If the splitter cannot identify a certain visible reply, it falls back to displaying the original `say`. Unmarked or ambiguous workflow text can therefore remain visible by design; preserving uncertain content takes priority over silently hiding it.
 

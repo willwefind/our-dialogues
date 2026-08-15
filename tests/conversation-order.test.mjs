@@ -28,6 +28,8 @@ function fakeElement(id="") {
     textContent: "",
     innerHTML: "",
     scrollTop: 0,
+    checked: false,
+    hidden: false,
     dataset: {},
     attributes: new Map(),
     classList: {
@@ -43,18 +45,28 @@ function fakeElement(id="") {
     },
     addEventListener(type, listener) { listeners.set(type, listener); },
     dispatch(type) { return listeners.get(type)?.({ target: this }); },
+    click() { return listeners.get("click")?.({ target: this }); },
     setAttribute(name, value) { this.attributes.set(name, String(value)); },
     getAttribute(name) { return this.attributes.get(name) ?? null; },
-    querySelectorAll() { return []; }
+    querySelectorAll(selector) {
+      if (selector === "[data-message-id]") {
+        return [...this.innerHTML.matchAll(/data-message-id="([^"]+)"/g)].map((match, index) => ({
+          dataset: { messageId: match[1] },
+          offsetTop: (index + 1) * 100
+        }));
+      }
+      return [];
+    }
   };
 }
 
-async function loadAppRuntime(savedSortMode="asc") {
+async function loadAppRuntime(savedSortMode="asc", options={}) {
   const ids = [
     "status", "search", "conversationList", "archiveMeta", "welcome", "reader",
     "currentTitle", "readerTitle", "readerMeta", "messages", "main", "fileInput",
     "folderInput", "voiceMappingInput", "voiceArchiveInput", "clearSolVoice",
-    "sourceFilter", "clearSources", "hideUser", "showThinking", "theme", "sidebarToggle", "sidebar"
+    "sourceFilter", "clearSources", "hideUser", "showThinking", "theme", "sidebarToggle", "sidebar",
+    "directoryPicker", "localLibraryStatus", "clearLocalLibrary"
   ];
   const elements = new Map(ids.map(id => [id, fakeElement(id)]));
   const sortAscending = fakeElement("sortAscending");
@@ -64,9 +76,16 @@ async function loadAppRuntime(savedSortMode="asc") {
   elements.set(sortAscending.id, sortAscending);
   elements.set(sortDescending.id, sortDescending);
 
-  const stored = new Map([["our-dialogues.conversation-sort", savedSortMode]]);
+  const stored = options.stored || new Map([["our-dialogues.conversation-sort", savedSortMode]]);
+  if (!stored.has("our-dialogues.conversation-sort")) stored.set("our-dialogues.conversation-sort", savedSortMode);
+  const documentListeners = new Map();
   const runtime = {
     console,
+    Blob,
+    File,
+    Date,
+    setTimeout,
+    clearTimeout,
     localStorage: {
       getItem(key) { return stored.get(key) ?? null; },
       setItem(key, value) { stored.set(key, value); }
@@ -74,7 +93,9 @@ async function loadAppRuntime(savedSortMode="asc") {
     document: {
       body: fakeElement("body"),
       documentElement: { dataset: {} },
+      visibilityState: "visible",
       getElementById(id) { return elements.get(id); },
+      addEventListener(type, listener) { documentListeners.set(type, listener); },
       querySelectorAll(selector) {
         if (selector === "[data-sort-mode]") return [sortAscending, sortDescending];
         return [];
@@ -90,15 +111,41 @@ async function loadAppRuntime(savedSortMode="asc") {
   };
   vm.createContext(runtime);
 
-  for (const relativePath of ["src/core/conversation-order.js", "src/core/source-library.js", "src/app.js"]) {
+  const runtimeFiles = ["src/core/conversation-order.js", "src/core/source-library.js"];
+  if (options.driver) runtimeFiles.push("src/core/persistent-library.js");
+  for (const relativePath of runtimeFiles) {
     const source = await readFile(path.join(repositoryRoot, relativePath), "utf8");
     vm.runInContext(source, runtime, { filename: relativePath });
   }
-  return { runtime, elements, stored, sortAscending, sortDescending };
+  if (options.driver) {
+    const persistence = runtime.OD.persistentLibrary.create({ driver: options.driver });
+    runtime.OD.persistentLibrary.create = () => persistence;
+  }
+  vm.runInContext(await readFile(path.join(repositoryRoot, "src/app.js"), "utf8"), runtime, { filename: "src/app.js" });
+  return {
+    runtime,
+    elements,
+    stored,
+    sortAscending,
+    sortDescending,
+    dispatchDocument(type) { return documentListeners.get(type)?.({ target: runtime.document }); }
+  };
 }
 
 function ids(conversations) {
   return [...conversations.map(conversation => conversation.id)];
+}
+
+async function createMemoryPersistenceDriver() {
+  const runtime = { console, Blob, File, Date, setTimeout, clearTimeout };
+  runtime.window = runtime;
+  vm.createContext(runtime);
+  vm.runInContext(
+    await readFile(path.join(repositoryRoot, "src/core/persistent-library.js"), "utf8"),
+    runtime,
+    { filename: "src/core/persistent-library.js" }
+  );
+  return runtime.OD.persistentLibrary._internals.createMemoryDriver();
 }
 
 test("conversation sort uses normalized createdAt in both directions", async () => {
@@ -286,6 +333,56 @@ test("app keeps consecutive sources, filters them, skips duplicates, and removes
   const mufySource = appState.sources.find(source => source.platform === "mufy");
   assert.equal(runtime.OD.app.removeSource(mufySource.id), true);
   assert.equal(disposedAssets, 1, "removing a source disposes its lazy local assets");
+});
+
+test("app boot restores the persistent source, prefs, recent conversation, and scroll position", async () => {
+  const driver = await createMemoryPersistenceDriver();
+  const stored = new Map([["our-dialogues.conversation-sort", "asc"]]);
+  const first = await loadAppRuntime("asc", { driver, stored });
+  await first.runtime.OD.app.ready;
+  first.runtime.OD.app.loadArchive({
+    source: { platform: "mufy", exporter: "mufy-synthetic" },
+    conversations: [{
+      id: "persistent-session",
+      title: "Persistent session",
+      createdAt: "2026-08-16T00:00:00.000Z",
+      context: { sourceMetadata: { characterId: "character-persistent", characterName: "Persistent" } },
+      participants: [],
+      messages: [
+        { id: "persistent-one", role: "assistant", content: "first" },
+        { id: "persistent-two", role: "assistant", content: "second" }
+      ]
+    }]
+  }, "Persistent Mufy");
+  await new Promise(resolve => setTimeout(resolve, 20));
+
+  const sourceId = first.runtime.OD.app.getState().sources[0].id;
+  first.elements.get("sourceFilter").value = sourceId;
+  first.elements.get("sourceFilter").dispatch("change");
+  first.elements.get("hideUser").checked = true;
+  first.elements.get("hideUser").dispatch("change");
+  first.elements.get("showThinking").checked = true;
+  first.elements.get("showThinking").dispatch("change");
+  first.elements.get("theme").value = "night";
+  first.elements.get("theme").dispatch("change");
+  first.elements.get("main").scrollTop = 222;
+  first.elements.get("main").dispatch("scroll");
+  first.runtime.document.visibilityState = "hidden";
+  await first.dispatchDocument("visibilitychange");
+  await new Promise(resolve => setTimeout(resolve, 20));
+
+  const refreshed = await loadAppRuntime("asc", { driver, stored });
+  await refreshed.runtime.OD.app.ready;
+  const restored = refreshed.runtime.OD.app.getState();
+  assert.equal(restored.sources.length, 1);
+  assert.equal(restored.current.id, "persistent-session");
+  assert.equal(restored.sourceFilter, sourceId);
+  assert.equal(refreshed.elements.get("main").scrollTop, 222);
+  assert.equal(refreshed.elements.get("hideUser").checked, true);
+  assert.equal(refreshed.elements.get("showThinking").checked, true);
+  assert.equal(refreshed.elements.get("theme").value, "night");
+  assert.match(refreshed.elements.get("status").textContent, /从本地书库恢复 1 个来源 \/ 1 段对话/);
+  assert.equal(driver.inspect().settings.readingPosition.messageId, "persistent-two");
 });
 
 test("sidebar exposes exactly two clearly labelled conversation sort modes", async () => {

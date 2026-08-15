@@ -1,8 +1,8 @@
 window.OD = window.OD || {};
 
 /*
-  In-memory multi-source library. It deliberately keeps File-backed asset
-  sessions out of persistence while giving every import a stable fingerprint.
+  Runtime multi-source library. File-backed asset sessions stay in memory;
+  src/core/persistent-library.js stores only lightweight source records.
 */
 (function(OD){
   function textOf(value) {
@@ -95,13 +95,30 @@ window.OD = window.OD || {};
       return candidate;
     }
 
-    function add({ archive, label, adapterId=null, assetSession=null, importDetails="" } = {}) {
+    function add({
+      archive,
+      label,
+      adapterId=null,
+      assetSession=null,
+      importDetails="",
+      directoryHandle=null,
+      reconnectMode=null
+    } = {}) {
       if (!archive?.conversations?.length) throw new Error("识别成功，但没有找到任何对话。");
       const fingerprint = archiveFingerprint(archive);
       const duplicate = sources.find(source => source.fingerprint === fingerprint);
       if (duplicate) {
-        disposeAssetSession(assetSession);
-        return { source: duplicate, duplicate: true };
+        let reconnected = false;
+        if (assetSession && !duplicate.assetSession && duplicate.assetMode === "local-reconnect") {
+          duplicate.assetSession = assetSession;
+          duplicate.assetMode = "local-reconnect";
+          reconnected = true;
+        } else {
+          disposeAssetSession(assetSession);
+        }
+        if (directoryHandle) duplicate.directoryHandle = directoryHandle;
+        if (reconnectMode) duplicate.reconnectMode = reconnectMode;
+        return { source: duplicate, duplicate: true, reconnected };
       }
 
       let id = `source-${fingerprint}`;
@@ -139,11 +156,69 @@ window.OD = window.OD || {};
         source: { ...(archive.source || {}) },
         exportedAt: archive.exportedAt || null,
         assetSession,
+        assetMode: assetSession ? "local-reconnect" : "none",
+        directoryHandle,
+        reconnectMode,
         conversations
       };
       sources.push(source);
       sourceById.set(id, source);
       return { source, duplicate: false };
+    }
+
+    function restore(snapshot = {}) {
+      if (!snapshot.id || !snapshot.fingerprint || !Array.isArray(snapshot.conversations)) {
+        throw new Error("本地书库中的来源记录不完整。");
+      }
+      const duplicate = sources.find(source => source.fingerprint === snapshot.fingerprint);
+      if (duplicate) return { source: duplicate, duplicate: true };
+      if (sourceById.has(String(snapshot.id))) throw new Error("本地书库包含重复的来源 ID。");
+
+      const source = {
+        id: String(snapshot.id),
+        fingerprint: String(snapshot.fingerprint),
+        label: String(snapshot.label || snapshot.source?.platform || "Source"),
+        adapterId: snapshot.adapterId || null,
+        importDetails: String(snapshot.importDetails || ""),
+        source: { ...(snapshot.source || {}) },
+        exportedAt: snapshot.exportedAt || null,
+        assetSession: null,
+        assetMode: snapshot.assetMode === "local-reconnect" ? "local-reconnect" : "none",
+        directoryHandle: snapshot.directoryHandle || null,
+        reconnectMode: snapshot.reconnectMode || null,
+        conversations: snapshot.conversations.map((conversation, index) => {
+          let id = String(conversation?.id || `conversation-${index + 1}`);
+          if (usedConversationIds.has(id)) id = uniqueConversationId(snapshot.id, id, index);
+          usedConversationIds.add(id);
+          conversationSource.set(id, String(snapshot.id));
+          return {
+            ...conversation,
+            id,
+            context: {
+              ...(conversation?.context || {}),
+              library: {
+                sourceId: String(snapshot.id),
+                sourceLabel: String(snapshot.label || snapshot.source?.platform || "Source"),
+                originalConversationId: conversation?.context?.library?.originalConversationId || conversation?.id || id
+              }
+            }
+          };
+        })
+      };
+      sources.push(source);
+      sourceById.set(source.id, source);
+      return { source, duplicate: false, restored: true };
+    }
+
+    function attachAssetSession(sourceId, assetSession, { directoryHandle=null, reconnectMode=null } = {}) {
+      const source = sourceById.get(String(sourceId));
+      if (!source) return false;
+      if (source.assetSession && source.assetSession !== assetSession) disposeAssetSession(source.assetSession);
+      source.assetSession = assetSession || null;
+      source.assetMode = assetSession ? "local-reconnect" : source.assetMode;
+      if (directoryHandle) source.directoryHandle = directoryHandle;
+      if (reconnectMode) source.reconnectMode = reconnectMode;
+      return true;
     }
 
     function remove(sourceId) {
@@ -185,6 +260,8 @@ window.OD = window.OD || {};
 
     return {
       add,
+      restore,
+      attachAssetSession,
       remove,
       clear,
       archive,

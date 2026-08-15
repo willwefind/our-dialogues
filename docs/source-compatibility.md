@@ -1,6 +1,6 @@
 # Source compatibility
 
-Our Dialogues keeps source knowledge in adapters. An adapter converts one strictly detected source schema into `our-dialogues.normalized.v1`; the Reader renders only normalized conversations and never interprets Mufy markup or exporter-specific Claude fields.
+Our Dialogues keeps source knowledge in adapters. An adapter converts one strictly detected source schema into `our-dialogues.normalized.v1`; the Reader renders only normalized conversations and never interprets raw Mufy markup or exporter-specific Claude fields.
 
 The compatibility rule is conservative: an unknown or ambiguous input stays unknown. Generic keys such as `conversations` or `messages` are not enough to claim a format.
 
@@ -10,7 +10,7 @@ The compatibility rule is conservative: an unknown or ambiguous input stays unkn
 |---|---:|---:|---|---|---|---|
 | ChatGPT official export (2026 observed) | Yes | ZIP and manifest-driven folder | Official text plus source-token cleanup | Exported `thoughts` and `reasoning_recap` | Metadata plus lazy local/ZIP assets | Implemented and regression-tested |
 | Ciel House Export v1 | Yes | ZIP | Contract text fields | Preserved when exported | Lazy ZIP assets | Implemented and regression-tested |
-| Mufy raw export | Yes | Single `_原始数据.json` ZIP and folder of multiple Mufy ZIPs | Source HTML becomes readable normalized text; comments and script/style content are excluded | Explicit, paired `<think>` and typed thinking parts only | Not present in the calibrated raw schema | Implemented with synthetic multi-ZIP batch coverage and real local schema metadata |
+| Mufy raw export | Yes | Single `_原始数据.json` ZIP and folder of multiple Mufy ZIPs | Known status/details markup becomes safe normalized rich blocks; unknown HTML becomes readable text; comments and script/style content are excluded | Explicit, paired `<think>` and typed thinking parts only | Not present in the calibrated raw schema | Implemented with synthetic rich-block/multi-ZIP coverage and real local schema metadata |
 | Our Dialogues normalized v1 | Yes | No direct ZIP adapter | Already normalized | Preserved | Preserved | Implemented and regression-tested |
 | SolVoice sidecar | Mapping JSON | `VoiceArchive` or `sol/audio` folder | Not a conversation source | Not applicable | Lazy local audio linked by strong exact message ID mapping | Implemented and regression-tested |
 | Claude official export | No | No | Unknown | Unknown | Unknown | Pending a real export sample |
@@ -49,11 +49,17 @@ Mufy folder import parses every matching ZIP and combines all contained sessions
 
 The Reader navigation then groups that archive as `source → characterId → sessions`. The display name is presentation only, so two characters with the same name remain separate. Session-title priority is archive remark, current-session marker, first readable assistant text, then a dated or generic fallback.
 
-## In-memory source library
+## Persistent source library
 
-Imports are registered as independent sources and combined only for the current page session. The library supplies source filtering, per-source removal, clear-all, unique runtime conversation addressing across sources, and a conservative normalized-content fingerprint that skips obvious repeat imports. Each source retains its own lazy attachment session; removing or clearing it revokes that source's object URLs and disposes its local asset index.
+Imports are registered as independent sources. The runtime library supplies source filtering, per-source removal, clear-all, unique runtime conversation addressing across sources, and a conservative normalized-content fingerprint that skips obvious repeat imports. Each source retains its own lazy attachment session while the page is open; removing or clearing it revokes that source's object URLs and disposes its local asset index.
 
-There is deliberately no IndexedDB persistence in this phase. Refresh or page close clears all source records and browser `File` references.
+IndexedDB `our-dialogues.library.v1` stores lightweight source records, one normalized conversation per record, and Reader settings/position. `File`, `Blob`, asset sessions, object URLs, ZIP media, attachments, and SolVoice audio are excluded. Browser `File` references still disappear on close, while normalized text restores automatically. Supported browsers may retain a `FileSystemDirectoryHandle`; failure to clone that handle falls back to text-only persistence.
+
+## Mufy markup boundary
+
+The Mufy adapter removes comments and `script`, `style`, `noscript`, and `template` content before parsing. A small non-executing parser recognizes only `fog-status-card`, `fog-status-row`, `fog-label`, `fog-comment-box`, `wg-box`, `details/summary`, common row/note classes, and bounded progress widths. It emits `source-rich-block` objects; Reader HTML is built only from escaped normalized fields. Unknown structures use the existing readable-text fallback, and the untouched source record remains in `metadata.original`.
+
+Mufy rich blocks are visible message content. They never enter normalized `thinking` and never share Claude's heuristic `sourceTrace` channel.
 
 ## Metadata-only diagnostics
 

@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- Add IndexedDB-backed persistent normalized text sources, preferences, recent conversation, and reading-position restore.
+- Keep binary attachments and SolVoice audio out of persistence, with source-specific reconnect prompts and optional persistent directory handles.
+- Add safe Mufy `source-rich-block` parsing and Reader-owned status-card, details, row, note, and progress rendering.
+- Add the dependency-free Windows `Start Reader.bat` localhost launcher and recommend stable-origin local use.
+
 ## v0.1.8-dev — 2026-08-16
 
 - Added an in-memory multi-source library so Mufy, Claude, ChatGPT, Ciel, and normalized imports coexist instead of replacing one another

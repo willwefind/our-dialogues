@@ -105,6 +105,63 @@ test("Mufy HTML becomes readable text and explicit think content stays separate"
   assert.doesNotMatch(visible, /secret greeting|hidden style|comment/);
 });
 
+test("Mufy fog status cards normalize rows, notes, and bounded progress", async () => {
+  const OD = await loadRuntime();
+  const source = syntheticMufy();
+  const raw = `<div class="fog-status-card" onclick="steal()">
+    <div class="fog-status-row"><span class="fog-label">时间</span><span>下午 14:30</span></div>
+    <div class="fog-status-row"><span class="fog-label">地点</span><span>D 大校园</span></div>
+    <div class="fog-comment-box">只是一段合成备注</div>
+    <div><span class="fog-label">好感度</span><div class="p-bar" style="width:108.5%;background:url(javascript:bad)"></div></div>
+    <script>secretScript()</script><style>.private{display:block}</style><!-- hidden -->
+  </div>`;
+  source.sessions[0].dialogs[0].content = raw;
+  const parsed = await OD.registry.parseJSON(source);
+  const message = parsed.archive.conversations[0].messages[1];
+  const block = message.content.find(item => item.type === "source-rich-block");
+
+  assert.equal(block.kind, "status-card");
+  assert.equal(block.variant, "fog");
+  assert.deepEqual([...block.rows.map(row => [row.label, row.value])], [
+    ["时间", "下午 14:30"],
+    ["地点", "D 大校园"]
+  ]);
+  assert.deepEqual([...block.notes], ["只是一段合成备注"]);
+  assert.deepEqual({ ...block.progress }, { label: "好感度", value: 100 });
+  assert.doesNotMatch(block.text, /secretScript|private|onclick|javascript/i);
+  assert.equal(message.metadata.original.content, raw, "raw source record remains available for fidelity audits");
+});
+
+test("Mufy details, wg-box, and progress become safe source rich blocks", async () => {
+  const OD = await loadRuntime();
+  const adapter = OD.adapters.find(item => item.id === "mufy-raw");
+  const normalized = adapter._internals.normalizeMufyContent([
+    { type: "text", text: `<details open><summary>角色状态</summary><div>保持冷静</div><div class="p-bar" style="width:8.5%"></div></details>` },
+    { type: "text", text: `<div class="wg-box"><div class="wg-row"><span class="wg-label">天气</span><span>小雨</span></div><div class="wg-comment">记得带伞</div></div>` }
+  ]);
+  const blocks = normalized.content.filter(item => item.type === "source-rich-block");
+
+  assert.equal(blocks.length, 2);
+  assert.equal(blocks[0].kind, "details");
+  assert.equal(blocks[0].title, "角色状态");
+  assert.equal(blocks[0].progress.value, 8.5);
+  assert.equal(blocks[1].variant, "wg");
+  assert.deepEqual([...blocks[1].rows.map(row => [row.label, row.value])], [["天气", "小雨"]]);
+  assert.deepEqual([...blocks[1].notes], ["记得带伞"]);
+});
+
+test("unknown Mufy HTML falls back to safe readable text without inventing a rich block", async () => {
+  const OD = await loadRuntime();
+  const adapter = OD.adapters.find(item => item.id === "mufy-raw");
+  const raw = `<custom-panel data-secret="not-rendered"><div>Readable <b>fallback</b></div><script>bad()</script></custom-panel>`;
+  const normalized = adapter._internals.normalizeMufyContent(raw);
+
+  assert.equal(normalized.text, "Readable fallback");
+  assert.equal(normalized.content.length, 1);
+  assert.equal(normalized.content[0].type, "text");
+  assert.doesNotMatch(normalized.text, /bad|script|custom-panel/);
+});
+
 test("Mufy title falls back to the first assistant line instead of a session hash", async () => {
   const OD = await loadRuntime();
   const source = syntheticMufy();
@@ -262,15 +319,18 @@ test("Reader HTML loads Claude, diagnostics, and source-folder routing before th
   const registry = html.indexOf('src/adapters/registry.js');
   const sourceFolder = html.indexOf('src/core/source-folder.js');
   const sourceLibrary = html.indexOf('src/core/source-library.js');
+  const persistentLibrary = html.indexOf('src/core/persistent-library.js');
   const app = html.indexOf('src/app.js');
 
   assert.ok(claude >= 0 && claude < registry, "Claude adapter must register before diagnostics registry");
   assert.ok(registry < sourceFolder && sourceFolder < app, "folder routing must load after registry and before app");
-  assert.ok(sourceLibrary >= 0 && sourceLibrary < app, "the in-memory source library must load before the app");
+  assert.ok(sourceLibrary >= 0 && sourceLibrary < persistentLibrary && persistentLibrary < app, "runtime and persistent libraries must load before the app");
   assert.match(html, /选择来源文件夹/);
   assert.match(html, /多个 Mufy ZIP/);
   assert.match(html, /id="sourceFilter"/);
   assert.match(html, /id="clearSources"/);
+  assert.match(html, /id="localLibraryStatus"/);
+  assert.match(html, /id="clearLocalLibrary"/);
 });
 
 test("unknown JSON returns schema-only diagnostics without leaking values", async () => {

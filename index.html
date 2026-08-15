@@ -15,9 +15,14 @@
       <p>把曾经说过的话，重新翻出来。</p>
 
       <div class="import-picks">
+        <div class="import-title">添加来源</div>
+        <button id="directoryPicker" class="pick pick-folder directory-picker" type="button" hidden>
+          <span>添加来源文件夹</span>
+          <small>推荐 · 可在浏览器允许时记住文件夹权限</small>
+        </button>
         <label class="pick pick-folder">
           <input id="folderInput" type="file" webkitdirectory directory multiple hidden>
-          <span>选择来源文件夹</span>
+          <span>选择来源文件夹（兼容添加）</span>
           <small>ChatGPT 官方 Export · 多个 Mufy ZIP</small>
         </label>
 
@@ -43,6 +48,10 @@
       </div>
 
       <div id="status" class="status" role="status" aria-live="polite">文件只在本机浏览器中解析。</div>
+      <div class="local-library" aria-live="polite">
+        <div id="localLibraryStatus">本地书库：正在准备…</div>
+        <button id="clearLocalLibrary" type="button" disabled>清除本地书库</button>
+      </div>
     </header>
 
     <div class="search-wrap">
@@ -100,6 +109,7 @@
   <script src="src/core/schema.js"></script>
   <script src="src/core/conversation-order.js"></script>
   <script src="src/core/source-library.js"></script>
+  <script src="src/core/persistent-library.js"></script>
   <script src="src/core/zip.js"></script>
   <script src="src/core/chatgpt-export-folder.js"></script>
   <script src="src/core/solvoice-sidecar.js"></script>

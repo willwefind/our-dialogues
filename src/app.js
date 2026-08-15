@@ -2,8 +2,10 @@ window.OD = window.OD || {};
 
 (function(OD){
   const $ = id => document.getElementById(id);
+  const SETTINGS_MIRROR_KEY = "our-dialogues.reader-state.v1";
   const state = {
     library: OD.sourceLibrary.create(),
+    persistence: OD.persistentLibrary?.create?.() || null,
     archive: null,
     filtered: [],
     current: null,
@@ -18,7 +20,13 @@ window.OD = window.OD || {};
     statusText: "",
     archiveStatusText: "",
     statusError: false,
-    renderToken: 0
+    renderToken: 0,
+    lastSavedAt: null,
+    persistenceError: "",
+    saveTimer: null,
+    pendingReconnectSourceId: null,
+    restoredPosition: null,
+    booted: false
   };
 
   function esc(s) {
@@ -60,12 +68,100 @@ window.OD = window.OD || {};
   function renderStatus() {
     $("status").textContent = [state.statusText, solVoiceStatusText()].filter(Boolean).join(" · ");
     $("status").classList.toggle("error", state.statusError);
+    renderLocalLibraryStatus();
+  }
+
+  function renderLocalLibraryStatus() {
+    const element = $("localLibraryStatus");
+    if (!element) return;
+    if (!state.persistence?.supported) {
+      element.textContent = "本地书库：当前浏览器不支持 IndexedDB；本次仍只保存在页面内。";
+    } else if (state.persistenceError) {
+      element.textContent = `本地书库：${state.persistenceError}`;
+    } else if (state.lastSavedAt) {
+      element.textContent = `本地书库：已保存 · 最后更新 ${fmtDate(state.lastSavedAt)}`;
+    } else {
+      element.textContent = "本地书库：准备就绪；成功导入后会自动保存文字内容。";
+    }
+    const clear = $("clearLocalLibrary");
+    if (clear) clear.disabled = state.library.size === 0 && !state.persistenceError;
   }
 
   function setStatus(text, error=false) {
     state.statusText = text;
     state.statusError = error;
     renderStatus();
+  }
+
+  function readSettingsMirror() {
+    try {
+      const value = JSON.parse(localStorage.getItem(SETTINGS_MIRROR_KEY) || "null");
+      return value && typeof value === "object" ? value : null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  function messageAnchor() {
+    const messages = [...$("messages").querySelectorAll("[data-message-id]")];
+    if (!messages.length) return null;
+    const scrollTop = Number($("main").scrollTop || 0);
+    const anchor = messages.find(element => Number(element.offsetTop || 0) >= scrollTop) || messages.at(-1);
+    return anchor?.dataset?.messageId || null;
+  }
+
+  function readerSettings() {
+    return {
+      sourceFilter: state.sourceFilter,
+      conversationSort: state.sortMode,
+      hideUser: !!$("hideUser").checked,
+      showThinking: !!$("showThinking").checked,
+      theme: $("theme").value || document.documentElement.dataset.theme || "paper",
+      recentConversationId: state.current?.id || null,
+      readingPosition: state.current ? {
+        conversationId: state.current.id,
+        messageId: messageAnchor(),
+        scrollTop: Number($("main").scrollTop || 0),
+        timestamp: new Date().toISOString()
+      } : null,
+      updatedAt: new Date().toISOString()
+    };
+  }
+
+  function saveReaderState({ immediate = false } = {}) {
+    const settings = readerSettings();
+    try { localStorage.setItem(SETTINGS_MIRROR_KEY, JSON.stringify(settings)); } catch (_) {}
+    if (!state.persistence?.supported) return Promise.resolve();
+    const write = async () => {
+      state.saveTimer = null;
+      try {
+        await state.persistence.saveSettings(settings);
+      } catch (error) {
+        state.persistenceError = error?.message || "保存设置失败";
+        renderLocalLibraryStatus();
+      }
+    };
+    if (immediate) {
+      clearTimeout(state.saveTimer);
+      state.saveTimer = null;
+      return write();
+    }
+    clearTimeout(state.saveTimer);
+    state.saveTimer = setTimeout(() => void write(), 180);
+    return Promise.resolve();
+  }
+
+  async function persistSource(source) {
+    if (!state.persistence?.supported || !source) return;
+    try {
+      state.lastSavedAt = await state.persistence.saveSource(source);
+      state.persistenceError = "";
+      await saveReaderState({ immediate: true });
+    } catch (error) {
+      console.warn("Could not save the local text library", error);
+      state.persistenceError = error?.message || "保存失败；当前页面内容仍可继续阅读";
+    }
+    renderLocalLibraryStatus();
   }
 
   function conversationHaystack(c) {
@@ -162,6 +258,7 @@ window.OD = window.OD || {};
 
   function renderSourceControls() {
     const sources = state.library.sources();
+    document.body.classList.toggle("has-library", sources.length > 0);
     const selected = sources.some(source => source.id === state.sourceFilter) ? state.sourceFilter : "all";
     state.sourceFilter = selected;
     $("sourceFilter").innerHTML = [
@@ -219,6 +316,7 @@ window.OD = window.OD || {};
     state.sortMode = OD.conversationOrder.persistMode(window.localStorage, mode);
     renderSortControl();
     renderList();
+    void saveReaderState();
   }
 
   function resolveAttachment(attachment) {
@@ -269,7 +367,10 @@ window.OD = window.OD || {};
   function attachmentMarkup(attachment, index) {
     const info = attachmentInfo(attachment);
     const canOpen = !!(info.resolved?.available && state.assetSession?.objectURLs?.get);
-    const availability = canOpen ? "滚动到此处时载入" : "仅显示附件信息";
+    const source = state.library.sourceForConversation(state.current);
+    const canReconnect = !canOpen && source?.assetMode === "local-reconnect";
+    const availability = canOpen ? "滚动到此处时载入" : (canReconnect ? "重新连接来源后打开" : "仅显示附件信息");
+    const reconnect = canReconnect ? `<button class="attachment-reconnect" type="button" data-reconnect-source="${esc(source.id)}">重新连接来源</button>` : "";
 
     if (info.kind === "file") {
       return `<div class="attachment attachment-file lazy-attachment${canOpen ? "" : " is-unavailable"}" data-attachment-index="${index}">
@@ -281,6 +382,7 @@ window.OD = window.OD || {};
           </span>
           <span class="attachment-action">${availability}</span>
         </a>
+        ${reconnect}
       </div>`;
     }
 
@@ -295,6 +397,7 @@ window.OD = window.OD || {};
         <span class="attachment-name">${esc(info.name)}</span>
         ${info.details ? `<small>${esc(info.details)}</small>` : ""}
       </figcaption>
+      ${reconnect}
     </figure>`;
   }
 
@@ -358,6 +461,9 @@ window.OD = window.OD || {};
   function prepareLazyAttachments(attachments) {
     const elements = [...$("messages").querySelectorAll(".lazy-attachment")];
     const manager = state.assetSession?.objectURLs;
+    for (const button of $("messages").querySelectorAll("[data-reconnect-source]")) {
+      button.addEventListener("click", () => void reconnectSource(button.dataset.reconnectSource));
+    }
     if (!elements.length || !manager?.get) return;
 
     const load = element => {
@@ -471,7 +577,34 @@ window.OD = window.OD || {};
     elements.forEach(element => state.solVoiceObserver.observe(element));
   }
 
-  function openConversation(id) {
+  function richBlockMarkup(block) {
+    if (block?.type !== "source-rich-block" || block.source !== "mufy") return "";
+    const rows = Array.isArray(block.rows) ? block.rows.filter(row => row?.label || row?.value) : [];
+    const notes = Array.isArray(block.notes) ? block.notes.filter(Boolean) : [];
+    const progress = block.progress && Number.isFinite(Number(block.progress.value))
+      ? { label: block.progress.label || "进度", value: Math.max(0, Math.min(100, Number(block.progress.value))) }
+      : null;
+    const body = block.body ? `<div class="source-rich-body">${esc(block.body)}</div>` : "";
+    const rowsHTML = rows.length ? `<dl class="source-rich-rows">${rows.map(row => `<div class="source-rich-row"><dt>${esc(row.label)}</dt><dd>${esc(row.value)}</dd></div>`).join("")}</dl>` : "";
+    const notesHTML = notes.map(note => `<div class="source-rich-note">${esc(note)}</div>`).join("");
+    const progressHTML = progress ? `<div class="source-rich-progress"><div class="source-rich-progress-copy"><span>${esc(progress.label)}</span><strong>${esc(progress.value)}%</strong></div><div class="source-rich-track" role="meter" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${esc(progress.value)}"><span style="width:${esc(progress.value)}%"></span></div></div>` : "";
+    const content = `${rowsHTML}${notesHTML}${body}${progressHTML}`;
+    if (block.kind === "details") {
+      return `<details class="source-rich-block source-rich-details"><summary>${esc(block.title || "详情")}</summary><div class="source-rich-details-body">${content}</div></details>`;
+    }
+    return `<section class="source-rich-block source-rich-status source-rich-${esc(block.variant || "status")}">${block.title ? `<header>${esc(block.title)}</header>` : ""}${content}</section>`;
+  }
+
+  function messageContentMarkup(content) {
+    const items = Array.isArray(content) ? content : [{ type: "text", text: String(content ?? "") }];
+    return items.map(item => {
+      if (item?.type === "source-rich-block") return richBlockMarkup(item);
+      const text = item?.text == null ? "" : String(item.text);
+      return text ? `<div class="message-body">${esc(text)}</div>` : "";
+    }).join("");
+  }
+
+  function openConversation(id, { restorePosition = null } = {}) {
     const c = (state.archive?.conversations || []).find(x => x.id === id);
     if (!c) return;
     releaseRenderedAssets();
@@ -493,7 +626,7 @@ window.OD = window.OD || {};
     const renderedAttachments = [];
     const renderedSolVoice = [];
     $("messages").innerHTML = (c.messages || []).map(m => {
-      const text = OD.schema.textOf(m.content);
+      const contentHTML = messageContentMarkup(m.content);
       const thinking = OD.schema.textOf(m.thinking);
       const recaps = Array.isArray(m.metadata?.reasoningRecap) ? m.metadata.reasoningRecap.filter(Boolean) : [];
       const sourceTrace = Array.isArray(m.metadata?.sourceTrace)
@@ -512,9 +645,9 @@ window.OD = window.OD || {};
       const sourceTraceHTML = sourceTrace.length ? `<div class="source-trace"><strong>Exporter source trace · heuristic, not official thinking</strong>\n${sourceTrace.map(item => item.type === "marker"
         ? `<span class="source-trace-marker">[${esc(item.marker || "marker")}] ${esc(item.text)}</span>`
         : esc(item.text)).join("\n\n")}</div>` : "";
-      return `<section class="message${reasoningOnly ? " reasoning-only" : ""}" data-role="${esc(m.role)}">
+      return `<section class="message${reasoningOnly ? " reasoning-only" : ""}" data-role="${esc(m.role)}" data-message-id="${esc(m.id)}">
         <div class="message-who">${esc(m.speaker || m.role)}</div>
-        ${text ? `<div class="message-body">${esc(text)}</div>` : ""}
+        ${contentHTML}
         ${attachmentHTML ? `<div class="attachments">${attachmentHTML}</div>` : ""}
         ${solVoiceHTML ? `<div class="solvoice-clips">${solVoiceHTML}</div>` : ""}
         ${(thinking || recaps.length) ? `<div class="thinking"><strong>Thinking / reasoning exported by source</strong>${recaps.length ? `\n${esc(recaps.join(" · "))}` : ""}${thinking ? `\n\n${esc(thinking)}` : ""}</div>` : ""}
@@ -523,10 +656,11 @@ window.OD = window.OD || {};
       </section>`;
     }).join("");
 
-    $("main").scrollTop = 0;
+    $("main").scrollTop = Number(restorePosition?.scrollTop || 0);
     prepareLazyAttachments(renderedAttachments);
     prepareLazySolVoice(renderedSolVoice);
     renderList();
+    void saveReaderState();
   }
 
   function rebuildSolVoiceSession({ rerender = true } = {}) {
@@ -598,21 +732,30 @@ window.OD = window.OD || {};
     renderStatus();
   }
 
-  function loadArchive(archive, adapterLabel, assetSession=null, importDetails="") {
+  function loadArchive(archive, adapterLabel, assetSession=null, importDetails="", options={}) {
     if (!archive?.conversations?.length) throw new Error("识别成功，但没有找到任何对话。");
+    const expected = options.expectedSourceId ? state.library.get(options.expectedSourceId) : null;
+    if (expected && expected.fingerprint !== OD.sourceLibrary.archiveFingerprint(archive)) {
+      OD.sourceLibrary._internals.disposeAssetSession(assetSession);
+      throw new Error("选择的文件与需要重新连接的来源不一致；文字书库未改变。");
+    }
     const added = state.library.add({
       archive,
       label: adapterLabel,
       adapterId: archive.source?.exporter || null,
       assetSession,
-      importDetails
+      importDetails,
+      directoryHandle: options.directoryHandle || null,
+      reconnectMode: options.reconnectMode || null
     });
     state.sourceFilter = "all";
     state.archive = state.library.archive();
     state.current = null;
     rebuildSolVoiceSession({ rerender: false });
     const detail = importDetails ? ` · ${importDetails}` : "";
-    state.archiveStatusText = added.duplicate
+    state.archiveStatusText = added.reconnected
+      ? `已重新连接：${added.source.label} · 聊天文字未重复导入`
+      : added.duplicate
       ? `已在书库中：${adapterLabel} · 未重复导入 · 共 ${state.library.size} 个来源`
       : `已加入：${adapterLabel} · ${added.source.conversations.length} 段对话${detail} · 共 ${state.library.size} 个来源`;
     setStatus(state.archiveStatusText);
@@ -620,6 +763,7 @@ window.OD = window.OD || {};
     renderList();
     const first = OD.conversationOrder.sortConversations(added.source.conversations, state.sortMode)[0];
     openConversation(first.id);
+    void persistSource(added.source);
     return added;
   }
 
@@ -642,6 +786,10 @@ window.OD = window.OD || {};
       state.assetSession = null;
     }
     state.library.remove(source.id);
+    void state.persistence?.removeSource?.(source.id).catch(error => {
+      state.persistenceError = error?.message || "移除本地来源失败";
+      renderLocalLibraryStatus();
+    });
     state.archive = state.library.size ? state.library.archive() : null;
     state.current = null;
     if (state.sourceFilter === source.id) state.sourceFilter = "all";
@@ -655,6 +803,7 @@ window.OD = window.OD || {};
       ? `已移除：${source.label} · 书库剩余 ${state.library.size} 个来源`
       : "书库已清空；本页仍不会上传任何文件。";
     setStatus(state.archiveStatusText);
+    void saveReaderState();
     return true;
   }
 
@@ -669,10 +818,16 @@ window.OD = window.OD || {};
     renderSourceControls();
     renderList();
     showEmptyLibrary();
+    state.lastSavedAt = null;
+    void state.persistence?.clearSources?.().catch(error => {
+      state.persistenceError = error?.message || "清除本地书库失败";
+      renderLocalLibraryStatus();
+    });
     state.archiveStatusText = count
-      ? `已清空 ${count} 个来源；数据只从当前内存移除。`
+      ? `已清空 ${count} 个来源；本地持久书库也已清除。`
       : "书库目前为空。";
     setStatus(state.archiveStatusText);
+    void saveReaderState();
     return count;
   }
 
@@ -684,7 +839,7 @@ window.OD = window.OD || {};
     throw error;
   }
 
-  async function loadFile(file) {
+  async function loadFile(file, options={}) {
     setStatus(`正在本地解析：${file.name}`);
     if (/\.zip$/i.test(file.name) || file.type === "application/zip") {
       const result = requireRecognized(await OD.registry.parseZIP(file));
@@ -692,14 +847,14 @@ window.OD = window.OD || {};
         result.archive,
         result.adapter.label,
         result.assetSession || null,
-        result.importDetails || ""
+        result.importDetails || "",
+        { ...options, reconnectMode: "file" }
       );
-      return;
     }
     const text = await file.text();
     const data = JSON.parse(text.replace(/^\uFEFF/, ""));
     const result = requireRecognized(await OD.registry.parseJSON(data));
-    return loadArchive(result.archive, result.adapter.label);
+    return loadArchive(result.archive, result.adapter.label, null, "", { ...options, reconnectMode: "file" });
   }
 
   /*
@@ -709,7 +864,7 @@ window.OD = window.OD || {};
     ChatGPT attachment File objects remain lazy. Mufy ZIP folders are combined
     in memory using stable source IDs and never persisted or uploaded.
   */
-  async function loadSourceFolder(files) {
+  async function loadSourceFolder(files, options={}) {
     if (typeof OD.sourceFolder?.parse !== "function") {
       throw new Error("当前版本缺少来源文件夹导入器。");
     }
@@ -720,18 +875,143 @@ window.OD = window.OD || {};
       result.archive,
       result.adapter.label,
       result.assetSession || null,
-      result.importDetails || ""
+      result.importDetails || "",
+      { ...options, reconnectMode: "folder" }
     );
   }
 
   // Backward-compatible public seam for existing browser tests and integrations.
   const loadChatGPTFolder = loadSourceFolder;
 
+  async function filesFromDirectoryHandle(directoryHandle) {
+    const files = [];
+    async function visit(handle, prefix="") {
+      for await (const entry of handle.values()) {
+        const relativePath = prefix ? `${prefix}/${entry.name}` : entry.name;
+        if (entry.kind === "directory") {
+          await visit(entry, relativePath);
+          continue;
+        }
+        const file = await entry.getFile();
+        try { Object.defineProperty(file, "relativePath", { value: relativePath, configurable: true }); } catch (_) {}
+        files.push(file);
+      }
+    }
+    await visit(directoryHandle);
+    return files;
+  }
+
+  async function chooseDirectory({ expectedSourceId=null } = {}) {
+    if (typeof window.showDirectoryPicker !== "function") {
+      state.pendingReconnectSourceId = expectedSourceId;
+      $("folderInput").click();
+      return null;
+    }
+    const directoryHandle = await window.showDirectoryPicker({ mode: "read" });
+    const files = await filesFromDirectoryHandle(directoryHandle);
+    return loadSourceFolder(files, { expectedSourceId, directoryHandle });
+  }
+
+  async function reconnectSource(sourceId) {
+    const source = state.library.get(sourceId);
+    if (!source) return false;
+    try {
+      if (source.directoryHandle) {
+        let permission = await source.directoryHandle.queryPermission?.({ mode: "read" });
+        if (permission !== "granted") permission = await source.directoryHandle.requestPermission?.({ mode: "read" });
+        if (permission === "granted") {
+          const files = await filesFromDirectoryHandle(source.directoryHandle);
+          await loadSourceFolder(files, { expectedSourceId: source.id, directoryHandle: source.directoryHandle });
+          return true;
+        }
+      }
+      state.pendingReconnectSourceId = source.id;
+      if (source.reconnectMode === "file") $("fileInput").click();
+      else $("folderInput").click();
+      setStatus(`请选择“${source.label}”原来的本地${source.reconnectMode === "file" ? "文件" : "文件夹"}；聊天文字仍可阅读。`);
+      return true;
+    } catch (error) {
+      if (error?.name === "AbortError") return false;
+      console.error(error);
+      setStatus(error?.message || "无法重新连接本地来源。", true);
+      return false;
+    }
+  }
+
+  function applyReaderSettings(settings) {
+    if (!settings || typeof settings !== "object") return;
+    state.sortMode = ["asc", "desc"].includes(settings.conversationSort) ? settings.conversationSort : state.sortMode;
+    $("hideUser").checked = !!settings.hideUser;
+    $("showThinking").checked = !!settings.showThinking;
+    document.body.classList.toggle("hide-user", !!settings.hideUser);
+    document.body.classList.toggle("show-thinking", !!settings.showThinking);
+    if (["paper", "night", "mist"].includes(settings.theme)) {
+      $("theme").value = settings.theme;
+      document.documentElement.dataset.theme = settings.theme;
+      localStorage.setItem("our-dialogues.theme", settings.theme);
+    }
+    state.restoredPosition = settings.readingPosition || null;
+  }
+
+  async function bootPersistentLibrary() {
+    const mirror = readSettingsMirror();
+    applyReaderSettings(mirror);
+    if (!state.persistence?.supported) {
+      state.booted = true;
+      renderSortControl();
+      renderSourceControls();
+      renderLocalLibraryStatus();
+      return { sourceCount: 0, conversationCount: 0 };
+    }
+    try {
+      const [restored, settings] = await Promise.all([
+        state.persistence.restore(),
+        state.persistence.loadSettings()
+      ]);
+      applyReaderSettings(settings || mirror);
+      for (const source of restored.sources) state.library.restore(source);
+      state.lastSavedAt = restored.savedAt;
+      state.archive = state.library.size ? state.library.archive() : null;
+      const requestedFilter = settings?.sourceFilter || mirror?.sourceFilter || "all";
+      state.sourceFilter = state.library.get(requestedFilter) ? requestedFilter : "all";
+      renderSortControl();
+      renderSourceControls();
+      renderList();
+
+      const conversations = state.archive?.conversations || [];
+      const recentId = settings?.recentConversationId || mirror?.recentConversationId || null;
+      const recent = conversations.find(conversation => conversation.id === recentId) ||
+        OD.conversationOrder.sortConversations(conversations, state.sortMode)[0] || null;
+      if (recent) {
+        const position = (settings?.readingPosition || mirror?.readingPosition)?.conversationId === recent.id
+          ? (settings?.readingPosition || mirror?.readingPosition)
+          : null;
+        openConversation(recent.id, { restorePosition: position });
+      }
+      state.archiveStatusText = restored.sources.length
+        ? `从本地书库恢复 ${restored.sources.length} 个来源 / ${conversations.length} 段对话；聊天文字可直接阅读。`
+        : "文件只在本机浏览器中解析，不会上传。";
+      setStatus(state.archiveStatusText);
+      state.booted = true;
+      return { sourceCount: restored.sources.length, conversationCount: conversations.length };
+    } catch (error) {
+      console.error("Could not restore the local library", error);
+      state.persistenceError = `${error?.message || "恢复失败"}；可清除本地书库后重新导入`;
+      state.archiveStatusText = "本地书库恢复失败；Reader 仍可继续添加来源。";
+      setStatus(state.archiveStatusText, true);
+      state.booted = true;
+      return { sourceCount: 0, conversationCount: 0, error };
+    }
+  }
+
   $("fileInput").addEventListener("change", async event => {
     const files = [...event.target.files];
     if (!files.length) return;
     try {
-      for (const file of files) await loadFile(file);
+      const expectedSourceId = state.pendingReconnectSourceId;
+      state.pendingReconnectSourceId = null;
+      if (expectedSourceId) await loadFile(files[0], { expectedSourceId });
+      else for (const file of files) await loadFile(file);
     } catch (error) {
       console.error(error);
       setStatus(error?.message || String(error), true);
@@ -744,12 +1024,27 @@ window.OD = window.OD || {};
     const files = [...event.target.files];
     if (!files.length) return;
     try {
-      await loadSourceFolder(files);
+      const expectedSourceId = state.pendingReconnectSourceId;
+      state.pendingReconnectSourceId = null;
+      await loadSourceFolder(files, { expectedSourceId });
     } catch (error) {
       console.error(error);
       setStatus(error?.message || String(error), true);
     } finally {
       event.target.value = "";
+    }
+  });
+
+  if ($("directoryPicker") && typeof window.showDirectoryPicker === "function") {
+    $("directoryPicker").hidden = false;
+  }
+  $("directoryPicker")?.addEventListener("click", async () => {
+    try {
+      await chooseDirectory();
+    } catch (error) {
+      if (error?.name === "AbortError") return;
+      console.error(error);
+      setStatus(error?.message || "无法打开来源文件夹。", true);
     }
   });
 
@@ -781,23 +1076,50 @@ window.OD = window.OD || {};
 
   $("clearSolVoice").addEventListener("click", clearSolVoice);
   $("clearSources").addEventListener("click", clearSources);
+  $("clearLocalLibrary")?.addEventListener("click", async () => {
+    if (state.persistenceError && state.persistence?.supported) {
+      try {
+        await state.persistence.reset();
+        state.persistenceError = "";
+      } catch (error) {
+        setStatus(error?.message || "无法重置本地书库。", true);
+        return;
+      }
+    }
+    clearSources();
+  });
   $("sourceFilter").addEventListener("change", event => {
     state.sourceFilter = event.target.value || "all";
     renderList();
+    void saveReaderState();
   });
 
   $("search").addEventListener("input", renderList);
   for (const button of document.querySelectorAll("[data-sort-mode]")) {
     button.addEventListener("click", () => setSortMode(button.dataset.sortMode));
   }
-  $("hideUser").addEventListener("change", event => document.body.classList.toggle("hide-user", event.target.checked));
-  $("showThinking").addEventListener("change", event => document.body.classList.toggle("show-thinking", event.target.checked));
+  $("hideUser").addEventListener("change", event => {
+    document.body.classList.toggle("hide-user", event.target.checked);
+    void saveReaderState();
+  });
+  $("showThinking").addEventListener("change", event => {
+    document.body.classList.toggle("show-thinking", event.target.checked);
+    void saveReaderState();
+  });
   $("theme").addEventListener("change", event => {
     document.documentElement.dataset.theme = event.target.value;
     localStorage.setItem("our-dialogues.theme", event.target.value);
+    void saveReaderState();
   });
   $("sidebarToggle").addEventListener("click", () => $("sidebar").classList.toggle("closed"));
-  window.addEventListener("beforeunload", releaseArchiveAssets, { once: true });
+  $("main").addEventListener("scroll", () => void saveReaderState());
+  document.addEventListener?.("visibilitychange", () => {
+    if (document.visibilityState === "hidden") void saveReaderState({ immediate: true });
+  });
+  window.addEventListener("beforeunload", () => {
+    void saveReaderState({ immediate: true });
+    releaseArchiveAssets();
+  }, { once: true });
 
   // Small public seam for browser smoke tests; import data remains in memory only.
   OD.app = {
@@ -809,6 +1131,8 @@ window.OD = window.OD || {};
     clearSolVoice,
     removeSource,
     clearSources,
+    reconnectSource,
+    chooseDirectory,
     openConversation,
     getState: () => ({
       archive: state.archive,
@@ -825,7 +1149,10 @@ window.OD = window.OD || {};
       hasSolVoice: !!state.solVoiceSession,
       solVoiceStats: state.solVoiceSession?.stats || null,
       filteredCount: state.filtered.length,
-      filteredIds: state.filtered.map(conversation => conversation.id)
+      filteredIds: state.filtered.map(conversation => conversation.id),
+      lastSavedAt: state.lastSavedAt,
+      persistenceSupported: !!state.persistence?.supported,
+      persistenceError: state.persistenceError
     })
   };
 
@@ -839,4 +1166,5 @@ window.OD = window.OD || {};
   renderSourceControls();
   setStatus("文件只在本机浏览器中解析，不会上传。");
   state.archiveStatusText = state.statusText;
+  OD.app.ready = bootPersistentLibrary();
 })(window.OD);
