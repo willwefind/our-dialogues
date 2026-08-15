@@ -28,6 +28,7 @@ async function loadReaderRuntime() {
   for (const relativePath of [
     "src/core/schema.js",
     "src/core/chatgpt-export-folder.js",
+    "src/adapters/contract.js",
     "src/adapters/chatgpt-official.js",
     "src/adapters/registry.js"
   ]) {

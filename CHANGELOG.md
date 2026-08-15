@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.1.7-dev — 2026-08-16
+
+- Converted Mufy HTML into readable normalized text while preserving raw source metadata and explicit thinking
+- Added strict adapter capability declarations and mutually exclusive JSON/ZIP detection
+- Added metadata-only unknown-format diagnostics without field values or conversation text
+- Documented source compatibility and kept Claude plugin support blocked on a real sample
+- Added synthetic source-fidelity tests and a counts-only real Mufy smoke tool
+
 ## v0.1.6-dev — 2026-08-15
 
 - Added optional local SolVoice mapping v2 and VoiceArchive folder selection

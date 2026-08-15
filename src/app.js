@@ -523,10 +523,18 @@ window.OD = window.OD || {};
     openConversation(first.id);
   }
 
+  function requireRecognized(result) {
+    if (result?.archive && result?.adapter) return result;
+    const message = OD.registry.formatDiagnostics(result?.diagnostics);
+    const error = new Error(message);
+    error.diagnostics = result?.diagnostics || null;
+    throw error;
+  }
+
   async function loadFile(file) {
     setStatus(`正在本地解析：${file.name}`);
     if (/\.zip$/i.test(file.name) || file.type === "application/zip") {
-      const result = await OD.registry.parseZIP(file);
+      const result = requireRecognized(await OD.registry.parseZIP(file));
       loadArchive(
         result.archive,
         result.adapter.label,
@@ -537,7 +545,7 @@ window.OD = window.OD || {};
     }
     const text = await file.text();
     const data = JSON.parse(text.replace(/^\uFEFF/, ""));
-    const result = await OD.registry.parseJSON(data);
+    const result = requireRecognized(await OD.registry.parseJSON(data));
     loadArchive(result.archive, result.adapter.label);
   }
 
@@ -558,7 +566,7 @@ window.OD = window.OD || {};
 
     setStatus(`正在读取 ChatGPT Export 文件夹索引（${files.length} 个文件）…`);
     const folder = await OD.chatgptExportFolder.parse(files);
-    const parsed = await OD.registry.parseJSON(folder.conversations);
+    const parsed = requireRecognized(await OD.registry.parseJSON(folder.conversations));
     const objectURLs = folder.objectURLs || (folder.assetIndex?.createObjectURL ? {
       get: ref => folder.assetIndex.createObjectURL(ref),
       revoke: ref => folder.assetIndex.revokeObjectURL?.(ref),

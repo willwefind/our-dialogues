@@ -21,7 +21,11 @@ OD.adapters = OD.adapters || [];
   }
 
   function looksLikeArray(data) {
-    return Array.isArray(data) && data.some(x => x && typeof x === "object" && x.mapping && (x.current_node || x.id));
+    return Array.isArray(data) && data.length > 0 && data.every(x =>
+      x && typeof x === "object" && !Array.isArray(x) &&
+      x.mapping && typeof x.mapping === "object" &&
+      (x.current_node || x.id || x.conversation_id)
+    );
   }
 
   function activeNodes(conv) {
@@ -334,21 +338,50 @@ OD.adapters = OD.adapters || [];
       });
   }
 
+  const zipProbeCache = new WeakMap();
+
+  function conversationsInChunk(chunk) {
+    if (Array.isArray(chunk)) return chunk;
+    return Array.isArray(chunk?.conversations) ? chunk.conversations : [];
+  }
+
+  async function probeZIP(zip) {
+    const names = shardNames(zip);
+    if (!names.length) return null;
+    const cached = zipProbeCache.get(zip);
+    if (cached?.name === names[0]) return cached;
+    const data = await zip.readJSON(names[0]);
+    if (!looksLikeArray(conversationsInChunk(data))) return null;
+    const probe = { name: names[0], data };
+    zipProbeCache.set(zip, probe);
+    return probe;
+  }
+
   OD.adapters.push({
     id: "chatgpt-official-2026",
     label: "ChatGPT official export (2026 validated)",
+    capabilities: {
+      contract: "our-dialogues.adapter-capabilities.v1",
+      json: true,
+      zip: true,
+      folder: true,
+      thinking: "extract",
+      attachments: "metadata-and-lazy-folder",
+      sourceMarkup: "source-token-cleanup"
+    },
     detectJSON: looksLikeArray,
     parseJSON: convert,
-    detectZIP(zip) {
-      return shardNames(zip).length > 0;
+    async detectZIP(zip) {
+      return !!(await probeZIP(zip));
     },
     async parseZIP(zip) {
       const names = shardNames(zip);
+      const probe = await probeZIP(zip);
+      if (!probe) throw new Error("ChatGPT conversation filenames exist, but their schema is not a strict official-export match.");
       let all = [];
       for (const name of names) {
-        const chunk = await zip.readJSON(name);
-        if (Array.isArray(chunk)) all = all.concat(chunk);
-        else if (Array.isArray(chunk?.conversations)) all = all.concat(chunk.conversations);
+        const chunk = name === probe.name ? probe.data : await zip.readJSON(name);
+        all = all.concat(conversationsInChunk(chunk));
       }
       if (!looksLikeArray(all)) {
         throw new Error("找到了 ChatGPT conversation JSON，但实际结构与当前 adapter 不一致。");

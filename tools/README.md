@@ -1,4 +1,14 @@
-# ElevenLabs Voice Archive Exporter
+# Local verification tools
+
+## Mufy source-fidelity smoke
+
+`smoke-mufy-source-fidelity.mjs` compares the legacy visible-text path with the current Mufy adapter for one local ZIP. It prints only archive/message counts and literal `<div`, `<details`, and `<think` counts; it never prints conversation text.
+
+```text
+node tools/smoke-mufy-source-fidelity.mjs path/to/mufy.zip
+```
+
+## ElevenLabs Voice Archive Exporter
 
 This local tool backs up ElevenLabs generation history without changing the Our Dialogues reader. It walks every History API page, saves metadata, and downloads audio for the configured Sol and Ciel voices.
 

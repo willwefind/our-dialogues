@@ -23,6 +23,7 @@ Currently included:
 - Conversation list, title/full-text search, message rendering
 - Hide-my-messages toggle
 - Thinking/reasoning expand toggle when an export actually contains it
+- Strict adapter capabilities and metadata-only diagnostics for unknown JSON/ZIP inputs
 - Fake fixtures only — no private conversations are committed
 
 Planned next:
@@ -86,6 +87,8 @@ node --test --test-isolation=none tests/*.test.mjs
 | SolVoice local sidecar | optional mapping v2 + VoiceArchive or `sol/audio` folder; strong mappings only |
 | Claude official / plugin exporters | pending real samples |
 | Already-normalized Our Dialogues archive | implemented |
+
+See [`docs/source-compatibility.md`](docs/source-compatibility.md) for the capability contract, fidelity notes, diagnostics privacy boundary, and Claude sample status.
 
 ZIP import uses browser-native decompression where available. JSON can always be imported directly. Existing JSON and ZIP workflows remain available beside folder import.
 

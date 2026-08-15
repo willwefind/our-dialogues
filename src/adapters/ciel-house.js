@@ -35,11 +35,25 @@ OD.adapters = OD.adapters || [];
   OD.adapters.push({
     id: "ciel-house-v1",
     label: "Ciel House Export v1",
+    capabilities: {
+      contract: "our-dialogues.adapter-capabilities.v1",
+      json: true,
+      zip: true,
+      folder: false,
+      thinking: "preserve",
+      attachments: "lazy-zip",
+      sourceMarkup: "plain-text"
+    },
     detectJSON(data) {
       return data?.format === "ciel-house-export" && Number(data?.version) === 1;
     },
     parseJSON(data) { return convert(data); },
-    detectZIP(zip) { return zip.has("manifest.json") && zip.has("conversations.json"); },
+    async detectZIP(zip) {
+      if (!zip.has("manifest.json")) return false;
+      const manifest = await zip.readJSON("manifest.json");
+      const dataFile = manifest?.dataFile || "conversations.json";
+      return manifest?.format === "ciel-house-export" && Number(manifest?.version) === 1 && zip.has(dataFile);
+    },
     async parseZIP(zip) {
       const manifest = await zip.readJSON("manifest.json");
       if (manifest?.format !== "ciel-house-export" || Number(manifest?.version) !== 1) {

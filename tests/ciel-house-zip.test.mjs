@@ -22,6 +22,7 @@ async function loadRuntime(urlAPI) {
   for (const relativePath of [
     "src/core/schema.js",
     "src/core/zip.js",
+    "src/adapters/contract.js",
     "src/adapters/ciel-house.js",
     "src/adapters/registry.js"
   ]) {
