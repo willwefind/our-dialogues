@@ -47,6 +47,7 @@ async function fixtureFiles() {
 test("Mufy folder imports multiple ZIP batches with stable conservative merging", async () => {
   const OD = await loadRuntime();
   const files = await fixtureFiles();
+  files[1].syntheticPack.sessions[0].archives = [{ remark: "Preferred later-batch archive remark" }];
   OD.zip = {
     async readZip(file) {
       return {
@@ -78,6 +79,15 @@ test("Mufy folder imports multiple ZIP batches with stable conservative merging"
   );
   assert.ok(alphaShared);
   assert.ok(betaShared, "same title and sessionId must stay separate for another characterId");
+  assert.equal(alphaShared.context.sourceMetadata.characterName, "Synthetic Same Name");
+  assert.equal(betaShared.context.sourceMetadata.characterName, "Synthetic Same Name");
+  assert.notEqual(
+    alphaShared.context.sourceMetadata.characterId,
+    betaShared.context.sourceMetadata.characterId,
+    "same-name characters remain separate by stable character ID"
+  );
+  assert.equal(alphaShared.title, "Preferred later-batch archive remark");
+  assert.equal(alphaShared.context.sourceMetadata.titleSource, "archive-remark");
   const sharedStableIdMessages = alphaShared.messages.filter(
     message => message.metadata?.original?.dialogsId === "alpha-shared-1"
   );

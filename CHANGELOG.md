@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.1.8-dev — 2026-08-16
+
+- Added an in-memory multi-source library so Mufy, Claude, ChatGPT, Ciel, and normalized imports coexist instead of replacing one another
+- Added source filtering, per-source removal, clear-all, lazy asset-session disposal, and obvious duplicate-import protection
+- Changed sidebar navigation to source groups, with Mufy grouped again by stable character ID before sessions
+- Prioritized Mufy session titles by archive remark, current marker, first readable assistant text, then fallback
+- Added a conservative `ai-chat-exporter.net` splitter for marker-bounded workflow and tool trace while preserving exact raw `say`
+- Kept heuristic Claude `sourceTrace` distinct from official/exported thinking and added a raw-text fallback when visibility is uncertain
+- Added multi-source, removal, duplicate, hierarchy, and Claude splitter regression coverage
+- Expanded private-data-safe smoke tools for multi-ZIP Mufy folders and Claude source-trace counts
+
 ## v0.1.7-dev — 2026-08-16
 
 - Converted Mufy HTML into readable normalized text while preserving raw source metadata and explicit thinking

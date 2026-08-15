@@ -24,6 +24,13 @@ function counts(text) {
   ]));
 }
 
+function completeTagCounts(text) {
+  return Object.fromEntries(["div", "details", "think", "strong"].map(tag => [
+    `<${tag}>`,
+    (String(text).match(new RegExp(`<\\s*${tag}\\b[^>\\n]*>`, "gi")) || []).length
+  ]));
+}
+
 async function loadRuntime() {
   const runtime = {
     Blob,
@@ -38,7 +45,14 @@ async function loadRuntime() {
   runtime.window = runtime;
   runtime.globalThis = runtime;
   vm.createContext(runtime);
-  for (const relativePath of ["src/core/schema.js", "src/core/zip.js", "src/adapters/mufy.js"]) {
+  for (const relativePath of [
+    "src/core/schema.js",
+    "src/core/zip.js",
+    "src/adapters/contract.js",
+    "src/adapters/mufy.js",
+    "src/adapters/registry.js",
+    "src/core/source-folder.js"
+  ]) {
     const source = await readFile(path.join(repositoryRoot, relativePath), "utf8");
     vm.runInContext(source, runtime, { filename: relativePath });
   }
@@ -46,54 +60,62 @@ async function loadRuntime() {
 }
 
 async function main() {
-  const archivePath = process.argv[2];
-  if (!archivePath) throw new Error("Usage: node tools/smoke-mufy-source-fidelity.mjs <mufy.zip>");
+  const archivePaths = process.argv.slice(2);
+  if (!archivePaths.length) throw new Error("Usage: node tools/smoke-mufy-source-fidelity.mjs <mufy.zip> [...]");
   const OD = await loadRuntime();
-  const bytes = await readFile(archivePath);
-  const file = new File([bytes], path.basename(archivePath), { type: "application/zip" });
-  const zip = await OD.zip.readZip(file);
-  const adapter = OD.adapters.find(item => item.id === "mufy-raw");
-  if (!adapter || !await adapter.detectZIP(zip)) throw new Error("The ZIP is not a strictly detected Mufy raw export.");
-
-  const rawName = zip.names.find(name => name === "_原始数据.json" || name.endsWith("/_原始数据.json"));
-  const pack = await zip.readJSON(rawName);
-  const legacyVisible = [pack.greeting || ""];
-  for (const session of pack.sessions || []) {
-    for (const dialog of session.dialogs || []) legacyVisible.push(legacyText(dialog.content));
+  const files = [];
+  const packs = [];
+  let zipBytes = 0;
+  const legacyVisible = [];
+  for (const archivePath of archivePaths) {
+    const bytes = await readFile(archivePath);
+    zipBytes += bytes.length;
+    const file = new File([bytes], path.basename(archivePath), { type: "application/zip" });
+    files.push(file);
+    const zip = await OD.zip.readZip(file);
+    const adapter = OD.adapters.find(item => item.id === "mufy-raw");
+    if (!adapter || !await adapter.detectZIP(zip)) throw new Error("An input ZIP is not a strictly detected Mufy raw export.");
+    const rawName = zip.names.find(name => name === "_原始数据.json" || name.endsWith("/_原始数据.json"));
+    const pack = await zip.readJSON(rawName);
+    packs.push(pack);
+    legacyVisible.push(pack.greeting || "");
+    for (const session of pack.sessions || []) {
+      for (const dialog of session.dialogs || []) legacyVisible.push(legacyText(dialog.content));
+    }
   }
 
-  const normalized = await adapter.parseZIP(zip);
+  const result = await OD.sourceFolder.parse(files);
+  const normalized = result.archive;
   const currentVisible = [];
-  const conversationIds = [];
-  const messageIds = [];
   let messageCount = 0;
   for (const conversation of normalized.conversations || []) {
-    conversationIds.push(conversation.id);
     for (const message of conversation.messages || []) {
       messageCount += 1;
-      messageIds.push(message.id);
       currentVisible.push(OD.schema.textOf(message.content));
     }
   }
 
   process.stdout.write(`${JSON.stringify({
     format: "our-dialogues.mufy-source-fidelity-smoke.v1",
-    zipBytes: bytes.length,
-    sourceEntry: rawName,
+    zipFileCount: files.length,
+    zipBytes,
     sourceIdentity: {
-      characterIdPresent: pack.characterId != null && String(pack.characterId).trim() !== "",
-      batchFromPresent: pack.batchFrom != null,
-      totalSessionsPresent: pack.totalSessions != null
+      characterIdPresentCount: packs.filter(pack => pack.characterId != null && String(pack.characterId).trim() !== "").length,
+      distinctCharacterCount: new Set(packs.map(pack => pack.characterId).filter(value => value != null && String(value).trim() !== "").map(String)).size,
+      batchFromPresentCount: packs.filter(pack => pack.batchFrom != null).length,
+      totalSessionsPresentCount: packs.filter(pack => pack.totalSessions != null).length
     },
     conversationCount: normalized.conversations.length,
     messageCount,
-    conversationIds,
-    messageIds,
+    uniqueConversationIdCount: new Set(normalized.conversations.map(conversation => conversation.id)).size,
+    emptyTitleCount: normalized.conversations.filter(conversation => !String(conversation.title || "").trim()).length,
+    duplicateSessionCount: result.stats.duplicateSessionCount,
     literalMarkupInVisibleText: {
       before: counts(legacyVisible.join("\n")),
-      after: counts(currentVisible.join("\n"))
+      after: counts(currentVisible.join("\n")),
+      completeTagsAfter: completeTagCounts(currentVisible.join("\n"))
     },
-    privacy: "counts and source IDs only; no conversation text printed"
+    privacy: "counts and booleans only; no paths, source IDs, titles, or conversation text printed"
   }, null, 2)}\n`);
 }
 

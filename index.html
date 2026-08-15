@@ -49,6 +49,13 @@
       <input id="search" type="search" placeholder="搜索标题或正文…">
     </div>
 
+    <div class="source-tools">
+      <select id="sourceFilter" aria-label="按来源筛选">
+        <option value="all">全部来源</option>
+      </select>
+      <button id="clearSources" type="button" disabled>清空全部</button>
+    </div>
+
     <div class="archive-tools">
       <div id="archiveMeta" class="archive-meta"></div>
       <div class="sort-control" role="group" aria-label="按对话创建时间排序">
@@ -64,7 +71,7 @@
       <button id="sidebarToggle" class="ghost" title="显示/隐藏侧栏">☰</button>
       <div id="currentTitle" class="current-title">尚未载入档案</div>
       <label><input id="hideUser" type="checkbox"> 隐藏我的发言</label>
-      <label><input id="showThinking" type="checkbox"> 展开 Thinking</label>
+      <label><input id="showThinking" type="checkbox"> 展开 Thinking / Trace</label>
       <select id="theme">
         <option value="paper">纸</option>
         <option value="night">夜</option>
@@ -92,6 +99,7 @@
 
   <script src="src/core/schema.js"></script>
   <script src="src/core/conversation-order.js"></script>
+  <script src="src/core/source-library.js"></script>
   <script src="src/core/zip.js"></script>
   <script src="src/core/chatgpt-export-folder.js"></script>
   <script src="src/core/solvoice-sidecar.js"></script>

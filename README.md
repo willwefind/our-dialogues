@@ -18,12 +18,14 @@ Currently included:
 - Claude Exporter (`ai-chat-exporter.net`) webpage-plugin JSON adapter
 - ChatGPT official Export Folder import validated against a real 2026 export structure
 - Local JSON / ZIP / browser folder import
+- In-memory multi-source library: consecutive imports coexist, with source filtering, single-source removal, clear-all, and duplicate-import protection
+- Hierarchical source navigation; Mufy sessions are grouped under stable character IDs rather than flattened
 - Manifest-driven shard merging and lazy local or ZIP-backed attachment loading
 - Inline images, native audio/video controls, and other-file attachment cards
 - Optional local SolVoice sidecar playback for exact, strong message mappings
 - Conversation list, title/full-text search, message rendering
 - Hide-my-messages toggle
-- Thinking/reasoning expand toggle when an export actually contains it
+- Thinking/reasoning and exporter source-trace expand toggle when a source actually contains them
 - Strict adapter capabilities and metadata-only diagnostics for unknown JSON/ZIP inputs
 - Fake fixtures only — no private conversations are committed
 
@@ -60,7 +62,7 @@ Different platforms and exporters may all use JSON, while still using completely
 ```text
 ChatGPT export ──→ adapter ──┐
 Claude export  ──→ adapter ──┤
-Mufy export    ──→ adapter ──┤──→ normalized archive ──→ reader
+Mufy export    ──→ adapter ──┤──→ normalized sources ──→ in-memory library ──→ reader
 Ciel House     ──→ adapter ──┘
 ```
 
@@ -86,13 +88,19 @@ node --test --test-isolation=none tests/*.test.mjs
 | Mufy `_原始数据.json` | JSON, single ZIP, and folder-of-ZIPs import; stable `characterId + sessionId` batch merging |
 | ChatGPT official export | JSON, ZIP, and manifest-driven Export Folder import implemented; folder structure validated against a real 2026 export |
 | SolVoice local sidecar | optional mapping v2 + VoiceArchive or `sol/audio` folder; strong mappings only |
-| Claude Exporter webpage-plugin JSON | implemented from two real `ai-chat-exporter.net` samples; public fixture is synthetic |
+| Claude Exporter webpage-plugin JSON | implemented from two real `ai-chat-exporter.net` samples; marker-bounded workflow becomes heuristic `sourceTrace`, raw `say` is retained; public fixture is synthetic |
 | Claude official export and other plugins | pending real samples |
 | Already-normalized Our Dialogues archive | implemented |
 
 See [`docs/source-compatibility.md`](docs/source-compatibility.md) for the capability contract, fidelity notes, diagnostics privacy boundary, and Claude sample status.
 
 ZIP import uses browser-native decompression where available. JSON can always be imported directly. Existing JSON and single-ZIP workflows remain available beside source-folder import.
+
+### In-memory multi-source library
+
+Every successful import is added as a source instead of replacing the previous archive. Mufy, Claude, ChatGPT, Ciel, and normalized inputs can therefore coexist in one session. The sidebar groups conversations by source, offers a source filter, and supports removing one source or clearing all sources. Re-importing an obviously identical normalized archive is skipped using a content-and-structure fingerprint; any unused local attachment session from that duplicate import is released.
+
+This phase is intentionally memory-only. Refreshing or closing the page clears the library, and no conversations or file handles are written to IndexedDB. Binary attachments and SolVoice audio remain lazy local `File` references rather than being copied into the normalized text library.
 
 ### Import a source folder
 
@@ -109,6 +117,14 @@ For ChatGPT, the folder importer:
 Images render inline, audio and video use native browser controls, and other files remain attachment cards. Selecting a folder does not copy its contents into the repository or browser storage.
 
 For Mufy, every strictly detected ZIP in the selected folder is parsed, including ZIPs that contain multiple sessions. Reader combines all sessions into one archive view while retaining single-ZIP import compatibility. Overlapping batches are merged only when both `characterId` and `sessionId` are present and equal. Repeated messages use stable exported dialog IDs (or exact identical source records) for deduplication. The same character name with different `characterId` values stays separate; when either stable identity field is missing, conversations stay separate rather than being merged by title.
+
+Within a Mufy source, the sidebar renders `source → character → sessions`. Character grouping uses `characterId`, not the display name. Session titles prefer an archive remark, then the current-session marker, then the first readable assistant text, then a dated/generic fallback.
+
+### Claude webpage-exporter fidelity
+
+`ai-chat-exporter.net` can flatten visible replies, workflow text, and UI/tool markers into one assistant `say`. The adapter retains the complete original record under `metadata.original` and the exact string under `metadata.rawSay`. A conservative marker-bounded splitter moves clear runs around `Done`, `Viewed file`, `Searching...`, reminder actions, and similar tool markers into `metadata.sourceTrace`; it never labels that material as Claude official thinking. Visible replies before, between, and after those runs remain in normalized `content`.
+
+If the splitter cannot identify a certain visible reply, it falls back to displaying the original `say`. Unmarked or ambiguous workflow text can therefore remain visible by design; preserving uncertain content takes priority over silently hiding it.
 
 ### Optional local SolVoice playback
 
@@ -166,6 +182,7 @@ fixtures/
   mufy-folder-batch-synthetic.json
 src/
   core/
+    source-library.js
     source-folder.js
     solvoice-sidecar.js
   adapters/
@@ -173,6 +190,7 @@ src/
 tests/
   chatgpt-export-folder.test.mjs
   mufy-folder-import.test.mjs
+  source-library.test.mjs
   solvoice-sidecar.test.mjs
 index.html
 styles.css

@@ -37,6 +37,13 @@ async function main() {
     const messages = archive.conversations.flatMap(conversation => conversation.messages || []);
     const roleCounts = {};
     for (const message of messages) roleCounts[message.role] = (roleCounts[message.role] || 0) + 1;
+    const assistantMessages = messages.filter(message => message.role === "assistant");
+    const traceItems = assistantMessages.flatMap(message => message.metadata?.sourceTrace || []);
+    const traceMarkerCounts = {};
+    for (const item of traceItems) {
+      if (!item?.marker) continue;
+      traceMarkerCounts[item.marker] = (traceMarkerCounts[item.marker] || 0) + 1;
+    }
 
     sources.push({
       sourceIndex: index + 1,
@@ -49,11 +56,19 @@ async function main() {
       roleCounts,
       emptyVisibleTextCount: messages.filter(message => !OD.schema.textOf(message.content)).length,
       thinkingItemCount: messages.reduce((total, message) => total + (message.thinking?.length || 0), 0),
+      assistantMessagesWithSourceTrace: assistantMessages.filter(message => message.metadata?.sourceTrace?.length).length,
+      sourceTraceItemCount: traceItems.length,
+      sourceTraceMarkerCounts: traceMarkerCounts,
+      heuristicAppliedCount: assistantMessages.filter(message => message.metadata?.sourceTraceHeuristic?.applied).length,
+      conservativeFallbackCount: assistantMessages.filter(message => message.metadata?.sourceTraceHeuristic?.conservativeFallback).length,
       nonIsoTimestampCount: messages.filter(message =>
         message.createdAt != null && !/^\d{4}-\d{2}-\d{2}T/.test(message.createdAt)
       ).length,
       rawMessageMetadataPreserved: messages.every((message, messageIndex) =>
         message.metadata?.original === data.messages[messageIndex]
+      ),
+      rawSayPreserved: messages.every((message, messageIndex) =>
+        message.metadata?.rawSay === data.messages[messageIndex]?.say
       )
     });
   }

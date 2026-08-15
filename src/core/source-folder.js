@@ -121,6 +121,16 @@ window.OD = window.OD || {};
     return `mufy:${encodeURIComponent(identity.characterId)}:${encodeURIComponent(identity.sessionId)}`;
   }
 
+  function titleSourceRank(value) {
+    return ({
+      "archive-remark": 0,
+      "current-marker": 1,
+      "assistant-text": 2,
+      "date-fallback": 3,
+      "generic-fallback": 4
+    })[value] ?? 5;
+  }
+
   function mergeMufyArchives(entries) {
     const conversations = [];
     const byStableIdentity = new Map();
@@ -158,6 +168,9 @@ window.OD = window.OD || {};
         existing.updatedAt = conversation.updatedAt || existing.updatedAt;
         const current = existing.context?.sourceMetadata || {};
         const incoming = conversation.context?.sourceMetadata || {};
+        if (titleSourceRank(incoming.titleSource) < titleSourceRank(current.titleSource)) {
+          existing.title = conversation.title;
+        }
         const batches = [
           ...(Array.isArray(current.sourceBatches) ? current.sourceBatches : []),
           { batchFrom: current.batchFrom ?? null, totalSessions: current.totalSessions ?? null },
@@ -167,6 +180,9 @@ window.OD = window.OD || {};
           ...existing.context,
           sourceMetadata: {
             ...current,
+            ...(titleSourceRank(incoming.titleSource) < titleSourceRank(current.titleSource)
+              ? { titleSource: incoming.titleSource }
+              : {}),
             sourceBatches: batches.filter((batch, index, all) =>
               all.findIndex(other => stableString(other) === stableString(batch)) === index
             )
@@ -295,6 +311,6 @@ window.OD = window.OD || {};
     inspect,
     parse,
     formatDiagnostics,
-    _internals: { filePath, zipFiles, inspectMufy, mergeMufyArchives, stableConversationIdentity }
+    _internals: { filePath, zipFiles, inspectMufy, mergeMufyArchives, stableConversationIdentity, titleSourceRank }
   };
 })(window.OD);

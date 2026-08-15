@@ -121,24 +121,26 @@ OD.adapters = OD.adapters || [];
       .find(Boolean) || "";
   }
 
-  function sessionTitle(pack, session, index) {
-    const explicit = lineForTitle(session?.title || session?.remark || session?.name || "");
-    if (explicit) return explicit;
+  function sessionTitleInfo(pack, session, index) {
     const archiveRemark = latestArchiveRemark(session);
-    if (archiveRemark) return archiveRemark;
+    if (archiveRemark) return { title: archiveRemark, source: "archive-remark" };
+    const name = lineForTitle(pack?.name) || "Mufy";
+    if (session?.isCurrent === true) return { title: `${name} · current conversation`, source: "current-marker" };
     const firstAssistant = (session?.dialogs || []).find(dialog =>
       ["assistant", "ai", "bot", "model", "character"].includes(String(dialog?.role || "").toLowerCase())
     );
     const assistantLine = lineForTitle(firstAssistant?.content);
-    if (assistantLine) return assistantLine;
-    const name = lineForTitle(pack?.name) || "Mufy";
-    if (session?.isCurrent === true) return `${name} · current conversation`;
+    if (assistantLine) return { title: assistantLine, source: "assistant-text" };
     const time = sourceTime(session);
     if (time) {
       const date = new Date(time);
-      if (!Number.isNaN(date.getTime())) return `${name} · ${date.toISOString().slice(0, 10)}`;
+      if (!Number.isNaN(date.getTime())) return { title: `${name} · ${date.toISOString().slice(0, 10)}`, source: "date-fallback" };
     }
-    return `${name} conversation ${index + 1}`;
+    return { title: `${name} conversation ${index + 1}`, source: "generic-fallback" };
+  }
+
+  function sessionTitle(pack, session, index) {
+    return sessionTitleInfo(pack, session, index).title;
   }
 
   function isMufyPack(data) {
@@ -171,6 +173,7 @@ OD.adapters = OD.adapters || [];
 
   function convert(pack) {
     const conversations = (pack.sessions || []).map((session, index) => {
+      const titleInfo = sessionTitleInfo(pack, session, index);
       const messages = [];
       if (index === 0 && pack.greeting != null && String(pack.greeting).trim()) {
         const greeting = normalizeMufyContent(pack.greeting);
@@ -201,12 +204,14 @@ OD.adapters = OD.adapters || [];
       }
       return {
         id: session.sessionId || `mufy-session-${index}`,
-        title: sessionTitle(pack, session, index),
+        title: titleInfo.title,
         createdAt: sourceTime(session) || messages.find(message => message.createdAt != null)?.createdAt || null,
         updatedAt: session.updatedTime ?? session.updatedAt ?? null,
         context: {
           sourceMetadata: {
             characterId: pack.characterId ?? null,
+            characterName: pack.name ?? null,
+            titleSource: titleInfo.source,
             sessionId: session.sessionId ?? null,
             batchFrom: pack.batchFrom ?? null,
             totalSessions: pack.totalSessions ?? null,
@@ -254,6 +259,6 @@ OD.adapters = OD.adapters || [];
       if (!probe) throw new Error("Mufy raw-data filename exists, but its schema is not a strict Mufy match.");
       return convert(probe.data);
     },
-    _internals: { decodeEntities, visibleMarkupText, normalizeMufyContent, sessionTitle, isMufyPack }
+    _internals: { decodeEntities, visibleMarkupText, normalizeMufyContent, sessionTitle, sessionTitleInfo, isMufyPack }
   });
 })();

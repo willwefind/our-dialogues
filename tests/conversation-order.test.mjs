@@ -54,7 +54,7 @@ async function loadAppRuntime(savedSortMode="asc") {
     "status", "search", "conversationList", "archiveMeta", "welcome", "reader",
     "currentTitle", "readerTitle", "readerMeta", "messages", "main", "fileInput",
     "folderInput", "voiceMappingInput", "voiceArchiveInput", "clearSolVoice",
-    "hideUser", "showThinking", "theme", "sidebarToggle", "sidebar"
+    "sourceFilter", "clearSources", "hideUser", "showThinking", "theme", "sidebarToggle", "sidebar"
   ];
   const elements = new Map(ids.map(id => [id, fakeElement(id)]));
   const sortAscending = fakeElement("sortAscending");
@@ -90,7 +90,7 @@ async function loadAppRuntime(savedSortMode="asc") {
   };
   vm.createContext(runtime);
 
-  for (const relativePath of ["src/core/conversation-order.js", "src/app.js"]) {
+  for (const relativePath of ["src/core/conversation-order.js", "src/core/source-library.js", "src/app.js"]) {
     const source = await readFile(path.join(repositoryRoot, relativePath), "utf8");
     vm.runInContext(source, runtime, { filename: relativePath });
   }
@@ -232,6 +232,60 @@ test("app opens the first sorted conversation and keeps search in the saved mode
   assert.equal(runtime.OD.app.getState().sortMode, "asc");
   assert.equal(stored.get("our-dialogues.conversation-sort"), "asc");
   assert.deepEqual([...runtime.OD.app.getState().filteredIds], ["middle", "newest"]);
+});
+
+test("app keeps consecutive sources, filters them, skips duplicates, and removes one source", async () => {
+  const { runtime, elements } = await loadAppRuntime("asc");
+  const makeArchive = (platform, id) => ({
+    source: { platform, exporter: `${platform}-synthetic` },
+    conversations: [{
+      id,
+      title: `${platform} title`,
+      createdAt: "2026-08-16T00:00:00.000Z",
+      context: platform === "mufy" ? {
+        sourceMetadata: { characterId: "same-name-a", characterName: "Same Name" }
+      } : {},
+      participants: [],
+      messages: [{ id: `${id}-message`, role: "assistant", content: `${platform} body` }]
+    }]
+  });
+  const mufyArchive = makeArchive("mufy", "mufy-session");
+  const claudeArchive = makeArchive("claude", "claude-chat");
+  const chatgptArchive = makeArchive("chatgpt", "chatgpt-chat");
+
+  let disposedAssets = 0;
+  const mufyAssets = { dispose() { disposedAssets += 1; } };
+  runtime.OD.app.loadArchive(mufyArchive, "Mufy folder", mufyAssets);
+  runtime.OD.app.loadArchive(claudeArchive, "Claude JSON");
+  runtime.OD.app.loadArchive(chatgptArchive, "ChatGPT");
+  let appState = runtime.OD.app.getState();
+  assert.equal(appState.sources.length, 3);
+  assert.equal(appState.archive.conversations.length, 3);
+  assert.match(elements.get("conversationList").innerHTML, /character-group/);
+  assert.match(elements.get("conversationList").innerHTML, /Same Name/);
+
+  const duplicate = runtime.OD.app.loadArchive(chatgptArchive, "ChatGPT again");
+  assert.equal(duplicate.duplicate, true);
+  assert.equal(runtime.OD.app.getState().sources.length, 3);
+
+  runtime.OD.app.openConversation("mufy-session");
+  assert.equal(runtime.OD.app.getState().hasLocalAssets, true, "opening a source activates only its asset session");
+
+  const claudeSource = runtime.OD.app.getState().sources.find(source => source.platform === "claude");
+  elements.get("sourceFilter").value = claudeSource.id;
+  elements.get("sourceFilter").dispatch("change");
+  assert.deepEqual([...runtime.OD.app.getState().filteredIds], ["claude-chat"]);
+
+  assert.equal(runtime.OD.app.removeSource(claudeSource.id), true);
+  appState = runtime.OD.app.getState();
+  assert.equal(appState.sources.length, 2);
+  assert.equal(appState.archive.conversations.length, 2);
+  assert.ok(appState.archive.conversations.some(conversation => conversation.id === "mufy-session"));
+  assert.ok(appState.archive.conversations.some(conversation => conversation.id === "chatgpt-chat"));
+  assert.equal(appState.sourceFilter, "all");
+  const mufySource = appState.sources.find(source => source.platform === "mufy");
+  assert.equal(runtime.OD.app.removeSource(mufySource.id), true);
+  assert.equal(disposedAssets, 1, "removing a source disposes its lazy local assets");
 });
 
 test("sidebar exposes exactly two clearly labelled conversation sort modes", async () => {

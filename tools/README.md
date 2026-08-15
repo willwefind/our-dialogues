@@ -2,7 +2,7 @@
 
 ## Claude webpage-plugin smoke
 
-`smoke-claude-web-exporter.mjs` strictly detects one or more local `ai-chat-exporter.net` JSON files and reports only message/role/timestamp counts and preservation booleans. It never prints filenames, links, titles, or conversation text.
+`smoke-claude-web-exporter.mjs` strictly detects one or more local `ai-chat-exporter.net` JSON files and reports only message/role/timestamp counts, trace-marker counts, conservative-fallback counts, and preservation booleans. It never prints filenames, links, titles, or conversation text.
 
 ```text
 node tools/smoke-claude-web-exporter.mjs path/to/claude-plugin.json
@@ -10,10 +10,10 @@ node tools/smoke-claude-web-exporter.mjs path/to/claude-plugin.json
 
 ## Mufy source-fidelity smoke
 
-`smoke-mufy-source-fidelity.mjs` compares the legacy visible-text path with the current Mufy adapter for one local ZIP. It prints only archive/message IDs and counts plus literal `<div`, `<details`, `<think`, and `<strong` counts; it never prints conversation text.
+`smoke-mufy-source-fidelity.mjs` compares the legacy visible-text path with the current Mufy folder adapter for one or more local ZIPs. It prints only counts and booleans: package/character/session/message totals, uniqueness and title checks, merge counts, and literal or complete `<div`, `<details`, `<think`, and `<strong` tag counts. It never prints paths, source IDs, titles, or conversation text.
 
 ```text
-node tools/smoke-mufy-source-fidelity.mjs path/to/mufy.zip
+node tools/smoke-mufy-source-fidelity.mjs path/to/mufy-1.zip path/to/mufy-2.zip
 ```
 
 ## Metadata-only JSON source inspection

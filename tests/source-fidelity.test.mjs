@@ -109,11 +109,23 @@ test("Mufy title falls back to the first assistant line instead of a session has
   const OD = await loadRuntime();
   const source = syntheticMufy();
   source.sessions[0].archives = [];
+  source.sessions[0].isCurrent = false;
   source.sessions[0].dialogs[0].content = "<div>A readable first assistant line</div>";
   const parsed = await OD.registry.parseJSON(source);
 
   assert.equal(parsed.archive.conversations[0].title, "A readable first assistant line");
   assert.notEqual(parsed.archive.conversations[0].title, "session-synthetic · 1");
+});
+
+test("Mufy session title uses current marker before assistant text when no archive remark exists", async () => {
+  const OD = await loadRuntime();
+  const source = syntheticMufy();
+  source.sessions[0].archives = [];
+  source.sessions[0].isCurrent = true;
+  const parsed = await OD.registry.parseJSON(source);
+
+  assert.equal(parsed.archive.conversations[0].title, "Synthetic Character · current conversation");
+  assert.equal(parsed.archive.conversations[0].context.sourceMetadata.characterName, "Synthetic Character");
 });
 
 test("known JSON adapters detect mutually exclusively", async () => {
@@ -162,7 +174,67 @@ test("Claude webpage-plugin JSON normalizes one conversation without inventing t
   assert.equal(OD.schema.textOf(conversation.messages[1].content), "Synthetic response with **Markdown** retained as text.");
   assert.deepEqual([...conversation.messages[1].thinking], []);
   assert.equal(conversation.messages[0].metadata.original, source.messages[0]);
+  assert.equal(conversation.messages[1].metadata.rawSay, source.messages[1].say);
+  assert.deepEqual([...conversation.messages[1].metadata.sourceTrace], []);
   assert.equal(conversation.context.sourceMetadata.original, source.metadata);
+});
+
+test("Claude exporter splitter keeps replies visible and marker-bounded workflow in sourceTrace", async () => {
+  const OD = await loadRuntime();
+  const adapter = OD.adapters.find(item => item.id === "claude-web-exporter");
+  const rawSay = [
+    "Need inspect the project before answering.",
+    "Done",
+    "First visible reply.",
+    "Viewed file\nsrc/app.js",
+    "Searching...",
+    "Need update the state model and tests.",
+    "Done",
+    "Interstitial visible reply.",
+    "Create reminder",
+    "Preparing the requested reminder action.",
+    "Done",
+    "Final visible reply."
+  ].join("\n\n");
+  const source = {
+    metadata: {
+      powered_by: "Claude Exporter (https://www.ai-chat-exporter.net)",
+      link: "https://claude.ai/chat/00000000-0000-4000-8000-000000000099",
+      title: "Synthetic mixed exporter transcript",
+      dates: { created: "8/16/2026 1:02:03" }
+    },
+    messages: [
+      { role: "human", time: "8/16/2026 1:02:03", say: "Please inspect it." },
+      { role: "assistant", time: "8/16/2026 1:02:04", say: rawSay }
+    ]
+  };
+
+  const archive = adapter.parseJSON(source);
+  const assistant = archive.conversations[0].messages[1];
+  assert.equal(
+    OD.schema.textOf(assistant.content),
+    "First visible reply.\n\nInterstitial visible reply.\n\nFinal visible reply."
+  );
+  assert.deepEqual([...assistant.thinking], [], "heuristic trace must never masquerade as official thinking");
+  assert.equal(assistant.metadata.rawSay, rawSay, "the complete exporter say must remain lossless");
+  assert.equal(assistant.metadata.original.say, rawSay);
+  assert.equal(assistant.metadata.sourceTraceHeuristic.applied, true);
+  assert.ok(assistant.metadata.sourceTrace.some(item => item.marker === "done"));
+  assert.ok(assistant.metadata.sourceTrace.some(item => item.marker === "tool-action"));
+  assert.match(assistant.metadata.sourceTrace.map(item => item.text).join("\n"), /Need update the state model/);
+  assert.doesNotMatch(OD.schema.textOf(assistant.content), /Viewed file|Searching|Create reminder|Need update/);
+});
+
+test("Claude exporter splitter falls back to raw say when markers leave no certain visible reply", async () => {
+  const OD = await loadRuntime();
+  const splitter = OD.adapters.find(item => item.id === "claude-web-exporter")._internals.splitAssistantSay;
+  const rawSay = "Possible answer or workflow text\n\nDone";
+  const split = splitter(rawSay);
+
+  assert.equal(split.visibleText, rawSay);
+  assert.equal(split.applied, false);
+  assert.equal(split.conservativeFallback, true);
+  assert.ok(split.sourceTrace.length > 0);
 });
 
 test("Claude webpage-plugin detection requires exporter and claude.ai fingerprints", async () => {
@@ -189,12 +261,16 @@ test("Reader HTML loads Claude, diagnostics, and source-folder routing before th
   const claude = html.indexOf('src/adapters/claude-web-exporter.js');
   const registry = html.indexOf('src/adapters/registry.js');
   const sourceFolder = html.indexOf('src/core/source-folder.js');
+  const sourceLibrary = html.indexOf('src/core/source-library.js');
   const app = html.indexOf('src/app.js');
 
   assert.ok(claude >= 0 && claude < registry, "Claude adapter must register before diagnostics registry");
   assert.ok(registry < sourceFolder && sourceFolder < app, "folder routing must load after registry and before app");
+  assert.ok(sourceLibrary >= 0 && sourceLibrary < app, "the in-memory source library must load before the app");
   assert.match(html, /选择来源文件夹/);
   assert.match(html, /多个 Mufy ZIP/);
+  assert.match(html, /id="sourceFilter"/);
+  assert.match(html, /id="clearSources"/);
 });
 
 test("unknown JSON returns schema-only diagnostics without leaking values", async () => {

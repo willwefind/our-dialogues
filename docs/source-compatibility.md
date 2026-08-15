@@ -14,7 +14,7 @@ The compatibility rule is conservative: an unknown or ambiguous input stays unkn
 | Our Dialogues normalized v1 | Yes | No direct ZIP adapter | Already normalized | Preserved | Preserved | Implemented and regression-tested |
 | SolVoice sidecar | Mapping JSON | `VoiceArchive` or `sol/audio` folder | Not a conversation source | Not applicable | Lazy local audio linked by strong exact message ID mapping | Implemented and regression-tested |
 | Claude official export | No | No | Unknown | Unknown | Unknown | Pending a real export sample |
-| Claude Exporter webpage-plugin JSON (`ai-chat-exporter.net`) | Yes | No | `say` text retained as exported | Not exported by the calibrated schema | Not exported by the calibrated schema | Implemented from two real local samples and a synthetic fixture |
+| Claude Exporter webpage-plugin JSON (`ai-chat-exporter.net`) | Yes | No | Visible/interstitial replies from `say`; exact raw `say` retained | No official thinking field; marker-bounded workflow is labeled heuristic `sourceTrace` | Not exported by the calibrated schema | Implemented from two real local samples and a synthetic fixture |
 
 No private archive is committed as a fixture. Public fixtures must be synthetic.
 
@@ -47,6 +47,14 @@ The browser folder entry is source-aware. `chatgpt-official-folder` requires one
 
 Mufy folder import parses every matching ZIP and combines all contained sessions into one normalized archive. A session can merge across split/overlapping packages only when the raw data supplies both the same `characterId` and the same `sessionId`. Stable dialog IDs deduplicate repeated messages; an exact identical source record is the only fallback dedupe. Conflicting records with the same dialog ID are both preserved and marked. Character names and conversation titles never participate in identity. Missing stable identity keeps conversations separate, and the same display name with different `characterId` values always stays separate.
 
+The Reader navigation then groups that archive as `source → characterId → sessions`. The display name is presentation only, so two characters with the same name remain separate. Session-title priority is archive remark, current-session marker, first readable assistant text, then a dated or generic fallback.
+
+## In-memory source library
+
+Imports are registered as independent sources and combined only for the current page session. The library supplies source filtering, per-source removal, clear-all, unique runtime conversation addressing across sources, and a conservative normalized-content fingerprint that skips obvious repeat imports. Each source retains its own lazy attachment session; removing or clearing it revokes that source's object URLs and disposes its local asset index.
+
+There is deliberately no IndexedDB persistence in this phase. Refresh or page close clears all source records and browser `File` references.
+
 ## Metadata-only diagnostics
 
 Unknown JSON and ZIP inputs return `our-dialogues.source-diagnostics.v1` rather than a loose guess. Diagnostics may contain only structural metadata:
@@ -64,6 +72,8 @@ Diagnostics never contain field values or conversation text. ZIP candidate JSON 
 
 The implemented webpage-plugin adapter is specifically for `Claude Exporter (https://www.ai-chat-exporter.net)`. Strict detection requires its exact `powered_by` fingerprint, a `claude.ai/chat/...` link, metadata dates/title, and messages shaped as `{role, say, time}` with `human` or `assistant` roles. It does not claim other Claude plugins merely because they contain generic `messages` or `content` keys.
 
-The observed plugin stores local timestamps as `M/D/YYYY H:mm:ss`; the adapter converts them using the browser's local timezone and preserves every original record under `metadata.original`. The two calibrated samples contain visible text only, so the adapter does not fabricate thinking or attachments.
+The observed plugin stores local timestamps as `M/D/YYYY H:mm:ss`; the adapter converts them using the browser's local timezone and preserves every original record under `metadata.original`, plus the exact string under `metadata.rawSay`. It never writes heuristic content to normalized `thinking`.
+
+Some exporter transcripts flatten workflow and replies into the same assistant `say`. The source-specific splitter treats exact `Done` lines and clear UI/tool markers such as `Viewed file`, `Searching...`, and reminder actions as boundaries. Only text inside a complete marker-bounded run is moved into `metadata.sourceTrace`; replies between runs remain visible. The trace is explicitly labeled heuristic and is shown separately from source-exported thinking. If splitting would leave no certain visible reply, the adapter displays the original `say` instead. Ambiguous unmarked text remains visible rather than being silently dropped.
 
 Claude official export and every other plugin remain separate pending formats. Each requires its own real sample and synthetic fixture before implementation; until then, metadata-only diagnostics are the supported workflow.

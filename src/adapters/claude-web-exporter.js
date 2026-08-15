@@ -45,22 +45,98 @@ OD.adapters = OD.adapters || [];
     );
   }
 
+  function markerKind(value) {
+    const line = String(value || "").split("\n").find(part => part.trim())?.trim() || "";
+    if (/^(?:✓\s*)?Done(?:[.!…]+)?$/i.test(line)) return "done";
+    if (/^(?:Viewed|Viewing|Read|Reading|Opened|Opening|Edited|Editing|Created|Creating|Wrote|Writing|Searched|Searching|Ran|Running|Executed|Executing|Fetched|Fetching|Called|Calling)\s+(?:file|files|folder|folders|command|commands|tool|tools|web|the web|reminder|task)\b/i.test(line)) {
+      return "tool";
+    }
+    if (/^(?:Search(?:ing)?|Web search|Create reminder|Created reminder|Tool action)(?:\.{3}|…|:|\b)/i.test(line)) {
+      return "tool";
+    }
+    return null;
+  }
+
+  /*
+    The exporter flattens UI trace, tool activity, and replies into one string.
+    Split only marker-bounded runs. Anything not clearly inside one stays in
+    visible text, and rawSay is retained by convert() regardless of the result.
+  */
+  function splitAssistantSay(value) {
+    const rawSay = String(value ?? "").replace(/\r\n?/g, "\n");
+    const blocks = rawSay.split(/\n[ \t]*\n+/).map(text => text.trim()).filter(Boolean);
+    if (!blocks.length) return { visibleText: "", sourceTrace: [], applied: false, conservativeFallback: false };
+
+    const kinds = blocks.map(markerKind);
+    const firstMarker = kinds.find(Boolean) || null;
+    let traceMode = firstMarker === "done";
+    const visible = [];
+    const sourceTrace = [];
+
+    for (let index = 0; index < blocks.length; index += 1) {
+      const text = blocks[index];
+      const kind = kinds[index];
+      if (kind === "done") {
+        sourceTrace.push({ type: "marker", marker: "done", text });
+        traceMode = false;
+        continue;
+      }
+      if (kind === "tool") {
+        sourceTrace.push({ type: "marker", marker: "tool-action", text });
+        traceMode = kinds.slice(index + 1).includes("done");
+        continue;
+      }
+      if (traceMode) sourceTrace.push({ type: "trace", text });
+      else visible.push(text);
+    }
+
+    if (!sourceTrace.length) {
+      return { visibleText: rawSay.trim(), sourceTrace: [], applied: false, conservativeFallback: false };
+    }
+    if (!visible.length) {
+      return {
+        visibleText: rawSay.trim(),
+        sourceTrace,
+        applied: false,
+        conservativeFallback: true
+      };
+    }
+    return {
+      visibleText: visible.join("\n\n").trim(),
+      sourceTrace,
+      applied: true,
+      conservativeFallback: false
+    };
+  }
+
   function convert(data) {
     const metadata = data.metadata;
     const id = claudeConversationId(metadata.link);
-    const messages = data.messages.map((message, index) => ({
-      id: `${id}-message-${index + 1}`,
-      role: message.role,
-      speaker: message.role === "human" ? "You" : "Claude",
-      createdAt: localExporterTime(message.time),
-      content: message.say,
-      thinking: [],
-      attachments: [],
-      metadata: {
-        originalRole: message.role,
-        original: message
-      }
-    }));
+    const messages = data.messages.map((message, index) => {
+      const split = message.role === "assistant"
+        ? splitAssistantSay(message.say)
+        : { visibleText: message.say, sourceTrace: [], applied: false, conservativeFallback: false };
+      return {
+        id: `${id}-message-${index + 1}`,
+        role: message.role,
+        speaker: message.role === "human" ? "You" : "Claude",
+        createdAt: localExporterTime(message.time),
+        content: split.visibleText,
+        thinking: [],
+        attachments: [],
+        metadata: {
+          originalRole: message.role,
+          original: message,
+          rawSay: message.say,
+          sourceTrace: split.sourceTrace,
+          sourceTraceHeuristic: {
+            format: "ai-chat-exporter-marker-bounded-v1",
+            applied: split.applied,
+            conservativeFallback: split.conservativeFallback
+          }
+        }
+      };
+    });
     const dates = metadata.dates || {};
 
     return OD.schema.archive({
@@ -91,12 +167,12 @@ OD.adapters = OD.adapters || [];
       json: true,
       zip: false,
       folder: false,
-      thinking: "not-exported",
+      thinking: "not-structured; conservative-source-trace",
       attachments: "not-exported",
       sourceMarkup: "plain-or-markdown-text"
     },
     detectJSON: isClaudeWebExporter,
     parseJSON: convert,
-    _internals: { claudeConversationId, localExporterTime, isClaudeWebExporter }
+    _internals: { claudeConversationId, localExporterTime, isClaudeWebExporter, markerKind, splitAssistantSay }
   });
 })();

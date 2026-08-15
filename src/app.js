@@ -3,9 +3,11 @@ window.OD = window.OD || {};
 (function(OD){
   const $ = id => document.getElementById(id);
   const state = {
+    library: OD.sourceLibrary.create(),
     archive: null,
     filtered: [],
     current: null,
+    sourceFilter: "all",
     sortMode: OD.conversationOrder.readStoredMode(window.localStorage),
     assetSession: null,
     solVoiceSession: null,
@@ -67,7 +69,12 @@ window.OD = window.OD || {};
   }
 
   function conversationHaystack(c) {
-    const body = (c.messages || []).map(m => OD.schema.textOf(m.content)).join("\n");
+    const body = (c.messages || []).map(m => {
+      const trace = Array.isArray(m.metadata?.sourceTrace)
+        ? m.metadata.sourceTrace.map(item => item?.text || "").join("\n")
+        : "";
+      return [OD.schema.textOf(m.content), trace].filter(Boolean).join("\n");
+    }).join("\n");
     return `${c.title}\n${body}`.toLowerCase();
   }
 
@@ -90,14 +97,9 @@ window.OD = window.OD || {};
   }
 
   function releaseArchiveAssets() {
-    const assetSession = state.assetSession;
     releaseRenderedAssets();
-    try {
-      assetSession?.dispose?.();
-    } catch (error) {
-      console.warn("Could not dispose attachment session", error);
-    }
     state.assetSession = null;
+    state.library.clear();
     try {
       state.solVoiceSession?.dispose?.();
     } catch (error) {
@@ -106,8 +108,76 @@ window.OD = window.OD || {};
     state.solVoiceSession = null;
   }
 
+  function conversationMarkup(c) {
+    const active = state.current?.id === c.id ? " on" : "";
+    const room = c.context?.room?.name ? ` · ${esc(c.context.room.name)}` : "";
+    return `<div class="conv${active}" data-id="${esc(c.id)}">
+      <div class="conv-title">${esc(c.title)}</div>
+      <div class="conv-meta">${c.messages.length} 条${room}${c.createdAt ? ` · ${esc(fmtDate(c.createdAt))}` : ""}</div>
+    </div>`;
+  }
+
+  function mufyCharacter(conversation) {
+    const metadata = conversation.context?.sourceMetadata || {};
+    const characterId = metadata.characterId == null || String(metadata.characterId).trim() === ""
+      ? null
+      : String(metadata.characterId);
+    const participant = (conversation.participants || []).find(item => item?.role === "assistant");
+    return {
+      key: characterId ? `id:${characterId}` : `missing:${conversation.id}`,
+      id: characterId,
+      name: String(metadata.characterName || participant?.name || "未命名角色")
+    };
+  }
+
+  function sourceMarkup(source, conversations) {
+    let children = "";
+    if (source.source?.platform === "mufy") {
+      const characters = new Map();
+      for (const conversation of conversations) {
+        const character = mufyCharacter(conversation);
+        const group = characters.get(character.key) || { ...character, conversations: [] };
+        group.conversations.push(conversation);
+        characters.set(character.key, group);
+      }
+      children = [...characters.values()].map(character => `<details class="character-group">
+        <summary>
+          <span class="character-summary-label">${esc(character.name)}${character.id ? `<small class="character-identity">${esc(character.id)}</small>` : ""}</span>
+          <span class="character-count">${character.conversations.length}</span>
+        </summary>
+        <div class="character-conversations">${character.conversations.map(conversationMarkup).join("")}</div>
+      </details>`).join("");
+    } else {
+      children = `<div class="source-conversations">${conversations.map(conversationMarkup).join("")}</div>`;
+    }
+    return `<details class="source-group" data-source-id="${esc(source.id)}" open>
+      <summary>
+        <span class="source-summary-label">${esc(source.label)}</span>
+        <span class="source-count">${conversations.length}</span>
+        <button class="remove-source" type="button" data-remove-source="${esc(source.id)}" title="移除这个来源" aria-label="移除 ${esc(source.label)}">×</button>
+      </summary>
+      ${children}
+    </details>`;
+  }
+
+  function renderSourceControls() {
+    const sources = state.library.sources();
+    const selected = sources.some(source => source.id === state.sourceFilter) ? state.sourceFilter : "all";
+    state.sourceFilter = selected;
+    $("sourceFilter").innerHTML = [
+      `<option value="all">全部来源（${sources.length}）</option>`,
+      ...sources.map(source => `<option value="${esc(source.id)}">${esc(source.label)}（${source.conversations.length}）</option>`)
+    ].join("");
+    $("sourceFilter").value = selected;
+    $("clearSources").disabled = sources.length === 0;
+  }
+
   function renderList() {
-    const all = state.archive?.conversations || [];
+    const allSources = state.library.sources();
+    const visibleSources = state.sourceFilter === "all"
+      ? allSources
+      : allSources.filter(source => source.id === state.sourceFilter);
+    const all = visibleSources.flatMap(source => source.conversations);
     state.filtered = OD.conversationOrder.filterAndSort(
       all,
       $("search").value,
@@ -115,20 +185,27 @@ window.OD = window.OD || {};
       state.sortMode
     );
 
-    $("conversationList").innerHTML = state.filtered.map(c => {
-      const active = state.current?.id === c.id ? " on" : "";
-      const room = c.context?.room?.name ? ` · ${esc(c.context.room.name)}` : "";
-      return `<div class="conv${active}" data-id="${esc(c.id)}">
-        <div class="conv-title">${esc(c.title)}</div>
-        <div class="conv-meta">${c.messages.length} 条${room}${c.createdAt ? ` · ${esc(fmtDate(c.createdAt))}` : ""}</div>
-      </div>`;
-    }).join("");
+    const filteredIds = new Set(state.filtered.map(conversation => conversation.id));
+    $("conversationList").innerHTML = visibleSources.map(source => sourceMarkup(
+      source,
+      OD.conversationOrder.sortConversations(
+        source.conversations.filter(conversation => filteredIds.has(conversation.id)),
+        state.sortMode
+      )
+    )).join("");
 
     [...document.querySelectorAll(".conv")].forEach(el => {
       el.addEventListener("click", () => openConversation(el.dataset.id));
     });
+    [...document.querySelectorAll("[data-remove-source]")].forEach(button => {
+      button.addEventListener("click", event => {
+        event.preventDefault();
+        event.stopPropagation();
+        removeSource(button.dataset.removeSource);
+      });
+    });
 
-    $("archiveMeta").textContent = `${state.filtered.length} / ${all.length} 段对话`;
+    $("archiveMeta").textContent = `${state.filtered.length} / ${all.length} 段对话 · ${state.library.size} 个来源`;
     return state.filtered;
   }
 
@@ -398,6 +475,8 @@ window.OD = window.OD || {};
     const c = (state.archive?.conversations || []).find(x => x.id === id);
     if (!c) return;
     releaseRenderedAssets();
+    const source = state.library.sourceForConversation(c);
+    state.assetSession = source?.assetSession || null;
     state.current = c;
     $("welcome").classList.add("hidden");
     $("reader").classList.remove("hidden");
@@ -405,6 +484,7 @@ window.OD = window.OD || {};
     $("readerTitle").textContent = c.title;
 
     const bits = [];
+    if (source?.label) bits.push(`Source: ${source.label}`);
     if (c.context?.room?.name) bits.push(`Room: ${c.context.room.name}`);
     if (c.createdAt) bits.push(fmtDate(c.createdAt));
     bits.push(`${c.messages.length} 条消息`);
@@ -416,6 +496,9 @@ window.OD = window.OD || {};
       const text = OD.schema.textOf(m.content);
       const thinking = OD.schema.textOf(m.thinking);
       const recaps = Array.isArray(m.metadata?.reasoningRecap) ? m.metadata.reasoningRecap.filter(Boolean) : [];
+      const sourceTrace = Array.isArray(m.metadata?.sourceTrace)
+        ? m.metadata.sourceTrace.filter(item => item?.text)
+        : [];
       const attachments = Array.isArray(m.attachments) ? m.attachments : [];
       const reasoningOnly = !!m.metadata?.reasoningOnly;
       const attachmentHTML = attachments.map(attachment => {
@@ -426,12 +509,16 @@ window.OD = window.OD || {};
         const index = renderedSolVoice.push(clip) - 1;
         return solVoiceMarkup(clip, index);
       }).join("") || "";
+      const sourceTraceHTML = sourceTrace.length ? `<div class="source-trace"><strong>Exporter source trace · heuristic, not official thinking</strong>\n${sourceTrace.map(item => item.type === "marker"
+        ? `<span class="source-trace-marker">[${esc(item.marker || "marker")}] ${esc(item.text)}</span>`
+        : esc(item.text)).join("\n\n")}</div>` : "";
       return `<section class="message${reasoningOnly ? " reasoning-only" : ""}" data-role="${esc(m.role)}">
         <div class="message-who">${esc(m.speaker || m.role)}</div>
         ${text ? `<div class="message-body">${esc(text)}</div>` : ""}
         ${attachmentHTML ? `<div class="attachments">${attachmentHTML}</div>` : ""}
         ${solVoiceHTML ? `<div class="solvoice-clips">${solVoiceHTML}</div>` : ""}
         ${(thinking || recaps.length) ? `<div class="thinking"><strong>Thinking / reasoning exported by source</strong>${recaps.length ? `\n${esc(recaps.join(" · "))}` : ""}${thinking ? `\n\n${esc(thinking)}` : ""}</div>` : ""}
+        ${sourceTraceHTML}
         ${m.createdAt ? `<div class="message-time">${esc(fmtDate(m.createdAt))}</div>` : ""}
       </section>`;
     }).join("");
@@ -451,9 +538,12 @@ window.OD = window.OD || {};
     }
     state.solVoiceSession = null;
 
-    if (state.archive && state.solVoiceMapping) {
+    const chatGPTConversations = state.library.sources()
+      .filter(source => source.source?.platform === "chatgpt")
+      .flatMap(source => source.conversations);
+    if (chatGPTConversations.length && state.solVoiceMapping) {
       state.solVoiceSession = OD.solVoiceSidecar.buildSession({
-        archive: state.archive,
+        archive: { ...state.archive, conversations: chatGPTConversations },
         mappingDocument: state.solVoiceMapping,
         audioFiles: state.solVoiceAudioFiles,
         urlAPI: URL
@@ -510,17 +600,80 @@ window.OD = window.OD || {};
 
   function loadArchive(archive, adapterLabel, assetSession=null, importDetails="") {
     if (!archive?.conversations?.length) throw new Error("识别成功，但没有找到任何对话。");
-    releaseArchiveAssets();
-    state.assetSession = assetSession;
-    state.archive = archive;
+    const added = state.library.add({
+      archive,
+      label: adapterLabel,
+      adapterId: archive.source?.exporter || null,
+      assetSession,
+      importDetails
+    });
+    state.sourceFilter = "all";
+    state.archive = state.library.archive();
     state.current = null;
     rebuildSolVoiceSession({ rerender: false });
     const detail = importDetails ? ` · ${importDetails}` : "";
-    state.archiveStatusText = `已识别：${adapterLabel} · ${archive.conversations.length} 段对话${detail}`;
+    state.archiveStatusText = added.duplicate
+      ? `已在书库中：${adapterLabel} · 未重复导入 · 共 ${state.library.size} 个来源`
+      : `已加入：${adapterLabel} · ${added.source.conversations.length} 段对话${detail} · 共 ${state.library.size} 个来源`;
     setStatus(state.archiveStatusText);
+    renderSourceControls();
     renderList();
-    const first = OD.conversationOrder.sortConversations(archive.conversations, state.sortMode)[0];
+    const first = OD.conversationOrder.sortConversations(added.source.conversations, state.sortMode)[0];
     openConversation(first.id);
+    return added;
+  }
+
+  function showEmptyLibrary() {
+    state.current = null;
+    state.assetSession = null;
+    $("reader").classList.add("hidden");
+    $("welcome").classList.remove("hidden");
+    $("currentTitle").textContent = "尚未载入档案";
+    $("readerTitle").textContent = "";
+    $("readerMeta").innerHTML = "";
+    $("messages").innerHTML = "";
+  }
+
+  function removeSource(sourceId) {
+    const source = state.library.get(sourceId);
+    if (!source) return false;
+    if (state.library.sourceForConversation(state.current)?.id === source.id) {
+      releaseRenderedAssets();
+      state.assetSession = null;
+    }
+    state.library.remove(source.id);
+    state.archive = state.library.size ? state.library.archive() : null;
+    state.current = null;
+    if (state.sourceFilter === source.id) state.sourceFilter = "all";
+    rebuildSolVoiceSession({ rerender: false });
+    renderSourceControls();
+    renderList();
+    const first = OD.conversationOrder.sortConversations(state.archive?.conversations || [], state.sortMode)[0];
+    if (first) openConversation(first.id);
+    else showEmptyLibrary();
+    state.archiveStatusText = state.library.size
+      ? `已移除：${source.label} · 书库剩余 ${state.library.size} 个来源`
+      : "书库已清空；本页仍不会上传任何文件。";
+    setStatus(state.archiveStatusText);
+    return true;
+  }
+
+  function clearSources() {
+    releaseRenderedAssets();
+    state.assetSession = null;
+    const count = state.library.clear();
+    state.archive = null;
+    state.current = null;
+    state.sourceFilter = "all";
+    rebuildSolVoiceSession({ rerender: false });
+    renderSourceControls();
+    renderList();
+    showEmptyLibrary();
+    state.archiveStatusText = count
+      ? `已清空 ${count} 个来源；数据只从当前内存移除。`
+      : "书库目前为空。";
+    setStatus(state.archiveStatusText);
+    return count;
   }
 
   function requireRecognized(result) {
@@ -535,7 +688,7 @@ window.OD = window.OD || {};
     setStatus(`正在本地解析：${file.name}`);
     if (/\.zip$/i.test(file.name) || file.type === "application/zip") {
       const result = requireRecognized(await OD.registry.parseZIP(file));
-      loadArchive(
+      return loadArchive(
         result.archive,
         result.adapter.label,
         result.assetSession || null,
@@ -546,7 +699,7 @@ window.OD = window.OD || {};
     const text = await file.text();
     const data = JSON.parse(text.replace(/^\uFEFF/, ""));
     const result = requireRecognized(await OD.registry.parseJSON(data));
-    loadArchive(result.archive, result.adapter.label);
+    return loadArchive(result.archive, result.adapter.label);
   }
 
   /*
@@ -563,7 +716,7 @@ window.OD = window.OD || {};
 
     setStatus(`正在识别来源文件夹（${files.length} 个文件）…`);
     const result = await OD.sourceFolder.parse(files);
-    loadArchive(
+    return loadArchive(
       result.archive,
       result.adapter.label,
       result.assetSession || null,
@@ -578,7 +731,7 @@ window.OD = window.OD || {};
     const files = [...event.target.files];
     if (!files.length) return;
     try {
-      await loadFile(files[0]);
+      for (const file of files) await loadFile(file);
     } catch (error) {
       console.error(error);
       setStatus(error?.message || String(error), true);
@@ -627,6 +780,11 @@ window.OD = window.OD || {};
   });
 
   $("clearSolVoice").addEventListener("click", clearSolVoice);
+  $("clearSources").addEventListener("click", clearSources);
+  $("sourceFilter").addEventListener("change", event => {
+    state.sourceFilter = event.target.value || "all";
+    renderList();
+  });
 
   $("search").addEventListener("input", renderList);
   for (const button of document.querySelectorAll("[data-sort-mode]")) {
@@ -649,10 +807,19 @@ window.OD = window.OD || {};
     loadSolVoiceMapping,
     loadSolVoiceFolder,
     clearSolVoice,
+    removeSource,
+    clearSources,
     openConversation,
     getState: () => ({
       archive: state.archive,
       current: state.current,
+      sources: state.library.sources().map(source => ({
+        id: source.id,
+        label: source.label,
+        platform: source.source?.platform || "unknown",
+        conversationCount: source.conversations.length
+      })),
+      sourceFilter: state.sourceFilter,
       sortMode: state.sortMode,
       hasLocalAssets: !!state.assetSession,
       hasSolVoice: !!state.solVoiceSession,
@@ -669,6 +836,7 @@ window.OD = window.OD || {};
   }
 
   renderSortControl();
+  renderSourceControls();
   setStatus("文件只在本机浏览器中解析，不会上传。");
   state.archiveStatusText = state.statusText;
 })(window.OD);

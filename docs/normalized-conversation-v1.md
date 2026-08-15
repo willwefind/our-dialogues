@@ -101,6 +101,8 @@ Unknown structures must be retained in `metadata` when practical.
 
 The reader must never fabricate hidden reasoning.
 
+Exporter UI/workflow text that is heuristically separated from visible content must not be placed in `thinking`. Adapters may retain it under `metadata.sourceTrace` with an explicit heuristic policy record and the exact raw source string alongside it. A source trace is provenance from an exporter transcript, not a claim about official hidden reasoning.
+
 ### Attachments
 
 Attachment records may contain:
