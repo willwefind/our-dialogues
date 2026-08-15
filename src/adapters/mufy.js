@@ -506,21 +506,47 @@ OD.adapters = OD.adapters || [];
     return probe;
   }
 
+  // The greeting lives on the character card, not inside any session. It becomes
+  // its own pinned "开场白" conversation, like the standalone Mufy reader's chapter 0.
+  // The synthetic session ID lets batch ZIPs of one character merge into one greeting.
+  const GREETING_SESSION_ID = "__od-greeting__";
+
+  function greetingConversation(pack) {
+    if (pack.greeting == null || !String(pack.greeting).trim()) return null;
+    const greeting = normalizeMufyContent(pack.greeting);
+    return {
+      id: "mufy-greeting",
+      title: "开场白",
+      createdAt: sourceTime(pack) || null,
+      updatedAt: null,
+      context: {
+        sourceMetadata: {
+          characterId: pack.characterId ?? null,
+          characterName: pack.name ?? null,
+          titleSource: "greeting",
+          sessionId: GREETING_SESSION_ID,
+          isGreeting: true,
+          original: pack.greeting
+        }
+      },
+      participants: [
+        { id: pack.characterId || "assistant", name: pack.name || "Assistant", role: "assistant" }
+      ],
+      messages: [{
+        id: "greeting",
+        role: "assistant",
+        speaker: pack.name || "Assistant",
+        createdAt: sourceTime(pack),
+        content: greeting.content,
+        thinking: greeting.thinking,
+        metadata: { original: pack.greeting, sourceField: "greeting" }
+      }]
+    };
+  }
+
   function convert(pack) {
-    const conversations = (pack.sessions || []).map((session, index) => {
+    const sessionConversations = (pack.sessions || []).map((session, index) => {
       const messages = [];
-      if (index === 0 && pack.greeting != null && String(pack.greeting).trim()) {
-        const greeting = normalizeMufyContent(pack.greeting);
-        messages.push({
-          id: "greeting",
-          role: "assistant",
-          speaker: pack.name || "Assistant",
-          createdAt: sourceTime(pack),
-          content: greeting.content,
-          thinking: greeting.thinking,
-          metadata: { original: pack.greeting, sourceField: "greeting" }
-        });
-      }
       for (const dialog of (session.dialogs || [])) {
         const semantic = normalizeMufyContent(dialog.content);
         const originalRole = dialog.role;
@@ -536,12 +562,7 @@ OD.adapters = OD.adapters || [];
           metadata: { originalRole, original: dialog }
         });
       }
-      const titleInfo = OD.mufyTitleResolver.resolve({
-        pack,
-        session,
-        index,
-        messages: messages.filter(message => message.metadata?.sourceField !== "greeting")
-      });
+      const titleInfo = OD.mufyTitleResolver.resolve({ pack, session, index, messages });
       return {
         id: session.sessionId || `mufy-session-${index}`,
         title: titleInfo.title,
@@ -570,6 +591,9 @@ OD.adapters = OD.adapters || [];
         messages
       };
     });
+
+    const greeting = greetingConversation(pack);
+    const conversations = greeting ? [greeting, ...sessionConversations] : sessionConversations;
 
     return OD.schema.archive({
       platform: "mufy",

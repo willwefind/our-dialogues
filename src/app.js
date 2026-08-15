@@ -322,6 +322,10 @@ window.OD = window.OD || {};
     };
   }
 
+  function isGreetingConversation(conversation) {
+    return conversation.context?.sourceMetadata?.isGreeting === true;
+  }
+
   function sourceMarkup(source, conversations) {
     let children = "";
     if (source.source?.platform === "mufy") {
@@ -332,13 +336,21 @@ window.OD = window.OD || {};
         group.conversations.push(conversation);
         characters.set(character.key, group);
       }
-      children = [...characters.values()].map(character => `<details class="character-group">
+      children = [...characters.values()].map(character => {
+        // The greeting chapter stays pinned first inside its character,
+        // regardless of the date sort — sessions keep the chosen order.
+        const ordered = [
+          ...character.conversations.filter(isGreetingConversation),
+          ...character.conversations.filter(conversation => !isGreetingConversation(conversation))
+        ];
+        return `<details class="character-group">
         <summary>
           <span class="character-summary-label">${esc(character.name)}${character.id ? `<small class="character-identity">${esc(character.id)}</small>` : ""}</span>
           <span class="character-count">${character.conversations.length}</span>
         </summary>
-        <div class="character-conversations">${character.conversations.map(conversationMarkup).join("")}</div>
-      </details>`).join("");
+        <div class="character-conversations">${ordered.map(conversationMarkup).join("")}</div>
+      </details>`;
+      }).join("");
     } else {
       children = `<div class="source-conversations">${conversations.map(conversationMarkup).join("")}</div>`;
     }

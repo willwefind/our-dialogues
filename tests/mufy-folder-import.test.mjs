@@ -65,13 +65,21 @@ test("Mufy folder imports multiple ZIP batches with stable conservative merging"
   const result = await OD.sourceFolder.parse(files);
   assert.equal(result.folderSourceId, "mufy-zip-folder");
   assert.equal(result.stats.importedZipCount, 5);
-  assert.equal(result.stats.sourceSessionCount, 7);
-  assert.equal(result.stats.duplicateSessionCount, 1);
+  assert.equal(result.stats.sourceSessionCount, 9);
+  assert.equal(result.stats.duplicateSessionCount, 2);
   assert.equal(result.stats.duplicateMessageCount, 2, "repeated greeting and dialog are deduplicated");
   assert.equal(result.stats.conflictingMessageIdCount, 1);
-  assert.equal(result.stats.conversationCount, 6);
+  assert.equal(result.stats.conversationCount, 7);
 
   const conversations = result.archive.conversations;
+  const alphaGreeting = conversations.find(item =>
+    item.id === "mufy:character-alpha:__od-greeting__"
+  );
+  assert.ok(alphaGreeting, "batch ZIPs of one character merge into a single greeting chapter");
+  assert.equal(alphaGreeting.title, "开场白");
+  assert.equal(alphaGreeting.context.sourceMetadata.isGreeting, true);
+  assert.equal(alphaGreeting.messages.length, 1, "the repeated greeting deduplicates to one message");
+  assert.equal(OD.schema.textOf(alphaGreeting.messages[0].content), "Synthetic greeting");
   const alphaShared = conversations.find(item =>
     item.id === "mufy:character-alpha:session-shared"
   );

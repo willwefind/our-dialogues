@@ -123,6 +123,7 @@ window.OD = window.OD || {};
 
   function titleSourceRank(value) {
     return ({
+      "greeting": 0,
       "remark": 0,
       "exported": 1,
       "current": 2,

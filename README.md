@@ -139,6 +139,8 @@ Reading preferences apply to every normalized source rather than only Mufy. The 
 
 Progress stores conversation ID, message anchor, page, and scroll offset. Restore chooses the page containing the message anchor first, then restores the nearby scroll position. Changing a reading preference or switching modes keeps the current conversation and anchor whenever that message remains visible.
 
+The character-card greeting, when the export contains one, becomes its own 开场白 conversation pinned first inside its character, mirroring the standalone Mufy reader's chapter 0. Batch ZIPs of the same character merge into a single greeting chapter; exports without the greeting field simply have no such chapter.
+
 ### Claude webpage-exporter fidelity
 
 `ai-chat-exporter.net` can flatten visible replies, workflow text, and UI/tool markers into one assistant `say`. The adapter retains the complete original record under `metadata.original` and the exact string under `metadata.rawSay`. A conservative marker-bounded splitter moves clear runs around `Done`, `Viewed file`, `Searching...`, reminder actions, and similar tool markers into `metadata.sourceTrace`; it never labels that material as Claude official thinking. Visible replies before, between, and after those runs remain in normalized `content`.

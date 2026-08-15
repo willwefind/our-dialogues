@@ -82,13 +82,18 @@ test("Mufy HTML becomes readable text and explicit think content stays separate"
 
   assert.equal(parsed.recognized, true);
   assert.equal(parsed.adapter.id, "mufy-raw");
-  const conversation = parsed.archive.conversations[0];
-  assert.equal(conversation.title, "Newest & readable");
-
-  const [greeting, assistant, user, timestamped] = conversation.messages;
+  const [greetingConversation, conversation] = parsed.archive.conversations;
+  assert.equal(greetingConversation.title, "开场白");
+  assert.equal(greetingConversation.context.sourceMetadata.isGreeting, true);
+  assert.equal(greetingConversation.context.sourceMetadata.titleSource, "greeting");
+  assert.equal(greetingConversation.messages.length, 1);
+  const [greeting] = greetingConversation.messages;
   assert.equal(OD.schema.textOf(greeting.content), "Hello & welcome\nfriend");
   assert.equal(OD.schema.textOf(greeting.thinking), "greeting thought & calm");
   assert.equal(greeting.metadata.original, source.greeting);
+
+  assert.equal(conversation.title, "Newest & readable");
+  const [assistant, user, timestamped] = conversation.messages;
 
   assert.equal(OD.schema.textOf(assistant.content), "Status & plan\nVisible line");
   assert.equal(OD.schema.textOf(assistant.thinking), "private reasoning");
@@ -101,7 +106,9 @@ test("Mufy HTML becomes readable text and explicit think content stays separate"
   assert.equal(OD.schema.textOf(timestamped.thinking), "typed thought");
   assert.equal(timestamped.createdAt, "2023-11-14T22:13:23.000Z");
 
-  const visible = conversation.messages.map(message => OD.schema.textOf(message.content)).join("\n");
+  const visible = parsed.archive.conversations
+    .flatMap(item => item.messages)
+    .map(message => OD.schema.textOf(message.content)).join("\n");
   assert.doesNotMatch(visible, /<\/?(?:div|details|summary|span|think)\b/i);
   assert.doesNotMatch(visible, /secret greeting|hidden style|comment/);
 });
@@ -118,7 +125,7 @@ test("Mufy fog status cards normalize rows, notes, and bounded progress", async 
   </div>`;
   source.sessions[0].dialogs[0].content = raw;
   const parsed = await OD.registry.parseJSON(source);
-  const message = parsed.archive.conversations[0].messages[1];
+  const message = parsed.archive.conversations[1].messages[0];
   const block = message.content.find(item => item.type === "source-rich-block");
 
   assert.equal(block.kind, "status-card");
@@ -250,8 +257,8 @@ test("Mufy title falls back to the first assistant line instead of a session has
   source.sessions[0].dialogs[0].content = "<div>A readable first assistant line</div>";
   const parsed = await OD.registry.parseJSON(source);
 
-  assert.equal(parsed.archive.conversations[0].title, "A readable first assistant line");
-  assert.notEqual(parsed.archive.conversations[0].title, "session-synthetic · 1");
+  assert.equal(parsed.archive.conversations[1].title, "A readable first assistant line");
+  assert.notEqual(parsed.archive.conversations[1].title, "session-synthetic · 1");
 });
 
 test("Mufy session title uses current marker before assistant text when no archive remark exists", async () => {
@@ -261,9 +268,9 @@ test("Mufy session title uses current marker before assistant text when no archi
   source.sessions[0].isCurrent = true;
   const parsed = await OD.registry.parseJSON(source);
 
-  assert.equal(parsed.archive.conversations[0].title, "Synthetic Character · 当前对话");
-  assert.equal(parsed.archive.conversations[0].metadata.titleSource, "current");
-  assert.equal(parsed.archive.conversations[0].context.sourceMetadata.characterName, "Synthetic Character");
+  assert.equal(parsed.archive.conversations[1].title, "Synthetic Character · 当前对话");
+  assert.equal(parsed.archive.conversations[1].metadata.titleSource, "current");
+  assert.equal(parsed.archive.conversations[1].context.sourceMetadata.characterName, "Synthetic Character");
 });
 
 test("known JSON adapters detect mutually exclusively", async () => {
