@@ -290,7 +290,7 @@ test("app opens the first sorted conversation and keeps search in the saved mode
 });
 
 test("app keeps consecutive sources, filters them, skips duplicates, and removes one source", async () => {
-  const { runtime, elements } = await loadAppRuntime("asc");
+  const { runtime, elements, stored } = await loadAppRuntime("asc");
   const makeArchive = (platform, id) => ({
     source: { platform, exporter: `${platform}-synthetic` },
     conversations: [{
@@ -325,6 +325,11 @@ test("app keeps consecutive sources, filters them, skips duplicates, and removes
 
   runtime.OD.app.openConversation("mufy-session");
   assert.equal(runtime.OD.app.getState().hasLocalAssets, true, "opening a source activates only its asset session");
+  const listHTML = elements.get("conversationList").innerHTML;
+  assert.match(listHTML, /class="source-group" data-source-id="[^"]+" open/, "source groups stay open by default");
+  assert.match(listHTML, /class="character-group" data-character-key="[^"]+" open/, "the character group holding the open conversation is expanded");
+  const mirror = JSON.parse(stored.get("our-dialogues.reader-state.v1"));
+  assert.deepEqual(mirror.groupState, { sources: {}, characters: {} }, "untouched groups persist no explicit state");
 
   const claudeSource = runtime.OD.app.getState().sources.find(source => source.platform === "claude");
   elements.get("sourceFilter").value = claudeSource.id;

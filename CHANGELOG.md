@@ -14,6 +14,7 @@
 - Fix the launcher's auto-open: pass the `start` command to cmd.exe verbatim so the browser actually opens, and keep the console window open on launcher errors.
 - Keep the launcher port fixed for a stable IndexedDB origin: a busy port now reuses the already-running Reader and opens the browser instead of hopping to a different-origin port.
 - Promote the Mufy character-card greeting to its own pinned 开场白 conversation per character, merged across batch ZIPs by a synthetic greeting session ID, instead of prepending it to an arbitrary first session.
+- Remember sidebar source-group and character-group collapse state across re-renders and restarts instead of re-expanding everything on each conversation switch; an active search still force-opens groups so hits stay visible.
 
 ## v0.1.8-dev — 2026-08-16
 

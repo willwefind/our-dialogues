@@ -30,6 +30,8 @@ window.OD = window.OD || {};
     pages: [[]],
     pageIndex: 0,
     titleLabels: new Map(),
+    groupState: { sources: {}, characters: {} },
+    searchForcedOpen: false,
     booted: false
   };
 
@@ -130,6 +132,10 @@ window.OD = window.OD || {};
         scrollTop: Number($("main").scrollTop || 0),
         timestamp: new Date().toISOString()
       } : null,
+      groupState: {
+        sources: { ...state.groupState.sources },
+        characters: { ...state.groupState.characters }
+      },
       updatedAt: new Date().toISOString()
     };
   }
@@ -326,7 +332,7 @@ window.OD = window.OD || {};
     return conversation.context?.sourceMetadata?.isGreeting === true;
   }
 
-  function sourceMarkup(source, conversations) {
+  function sourceMarkup(source, conversations, searching) {
     let children = "";
     if (source.source?.platform === "mufy") {
       const characters = new Map();
@@ -343,7 +349,11 @@ window.OD = window.OD || {};
           ...character.conversations.filter(isGreetingConversation),
           ...character.conversations.filter(conversation => !isGreetingConversation(conversation))
         ];
-        return `<details class="character-group">
+        const characterKey = `${source.id}::${character.key}`;
+        const stored = state.groupState.characters[characterKey];
+        const containsCurrent = character.conversations.some(conversation => conversation.id === state.current?.id);
+        const open = searching || (stored === undefined ? containsCurrent : stored === true);
+        return `<details class="character-group" data-character-key="${esc(characterKey)}"${open ? " open" : ""}>
         <summary>
           <span class="character-summary-label">${esc(character.name)}${character.id ? `<small class="character-identity">${esc(character.id)}</small>` : ""}</span>
           <span class="character-count">${character.conversations.length}</span>
@@ -354,7 +364,9 @@ window.OD = window.OD || {};
     } else {
       children = `<div class="source-conversations">${conversations.map(conversationMarkup).join("")}</div>`;
     }
-    return `<details class="source-group" data-source-id="${esc(source.id)}" open>
+    const storedSource = state.groupState.sources[source.id];
+    const sourceOpen = searching || (storedSource === undefined ? true : storedSource !== false);
+    return `<details class="source-group" data-source-id="${esc(source.id)}"${sourceOpen ? " open" : ""}>
       <summary>
         <span class="source-summary-label">${esc(source.label)}</span>
         <span class="source-count">${conversations.length}</span>
@@ -392,16 +404,32 @@ window.OD = window.OD || {};
     );
 
     const filteredIds = new Set(state.filtered.map(conversation => conversation.id));
+    // While a search query is active every group is forced open so hits stay
+    // visible; those forced states are not recorded as the user's choice.
+    const searching = String($("search").value || "").trim() !== "";
+    state.searchForcedOpen = searching;
     $("conversationList").innerHTML = visibleSources.map(source => sourceMarkup(
       source,
       OD.conversationOrder.sortConversations(
         source.conversations.filter(conversation => filteredIds.has(conversation.id)),
         state.sortMode
-      )
+      ),
+      searching
     )).join("");
 
     [...document.querySelectorAll(".conv")].forEach(el => {
       el.addEventListener("click", () => openConversation(el.dataset.id));
+    });
+    [...document.querySelectorAll("#conversationList details.source-group, #conversationList details.character-group")].forEach(el => {
+      el.addEventListener("toggle", () => {
+        if (state.searchForcedOpen) return;
+        if (el.classList.contains("source-group")) {
+          state.groupState.sources[el.dataset.sourceId] = el.open;
+        } else if (el.dataset.characterKey) {
+          state.groupState.characters[el.dataset.characterKey] = el.open;
+        }
+        void saveReaderState();
+      });
     });
     [...document.querySelectorAll("[data-remove-source]")].forEach(button => {
       button.addEventListener("click", event => {
@@ -1142,6 +1170,13 @@ window.OD = window.OD || {};
     applyReaderPreferences({ ...state.readerPrefs, ...settings });
     localStorage.setItem("our-dialogues.theme", state.readerPrefs.theme);
     state.restoredPosition = settings.readingPosition || null;
+    const groupState = settings.groupState;
+    if (groupState && typeof groupState === "object") {
+      state.groupState = {
+        sources: { ...(groupState.sources && typeof groupState.sources === "object" ? groupState.sources : {}) },
+        characters: { ...(groupState.characters && typeof groupState.characters === "object" ? groupState.characters : {}) }
+      };
+    }
   }
 
   async function bootPersistentLibrary() {
