@@ -39,6 +39,7 @@ window.OD = window.OD || {};
     importOpen: null,
     readingProgress: {},
     readingOrder: [],
+    searchScope: "current",
     booted: false
   };
 
@@ -148,6 +149,7 @@ window.OD = window.OD || {};
       annotationColor: state.annotationColor,
       importOpen: state.importOpen,
       readingProgress: state.readingProgress,
+      searchScope: state.searchScope,
       updatedAt: new Date().toISOString()
     };
   }
@@ -699,6 +701,79 @@ window.OD = window.OD || {};
         }
       });
     });
+  }
+
+  function syncSearchScope() {
+    $("searchScopeCurrent")?.setAttribute?.("aria-pressed", String(state.searchScope === "current"));
+    $("searchScopeLibrary")?.setAttribute?.("aria-pressed", String(state.searchScope === "library"));
+  }
+
+  function jumpToSearchHit(conversationId, messageId) {
+    if (!(state.archive?.conversations || []).some(conversation => conversation.id === conversationId)) return false;
+    openConversation(conversationId, { restorePosition: { messageId } });
+    const target = [...$("messages").querySelectorAll("[data-message-id]")]
+      .find(element => element?.dataset?.messageId === String(messageId));
+    target?.classList?.add?.("bookmark-flash");
+    return true;
+  }
+
+  function performSearch() {
+    const results = $("searchResults");
+    const countElement = $("searchHitCount");
+    if (!results || !countElement) return [];
+    const query = String($("searchQuery").value || "").trim();
+    syncSearchScope();
+    if (!query) {
+      countElement.textContent = "";
+      results.innerHTML = `<div class="bookmarks-empty">输入关键词后回车。「当前对话」搜正在读的这一段，「全部书库」搜所有来源。</div>`;
+      return [];
+    }
+    let outcome;
+    if (state.searchScope === "current") {
+      if (!state.current) {
+        countElement.textContent = "";
+        results.innerHTML = `<div class="bookmarks-empty">先打开一段对话，或切换到「全部书库」。</div>`;
+        return [];
+      }
+      outcome = OD.messageSearch.searchConversation(state.current, query);
+    } else {
+      // Library scope honors the source filter but deliberately ignores the
+      // catalog filter box — that box narrows the sidebar, not this search.
+      const allSources = state.library.sources();
+      const visibleSources = state.sourceFilter === "all"
+        ? allSources
+        : allSources.filter(source => source.id === state.sourceFilter);
+      outcome = OD.messageSearch.searchLibrary(visibleSources.flatMap(source => source.conversations), query);
+    }
+    const { hits, truncated } = outcome;
+    countElement.textContent = hits.length ? `${hits.length}${truncated ? "+" : ""}` : "";
+    if (!hits.length) {
+      results.innerHTML = `<div class="bookmarks-empty">没搜到。${state.searchScope === "current" ? "可以试试「全部书库」范围。" : ""}</div>`;
+      return hits;
+    }
+    const titles = new Map((state.archive?.conversations || []).map(conversation =>
+      [conversation.id, displayConversationTitle(conversation)]
+    ));
+    results.innerHTML = [
+      truncated ? `<div class="bookmarks-empty">命中太多，只列前 ${OD.messageSearch.DEFAULT_LIMIT} 处；换个更具体的词。</div>` : "",
+      ...hits.map(hit => `<div class="search-hit" data-search-conversation="${esc(hit.conversationId)}" data-search-message="${esc(hit.messageId)}">
+        <div class="bookmark-meta">${esc(titles.get(hit.conversationId) || hit.conversationId)}${hit.speaker ? ` · ${esc(hit.speaker)}` : ""}</div>
+        <div class="search-snippet">${hit.before ? "…" : ""}${esc(hit.before)}<b>${esc(hit.match)}</b>${esc(hit.after)}…</div>
+      </div>`)
+    ].join("");
+    [...document.querySelectorAll("#searchResults .search-hit")].forEach(element => {
+      element.addEventListener("click", () => {
+        jumpToSearchHit(element.dataset.searchConversation, element.dataset.searchMessage);
+      });
+    });
+    return hits;
+  }
+
+  function setSearchScope(scope) {
+    state.searchScope = scope === "library" ? "library" : "current";
+    syncSearchScope();
+    void saveReaderState();
+    if (String($("searchQuery")?.value || "").trim()) performSearch();
   }
 
   function renderSourceControls() {
@@ -1541,6 +1616,7 @@ window.OD = window.OD || {};
     if (settings.readingProgress && typeof settings.readingProgress === "object") {
       state.readingProgress = OD.readingProgress.normalize(settings.readingProgress);
     }
+    if (["current", "library"].includes(settings.searchScope)) state.searchScope = settings.searchScope;
   }
 
   async function bootPersistentLibrary() {
@@ -1744,6 +1820,15 @@ window.OD = window.OD || {};
   $("toEnd").addEventListener("click", () => scrollMain("end"));
   $("sidebarToggle").addEventListener("click", () => $("sidebar").classList.toggle("closed"));
   $("bookmarkAdd").addEventListener("click", () => addBookmark());
+  $("searchQuery").addEventListener("keydown", event => {
+    if (event.key === "Enter") {
+      event.preventDefault?.();
+      performSearch();
+    }
+  });
+  $("searchScopeCurrent").addEventListener("click", () => setSearchScope("current"));
+  $("searchScopeLibrary").addEventListener("click", () => setSearchScope("library"));
+  syncSearchScope();
   $("importPanel").addEventListener("toggle", () => {
     const panel = $("importPanel");
     if (pendingImportSync !== null && panel.open === pendingImportSync) {
@@ -1935,6 +2020,9 @@ window.OD = window.OD || {};
     updateAnnotation,
     removeAnnotation,
     jumpToAnnotation,
+    performSearch,
+    setSearchScope,
+    jumpToSearchHit,
     getState: () => ({
       archive: state.archive,
       current: state.current,
@@ -1962,7 +2050,8 @@ window.OD = window.OD || {};
       annotations: state.annotations.map(annotation => ({ ...annotation })),
       annotationColor: state.annotationColor,
       readingProgress: { ...state.readingProgress },
-      recentConversations: OD.readingProgress.recent(state.readingProgress, 10).map(entry => entry.conversationId)
+      recentConversations: OD.readingProgress.recent(state.readingProgress, 10).map(entry => entry.conversationId),
+      searchScope: state.searchScope
     }),
     auditPersistentLibrary: refreshAcceptanceAudit
   };

@@ -74,7 +74,8 @@ async function loadAppRuntime(savedSortMode="asc", options={}) {
     "annotationsPanel", "annotationsList", "annotationsCount", "highlightButton",
     "annotationEditor", "annotationColors", "annotationNote",
     "annotationSave", "annotationCancel", "annotationDelete", "importPanel",
-    "recentPanel", "recentList", "recentCount"
+    "recentPanel", "recentList", "recentCount",
+    "searchPanel", "searchHitCount", "searchScopeCurrent", "searchScopeLibrary", "searchQuery", "searchResults"
   ];
   const elements = new Map(ids.map(id => [id, fakeElement(id)]));
   const sortAscending = fakeElement("sortAscending");
@@ -126,7 +127,8 @@ async function loadAppRuntime(savedSortMode="asc", options={}) {
     "src/core/mufy-title-resolver.js",
     "src/core/bookmarks.js",
     "src/core/annotations.js",
-    "src/core/reading-progress.js"
+    "src/core/reading-progress.js",
+    "src/core/message-search.js"
   ];
   if (options.driver) runtimeFiles.push("src/core/persistent-library.js");
   for (const relativePath of runtimeFiles) {
@@ -795,4 +797,51 @@ test("previous/next follow the sidebar's visible order, not the flat date order"
   assert.equal(runtime.OD.app.getState().current.id, "session-a1");
   elements.get("previousPage").click();
   assert.equal(runtime.OD.app.getState().current.id, "greeting-a", "previous walks back to the pinned greeting");
+});
+
+test("full-text search scopes to the current conversation or the whole library and jumps exactly", async () => {
+  const { runtime, elements, stored } = await loadAppRuntime("asc");
+  runtime.OD.app.loadArchive({
+    conversations: [
+      {
+        id: "alpha",
+        title: "第一段",
+        createdAt: "2025-01-01T00:00:00.000Z",
+        messages: [
+          { id: "alpha-m1", role: "assistant", content: "这里有关键词，后面还有一次关键词。" },
+          { id: "alpha-m2", role: "user", content: "无关内容" }
+        ]
+      },
+      {
+        id: "beta",
+        title: "第二段",
+        createdAt: "2026-01-01T00:00:00.000Z",
+        messages: [{ id: "beta-m1", role: "assistant", content: "另一段也提到关键词。" }]
+      }
+    ]
+  }, "Synthetic");
+  runtime.OD.app.openConversation("alpha");
+
+  elements.get("searchQuery").value = "关键词";
+  let hits = runtime.OD.app.performSearch();
+  assert.equal(runtime.OD.app.getState().searchScope, "current");
+  assert.equal(hits.length, 2, "current scope lists every occurrence in the open conversation only");
+  assert.ok(hits.every(hit => hit.conversationId === "alpha"));
+  assert.equal(elements.get("searchHitCount").textContent, "2");
+  assert.match(elements.get("searchResults").innerHTML, /<b>关键词<\/b>/);
+
+  elements.get("searchScopeLibrary").click();
+  hits = runtime.OD.app.performSearch();
+  assert.equal(hits.length, 3, "library scope adds the other conversation's hit");
+  const mirror = JSON.parse(stored.get("our-dialogues.reader-state.v1"));
+  assert.equal(mirror.searchScope, "library", "the chosen scope persists");
+
+  const betaHit = hits.find(hit => hit.conversationId === "beta");
+  assert.equal(runtime.OD.app.jumpToSearchHit(betaHit.conversationId, betaHit.messageId), true);
+  assert.equal(runtime.OD.app.getState().current.id, "beta", "a hit jumps to its exact conversation and message");
+
+  elements.get("searchQuery").value = "不存在的词";
+  hits = runtime.OD.app.performSearch();
+  assert.equal(hits.length, 0);
+  assert.match(elements.get("searchResults").innerHTML, /没搜到/);
 });

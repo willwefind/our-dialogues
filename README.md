@@ -30,6 +30,7 @@ Currently included:
 - Multiple reading bookmarks anchored to `sourceId + conversationId + messageId`, with jump, rename, delete, and persistence alongside reader settings
 - Highlights and notes in five highlighter colors, anchored to `messageId + selectedText + surrounding context` (never DOM offsets), with click-to-edit, jump, delete, and persistence
 - Per-conversation reading progress: every conversation resumes at its own last position, a recency-capped 最近阅读 panel lists what you were reading with 读到 n% / 已读完 labels, and the conversation list carries the same progress marks
+- Message-level full-text search with current-conversation and whole-library scopes: every occurrence is its own hit with context, and clicking a hit jumps exactly to its `messageId` with a flash
 - Dedicated conservative Mufy title resolver with provenance and duplicate display disambiguation
 - Safe Mufy rich-block rendering for common status cards, details, rows, notes, and progress bars
 - Strict adapter capabilities and metadata-only diagnostics for unknown JSON/ZIP inputs

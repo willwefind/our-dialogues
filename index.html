@@ -59,7 +59,7 @@
     </header>
 
     <div class="search-wrap">
-      <input id="search" type="search" placeholder="搜索标题或正文…">
+      <input id="search" type="search" placeholder="筛选目录（标题或正文）…" aria-label="筛选目录" title="边输入边收窄左侧目录；想精确找到某句话并跳过去，用下方的「🔍 全文搜索」">
     </div>
 
     <div class="source-tools">
@@ -87,6 +87,15 @@
     <details id="annotationsPanel" class="bookmarks-panel">
       <summary>🖍 划线与小注 <span id="annotationsCount" class="bookmarks-count"></span></summary>
       <div id="annotationsList" class="bookmarks-list"></div>
+    </details>
+    <details id="searchPanel" class="bookmarks-panel">
+      <summary>🔍 全文搜索 <span id="searchHitCount" class="bookmarks-count"></span></summary>
+      <div class="search-scope" role="group" aria-label="搜索范围">
+        <button id="searchScopeCurrent" type="button">当前对话</button>
+        <button id="searchScopeLibrary" type="button">全部书库</button>
+      </div>
+      <input id="searchQuery" type="search" placeholder="搜关键词，回车" aria-label="全文搜索关键词">
+      <div id="searchResults" class="bookmarks-list"></div>
     </details>
     <nav id="conversationList" class="conversation-list"></nav>
   </aside>
@@ -181,6 +190,7 @@
   <script src="src/core/bookmarks.js"></script>
   <script src="src/core/annotations.js"></script>
   <script src="src/core/reading-progress.js"></script>
+  <script src="src/core/message-search.js"></script>
   <script src="src/core/zip.js"></script>
   <script src="src/core/chatgpt-export-folder.js"></script>
   <script src="src/core/solvoice-sidecar.js"></script>
