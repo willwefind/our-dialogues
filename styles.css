@@ -36,8 +36,31 @@ button,input,select{font:inherit}
 .solvoice-clips{display:flex;flex-direction:column;gap:8px;margin-top:14px}.solvoice-player{margin:0;border:1px solid var(--line);border-radius:9px;background:var(--paper);overflow:hidden;font:11px/1.4 ui-sans-serif,system-ui,sans-serif}.solvoice-caption{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:7px 10px;color:var(--accent);font-weight:600}.solvoice-caption small{color:var(--muted);font-size:9px;font-weight:400}.solvoice-viewport{display:grid;place-items:center;min-height:58px;border-top:1px solid var(--line);background:rgba(127,127,127,.04)}.solvoice-viewport audio{display:block;width:calc(100% - 20px);margin:9px}.solvoice-loading{padding:17px;color:var(--muted);font-size:10px}.solvoice-player.is-unavailable{opacity:.7}
 body:not(.show-thinking) .message.reasoning-only{display:none}
 .page-navigation{display:flex;align-items:center;gap:10px;margin-top:50px;padding-top:20px;border-top:1px solid var(--line);font:12px/1.4 ui-sans-serif,system-ui,sans-serif;color:var(--muted)}.page-navigation button{flex:1;padding:10px;border:1px solid var(--line);border-radius:9px;background:var(--paper);color:var(--ink);cursor:pointer}.page-navigation button:disabled{opacity:.4;cursor:default}.page-navigation label{white-space:nowrap}.page-navigation input{width:4em;padding:3px;border:1px solid var(--line);border-radius:6px;background:transparent;color:var(--ink);text-align:center}.scroll-jumpers{position:fixed;right:16px;bottom:16px;z-index:20;display:flex;gap:6px}.scroll-jumpers button{width:38px;height:38px;border:1px solid var(--line);border-radius:10px;background:var(--panel);color:var(--ink);cursor:pointer}body:not(.has-library) .scroll-jumpers{display:none}
-@media (max-width:980px){.reader-preferences select{max-width:92px}.toolbar{gap:7px}}
-@media (max-width:760px){#sidebar{position:fixed;z-index:50;box-shadow:10px 0 30px rgba(0,0,0,.12)}.toolbar>label{display:none}.reader-preferences{order:3;width:100%;overflow-x:auto}.reader{padding:42px 20px 100px}.attachment-card{grid-template-columns:auto minmax(0,1fr)}.attachment-action{grid-column:2}.attachment-caption{align-items:flex-start;flex-direction:column;gap:2px}.attachment-caption small{text-align:left;white-space:normal}.scroll-jumpers{right:10px;bottom:10px}}
+@media (max-width:980px){.toolbar{gap:7px}}
+/* ── Phone layout: the sidebar becomes a drawer over the text, the toolbar
+   stays one thumb-height row, and nothing ever forces sideways page scroll. ── */
+.sidebar-backdrop{position:fixed;inset:0;z-index:45;background:rgba(0,0,0,.35)}
+@media (max-width:760px){
+  #sidebar{position:fixed;inset:0 auto 0 0;z-index:50;width:min(86vw,340px);margin-left:0;
+    box-shadow:10px 0 30px rgba(0,0,0,.2);transition:transform .25s ease}
+  #sidebar.closed{margin-left:0;transform:translateX(-105%)}
+  .toolbar{gap:6px;padding:8px 10px;min-height:48px;flex-wrap:nowrap}
+  .current-title{min-width:0;font-size:12px}
+  .ghost{padding:7px 9px}
+  .reader-prefs-panel{width:min(92vw,270px);right:10px;top:54px;max-height:calc(100vh - 70px);overflow-y:auto}
+  .reader{padding:38px 16px 100px}
+  .welcome{padding:18px}.welcome-card{padding:26px 20px}.welcome-card h2{font-size:20px}
+  .tool-tabs button{padding:9px 3px}
+  .conv{padding:12px 11px}
+  .bookmark,.search-hit{padding:10px 9px}
+  .page-navigation button{padding:12px 8px}
+  .attachment-card{grid-template-columns:auto minmax(0,1fr)}
+  .attachment-action{grid-column:2}
+  .attachment-caption{align-items:flex-start;flex-direction:column;gap:2px}
+  .attachment-caption small{text-align:left;white-space:normal}
+  .scroll-jumpers{right:10px;bottom:10px}
+  .scroll-jumpers button{width:42px;height:42px}
+}
 
 /* ── Bookmarks ── */
 .bookmarks-panel{flex:none;margin:0 14px 6px;border:1px solid var(--line);border-radius:9px;background:var(--paper)}
@@ -151,3 +174,6 @@ mark.annotation.annotation-flash{animation:bookmark-flash 1.4s ease 2}
 
 /* ── Search source selector ── */
 #searchSource{display:block;width:calc(100% - 16px);margin:0 8px 7px;background:var(--paper);color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:5px 8px;font-size:11.5px}
+.pref-row-toggle{border-top:1px solid var(--line);padding-top:9px}
+.pref-row-toggle+.pref-row-toggle{border-top:0;padding-top:0}
+.pref-row-toggle label{display:flex;align-items:center;gap:7px;color:var(--ink);font-size:12px;cursor:pointer}

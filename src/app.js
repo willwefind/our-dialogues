@@ -1337,6 +1337,7 @@ window.OD = window.OD || {};
     prepareLazySolVoice(renderedSolVoice);
     renderList();
     renderPageNavigation();
+    closeSidebarOnNarrow();
     if (resumed && switching) setStatus("回到上次读到的地方。");
     void saveReaderState();
   }
@@ -1910,7 +1911,39 @@ window.OD = window.OD || {};
   }
   $("toTop").addEventListener("click", () => scrollMain("top"));
   $("toEnd").addEventListener("click", () => scrollMain("end"));
-  $("sidebarToggle").addEventListener("click", () => $("sidebar").classList.toggle("closed"));
+  function isNarrowScreen() {
+    return window.matchMedia?.("(max-width: 760px)")?.matches === true;
+  }
+
+  function syncSidebarBackdrop() {
+    const backdrop = $("sidebarBackdrop");
+    if (!backdrop) return;
+    backdrop.hidden = !isNarrowScreen() || $("sidebar").classList.contains("closed");
+  }
+
+  function closeSidebarOnNarrow() {
+    if (!isNarrowScreen()) return;
+    $("sidebar").classList.add("closed");
+    syncSidebarBackdrop();
+  }
+
+  $("sidebarToggle").addEventListener("click", () => {
+    $("sidebar").classList.toggle("closed");
+    syncSidebarBackdrop();
+  });
+  $("sidebarBackdrop")?.addEventListener?.("click", () => {
+    $("sidebar").classList.add("closed");
+    syncSidebarBackdrop();
+  });
+  // A phone starts with the drawer closed and reads full-width; the file
+  // pickers stay one tap away behind ☰. The hint steers around the mobile
+  // folder-picker trap the standalone Mufy reader already ran into.
+  if (isNarrowScreen()) {
+    $("sidebar").classList.add("closed");
+    const hint = $("mobileHint");
+    if (hint) hint.hidden = false;
+  }
+  syncSidebarBackdrop();
   $("bookmarkAdd").addEventListener("click", () => addBookmark());
   $("toolTabRecent").addEventListener("click", () => setToolTab("recent"));
   $("toolTabBookmarks").addEventListener("click", () => setToolTab("bookmarks"));

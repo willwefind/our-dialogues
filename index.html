@@ -106,15 +106,14 @@
     </div>
     <nav id="conversationList" class="conversation-list"></nav>
   </aside>
+  <div id="sidebarBackdrop" class="sidebar-backdrop" hidden></div>
 
   <main id="main">
     <div class="toolbar">
       <button id="sidebarToggle" class="ghost" title="显示/隐藏侧栏">☰</button>
       <div id="currentTitle" class="current-title">尚未载入档案</div>
-      <button id="readerPrefsToggle" class="ghost" type="button" title="阅读设置：字号、行距、宽度、字体、翻页方式、主题" aria-haspopup="true">Aa</button>
+      <button id="readerPrefsToggle" class="ghost" type="button" title="阅读设置：字号、行距、宽度、字体、翻页方式、主题、显示开关" aria-haspopup="true">Aa</button>
       <button id="bookmarkAdd" class="ghost" type="button" title="把当前读到的位置存为书签；同一位置再存会刷新它">🔖 存书签</button>
-      <label><input id="hideUser" type="checkbox"> 隐藏我的发言</label>
-      <label><input id="showThinking" type="checkbox"> 展开 Thinking / Trace</label>
     </div>
 
     <div id="readerPrefsPanel" class="reader-prefs-panel" hidden>
@@ -162,6 +161,8 @@
           <option value="mist">雾</option>
         </select>
       </div>
+      <div class="pref-row pref-row-toggle"><label><input id="hideUser" type="checkbox"> 隐藏我的发言</label></div>
+      <div class="pref-row pref-row-toggle"><label><input id="showThinking" type="checkbox"> 展开 Thinking / Trace</label></div>
     </div>
 
     <section id="welcome" class="welcome">
@@ -170,6 +171,7 @@
         <h2>I knew the conversation existed.<br>I just wanted to find it again.</h2>
         <p>选择 ChatGPT 官方 Export 文件夹、包含多个 Mufy ZIP 的文件夹，或载入已有的 AI 对话 JSON / ZIP。Reader 会在本地识别并转换为统一阅读结构。</p>
         <p class="small">文件不会上传。官方导出的对话分片会自动合并，图片、音频、视频和其他附件只在滚动到附近时才从本地文件创建临时地址。</p>
+        <p class="small" id="mobileHint" hidden><b>手机上请用「选择 JSON / ZIP」一次多选文件。</b>「选择文件夹」在手机浏览器里常退化成一次只能选一个，几十个文件会点到崩溃——别走那条。</p>
       </div>
     </section>
 

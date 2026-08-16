@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Make the Reader phone-usable: on narrow screens the sidebar becomes a drawer over the text (starts closed, ☰ opens it, a backdrop tap or opening a conversation closes it), the toolbar stays one thumb-height row (显示开关 moved into the Aa popover for all screen sizes), the Aa popover fits and scrolls within the viewport, touch targets grow, and the welcome card warns that mobile folder pickers degrade — use 选择 JSON / ZIP multi-select instead, a lesson inherited from the standalone Mufy reader.
 - Make voice audio folder selection additive: choosing another folder (e.g. Ciel House audio after the VoiceArchive) merges into the session's audio pool with path+size deduplication instead of replacing it.
 - Make voice player fallback labels platform-neutral（ChatGPT 语音 / Claude 语音）so another person's archive never displays personal names; personal display names come only from a private mapping's `voiceLabel`, and the CielVoice mapping builder omits the field unless one is passed.
 - Add IndexedDB-backed persistent normalized text sources, preferences, recent conversation, and reading-position restore.
