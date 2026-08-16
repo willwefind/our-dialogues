@@ -73,7 +73,7 @@ async function loadAppRuntime(savedSortMode="asc", options={}) {
     "bookmarkAdd", "bookmarksPanel", "bookmarksList", "bookmarksCount",
     "annotationsPanel", "annotationsList", "annotationsCount", "highlightButton",
     "annotationEditor", "annotationColors", "annotationNote",
-    "annotationSave", "annotationCancel", "annotationDelete"
+    "annotationSave", "annotationCancel", "annotationDelete", "importPanel"
   ];
   const elements = new Map(ids.map(id => [id, fakeElement(id)]));
   const sortAscending = fakeElement("sortAscending");
@@ -667,4 +667,29 @@ test("an annotation whose source was removed stays listed but refuses to jump", 
   assert.equal(runtime.OD.app.getState().annotations.length, 1, "the annotation itself is not deleted");
   assert.match(elements.get("annotationsList").innerHTML, /来源不在书库中/);
   assert.equal(runtime.OD.app.jumpToAnnotation(annotation.id), false);
+});
+
+test("the import section opens on an empty library, folds after import, and a manual choice wins", async () => {
+  const { runtime, elements, stored } = await loadAppRuntime("asc");
+  const panel = elements.get("importPanel");
+  assert.equal(panel.open, true, "an empty library keeps the import buttons visible");
+
+  runtime.OD.app.loadArchive({
+    conversations: [{
+      id: "only",
+      title: "唯一的一段",
+      createdAt: "2025-01-01T00:00:00.000Z",
+      messages: [{ id: "only-1", role: "assistant", content: "正文" }]
+    }]
+  }, "Synthetic");
+  assert.equal(panel.open, false, "the import section folds away once a library exists");
+
+  panel.open = true;
+  panel.dispatch("toggle");
+  const mirror = JSON.parse(stored.get("our-dialogues.reader-state.v1"));
+  assert.equal(mirror.importOpen, true, "a manual toggle persists as the user's choice");
+
+  const sourceId = runtime.OD.app.getState().sources[0].id;
+  runtime.OD.app.removeSource(sourceId);
+  assert.equal(panel.open, true, "the recorded choice wins over the empty-library default");
 });

@@ -36,6 +36,7 @@ window.OD = window.OD || {};
     editingBookmarkId: null,
     annotations: [],
     annotationColor: "yellow",
+    importOpen: null,
     booted: false
   };
 
@@ -143,6 +144,7 @@ window.OD = window.OD || {};
       bookmarks: state.bookmarks.map(bookmark => ({ ...bookmark })),
       annotations: state.annotations.map(annotation => ({ ...annotation })),
       annotationColor: state.annotationColor,
+      importOpen: state.importOpen,
       updatedAt: new Date().toISOString()
     };
   }
@@ -617,9 +619,25 @@ window.OD = window.OD || {};
     });
   }
 
+  /* The import section stays open while the library is empty (a first run
+     needs those buttons front and center) and folds away once sources exist —
+     unless the user has toggled it, which wins and persists. Programmatic
+     toggles are consumed by the listener so they are never recorded as the
+     user's choice (the toggle event fires asynchronously). */
+  let pendingImportSync = null;
+  function syncImportPanel() {
+    const panel = $("importPanel");
+    if (!panel) return;
+    const shouldOpen = state.importOpen === null ? state.library.size === 0 : state.importOpen;
+    if (panel.open === shouldOpen) return;
+    pendingImportSync = shouldOpen;
+    panel.open = shouldOpen;
+  }
+
   function renderSourceControls() {
     const sources = state.library.sources();
     document.body.classList.toggle("has-library", sources.length > 0);
+    syncImportPanel();
     const selected = sources.some(source => source.id === state.sourceFilter) ? state.sourceFilter : "all";
     state.sourceFilter = selected;
     $("sourceFilter").innerHTML = [
@@ -1429,6 +1447,7 @@ window.OD = window.OD || {};
     if (Array.isArray(settings.bookmarks)) state.bookmarks = OD.bookmarks.normalize(settings.bookmarks);
     if (Array.isArray(settings.annotations)) state.annotations = OD.annotations.normalize(settings.annotations);
     if (typeof settings.annotationColor === "string") state.annotationColor = OD.annotations.normalizeColor(settings.annotationColor);
+    if (typeof settings.importOpen === "boolean") state.importOpen = settings.importOpen;
   }
 
   async function bootPersistentLibrary() {
@@ -1632,6 +1651,16 @@ window.OD = window.OD || {};
   $("toEnd").addEventListener("click", () => scrollMain("end"));
   $("sidebarToggle").addEventListener("click", () => $("sidebar").classList.toggle("closed"));
   $("bookmarkAdd").addEventListener("click", () => addBookmark());
+  $("importPanel").addEventListener("toggle", () => {
+    const panel = $("importPanel");
+    if (pendingImportSync !== null && panel.open === pendingImportSync) {
+      pendingImportSync = null;
+      return;
+    }
+    pendingImportSync = null;
+    state.importOpen = panel.open;
+    void saveReaderState();
+  });
 
   /* ── Highlight selection capture and editor (real-browser path) ──
      The anchor is computed against the raw part text via the selection's

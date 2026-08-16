@@ -14,38 +14,40 @@
       <h1>Our Dialogues</h1>
       <p>把曾经说过的话，重新翻出来。</p>
 
-      <div class="import-picks">
-        <div class="import-title">添加来源</div>
-        <button id="directoryPicker" class="pick pick-folder directory-picker" type="button" hidden>
-          <span>添加来源文件夹</span>
-          <small>推荐 · 可在浏览器允许时记住文件夹权限</small>
-        </button>
-        <label class="pick pick-folder">
-          <input id="folderInput" type="file" webkitdirectory directory multiple hidden>
-          <span>选择来源文件夹（兼容添加）</span>
-          <small>ChatGPT 官方 Export · 多个 Mufy ZIP</small>
-        </label>
+      <details id="importPanel" class="import-panel" open>
+        <summary>添加来源</summary>
+        <div class="import-picks">
+          <button id="directoryPicker" class="pick pick-folder directory-picker" type="button" hidden>
+            <span>添加来源文件夹</span>
+            <small>推荐 · 可在浏览器允许时记住文件夹权限</small>
+          </button>
+          <label class="pick pick-folder">
+            <input id="folderInput" type="file" webkitdirectory directory multiple hidden>
+            <span>选择来源文件夹（兼容添加）</span>
+            <small>ChatGPT 官方 Export · 多个 Mufy ZIP</small>
+          </label>
 
-        <div class="pick-divider"><span>或</span></div>
+          <div class="pick-divider"><span>或</span></div>
 
-        <label class="pick pick-secondary">
-          <input id="fileInput" type="file" accept=".json,.zip,application/json,application/zip" multiple hidden>
-          <span>选择 JSON / ZIP</span>
-        </label>
-      </div>
+          <label class="pick pick-secondary">
+            <input id="fileInput" type="file" accept=".json,.zip,application/json,application/zip" multiple hidden>
+            <span>选择 JSON / ZIP</span>
+          </label>
+        </div>
 
-      <div class="sidecar-picks" aria-label="Optional local SolVoice sidecar">
-        <div class="sidecar-title">Optional SolVoice sidecar</div>
-        <label class="sidecar-pick">
-          <input id="voiceArchiveInput" type="file" webkitdirectory directory multiple hidden>
-          <span>Choose VoiceArchive / sol/audio folder</span>
-        </label>
-        <label class="sidecar-pick">
-          <input id="voiceMappingInput" type="file" accept=".json,application/json" hidden>
-          <span>Choose mapping JSON</span>
-        </label>
-        <button id="clearSolVoice" class="sidecar-clear" type="button">Clear SolVoice</button>
-      </div>
+        <div class="sidecar-picks" aria-label="Optional local SolVoice sidecar">
+          <div class="sidecar-title">Optional SolVoice sidecar</div>
+          <label class="sidecar-pick">
+            <input id="voiceArchiveInput" type="file" webkitdirectory directory multiple hidden>
+            <span>Choose VoiceArchive / sol/audio folder</span>
+          </label>
+          <label class="sidecar-pick">
+            <input id="voiceMappingInput" type="file" accept=".json,application/json" hidden>
+            <span>Choose mapping JSON</span>
+          </label>
+          <button id="clearSolVoice" class="sidecar-clear" type="button">Clear SolVoice</button>
+        </div>
+      </details>
 
       <div id="status" class="status" role="status" aria-live="polite">文件只在本机浏览器中解析。</div>
       <output id="acceptanceAudit" hidden aria-hidden="true"></output>

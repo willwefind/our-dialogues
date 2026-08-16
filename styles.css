@@ -104,3 +104,10 @@ mark.annotation.annotation-flash{animation:bookmark-flash 1.4s ease 2}
 ::-webkit-scrollbar-thumb{background:var(--line);border-radius:9px}
 ::-webkit-scrollbar-thumb:hover{background:var(--muted)}
 ::-webkit-scrollbar-track{background:transparent}
+
+/* ── Collapsible import section ── */
+.import-panel>summary{display:flex;align-items:center;gap:7px;cursor:pointer;list-style:none;padding:5px 0;font:600 10px/1.2 ui-sans-serif,system-ui,sans-serif;color:var(--muted);letter-spacing:.06em}
+.import-panel>summary::-webkit-details-marker{display:none}
+.import-panel>summary::before{content:"›";flex:none;color:var(--muted);transform:rotate(90deg);transition:transform .15s}
+.import-panel:not([open])>summary::before{transform:none}
+.import-panel>summary:hover{color:var(--ink)}
