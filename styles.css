@@ -40,7 +40,11 @@ body:not(.show-thinking) .message.reasoning-only{display:none}
 /* ── Phone layout: the sidebar becomes a drawer over the text, the toolbar
    stays one thumb-height row, and nothing ever forces sideways page scroll. ── */
 .sidebar-backdrop{position:fixed;inset:0;z-index:45;background:rgba(0,0,0,.35)}
+.sidebar-close{display:none}
 @media (max-width:760px){
+  .sidebar-close{display:flex;align-items:center;justify-content:center;position:absolute;top:10px;right:10px;z-index:5;
+    width:36px;height:36px;border:1px solid var(--line);border-radius:9px;background:var(--paper);color:var(--muted);cursor:pointer;font-size:14px}
+  .sidebar-close:hover{color:var(--ink);border-color:var(--accent)}
   #sidebar{position:fixed;inset:0 auto 0 0;z-index:50;width:min(86vw,340px);margin-left:0;
     box-shadow:10px 0 30px rgba(0,0,0,.2);transition:transform .25s ease}
   #sidebar.closed{margin-left:0;transform:translateX(-105%)}

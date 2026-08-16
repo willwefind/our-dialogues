@@ -78,7 +78,7 @@ async function loadAppRuntime(savedSortMode="asc", options={}) {
     "searchHitCount", "searchScopeCurrent", "searchScopeLibrary", "searchSource", "searchQuery", "searchResults",
     "toolTabRecent", "toolTabBookmarks", "toolTabAnnotations", "toolTabSearch",
     "toolPanels", "recentPane", "bookmarksPane", "annotationsPane", "searchPane",
-    "readerPrefsToggle", "readerPrefsPanel"
+    "readerPrefsToggle", "readerPrefsPanel", "sidebarClose", "sidebarBackdrop", "mobileHint"
   ];
   const elements = new Map(ids.map(id => [id, fakeElement(id)]));
   const sortAscending = fakeElement("sortAscending");
@@ -116,6 +116,7 @@ async function loadAppRuntime(savedSortMode="asc", options={}) {
   };
   runtime.window = runtime;
   runtime.addEventListener = () => {};
+  if (options.matchMedia) runtime.matchMedia = options.matchMedia;
   runtime.OD = {
     schema: {
       textOf(content) { return typeof content === "string" ? content : ""; }
@@ -952,4 +953,35 @@ test("choosing another voice audio folder adds to the pool instead of replacing 
 
   runtime.OD.app.clearSolVoice();
   assert.equal(runtime.OD.app.getState().voiceAudioFileCount, 0);
+});
+
+test("crossing the narrow breakpoint never strands the drawer without a way out", async () => {
+  const mediaListeners = [];
+  const mediaQuery = {
+    matches: false,
+    addEventListener(type, listener) { if (type === "change") mediaListeners.push(listener); }
+  };
+  const { elements } = await loadAppRuntime("asc", { matchMedia: () => mediaQuery });
+  const sidebar = elements.get("sidebar");
+  const backdrop = elements.get("sidebarBackdrop");
+
+  assert.equal(sidebar.classList.contains("closed"), false, "desktop starts with the sidebar open");
+
+  mediaQuery.matches = true;
+  mediaListeners.forEach(listener => listener({ matches: true }));
+  assert.equal(sidebar.classList.contains("closed"), true, "entering narrow closes the drawer");
+  assert.equal(backdrop.hidden, true);
+
+  elements.get("sidebarToggle").click();
+  assert.equal(sidebar.classList.contains("closed"), false);
+  assert.equal(backdrop.hidden, false, "an open drawer on narrow always shows its backdrop");
+
+  elements.get("sidebarClose").click();
+  assert.equal(sidebar.classList.contains("closed"), true, "the in-drawer ✕ closes it");
+  assert.equal(backdrop.hidden, true);
+
+  elements.get("sidebarToggle").click();
+  mediaQuery.matches = false;
+  mediaListeners.forEach(listener => listener({ matches: false }));
+  assert.equal(backdrop.hidden, true, "leaving narrow retires the backdrop");
 });

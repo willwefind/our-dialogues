@@ -1935,6 +1935,23 @@ window.OD = window.OD || {};
     $("sidebar").classList.add("closed");
     syncSidebarBackdrop();
   });
+  $("sidebarClose")?.addEventListener?.("click", () => {
+    $("sidebar").classList.add("closed");
+    syncSidebarBackdrop();
+  });
+  // Crossing the width breakpoint mid-session must never strand the drawer:
+  // entering narrow closes it (☰ would be buried underneath), and leaving
+  // narrow retires the backdrop. Both matchMedia change and window resize
+  // are watched — some environments only deliver one of them.
+  let wasNarrowScreen = isNarrowScreen();
+  const onViewportChange = () => {
+    const narrow = isNarrowScreen();
+    if (narrow && !wasNarrowScreen) $("sidebar").classList.add("closed");
+    wasNarrowScreen = narrow;
+    syncSidebarBackdrop();
+  };
+  window.matchMedia?.("(max-width: 760px)")?.addEventListener?.("change", onViewportChange);
+  addEventListener("resize", onViewportChange);
   // A phone starts with the drawer closed and reads full-width; the file
   // pickers stay one tap away behind ☰. The hint steers around the mobile
   // folder-picker trap the standalone Mufy reader already ran into.
