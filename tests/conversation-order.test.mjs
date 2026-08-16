@@ -69,7 +69,8 @@ async function loadAppRuntime(savedSortMode="asc", options={}) {
     "directoryPicker", "localLibraryStatus", "clearLocalLibrary", "acceptanceAudit", "runAcceptanceAudit",
     "fontSmaller", "fontLarger", "lineHeight", "contentWidth", "fontFamily",
     "readingMode", "pageLength", "pageNavigation", "previousPage", "nextPage",
-    "pageIndicator", "pageJump", "pageCount", "scrollJumpers", "toTop", "toEnd"
+    "pageIndicator", "pageJump", "pageCount", "scrollJumpers", "toTop", "toEnd",
+    "bookmarkAdd", "bookmarksPanel", "bookmarksList", "bookmarksCount"
   ];
   const elements = new Map(ids.map(id => [id, fakeElement(id)]));
   const sortAscending = fakeElement("sortAscending");
@@ -118,7 +119,8 @@ async function loadAppRuntime(savedSortMode="asc", options={}) {
     "src/core/conversation-order.js",
     "src/core/source-library.js",
     "src/core/reader-parity.js",
-    "src/core/mufy-title-resolver.js"
+    "src/core/mufy-title-resolver.js",
+    "src/core/bookmarks.js"
   ];
   if (options.driver) runtimeFiles.push("src/core/persistent-library.js");
   for (const relativePath of runtimeFiles) {
@@ -510,4 +512,80 @@ test("sidebar exposes exactly two clearly labelled conversation sort modes", asy
   ]);
   assert.match(html, /正序：最早到最新/);
   assert.match(html, /倒序：最新到最早/);
+});
+
+test("bookmarks anchor by conversation and message, persist, jump, rename, and remove", async () => {
+  const { runtime, elements, stored } = await loadAppRuntime("asc");
+  const archive = {
+    conversations: [
+      {
+        id: "alpha",
+        title: "第一段",
+        createdAt: "2025-01-01T00:00:00.000Z",
+        messages: [
+          { id: "alpha-1", role: "assistant", content: "开头的一句话" },
+          { id: "alpha-2", role: "user", content: "后面的一句话" }
+        ]
+      },
+      {
+        id: "beta",
+        title: "第二段",
+        createdAt: "2026-01-01T00:00:00.000Z",
+        messages: [{ id: "beta-1", role: "assistant", content: "另一段的话" }]
+      }
+    ]
+  };
+
+  assert.equal(runtime.OD.app.addBookmark(), null, "no bookmark without an open conversation");
+
+  runtime.OD.app.loadArchive(archive, "Synthetic");
+  runtime.OD.app.openConversation("alpha");
+  const bookmark = runtime.OD.app.addBookmark();
+  assert.equal(bookmark.conversationId, "alpha");
+  assert.equal(bookmark.messageId, "alpha-1", "anchors to the visible message, not an index");
+  assert.equal(bookmark.conversationTitle, "第一段");
+  assert.equal(bookmark.snippet, "开头的一句话");
+  assert.equal(runtime.OD.app.getState().bookmarks.length, 1);
+
+  runtime.OD.app.addBookmark();
+  assert.equal(runtime.OD.app.getState().bookmarks.length, 1, "same anchor refreshes instead of duplicating");
+
+  const mirror = JSON.parse(stored.get("our-dialogues.reader-state.v1"));
+  assert.equal(mirror.bookmarks.length, 1, "bookmarks persist with reader settings");
+  assert.equal(mirror.bookmarks[0].conversationId, "alpha");
+
+  runtime.OD.app.openConversation("beta");
+  assert.equal(runtime.OD.app.getState().current.id, "beta");
+  const activeBookmark = runtime.OD.app.getState().bookmarks[0];
+  assert.equal(runtime.OD.app.jumpToBookmark(activeBookmark.id), true);
+  assert.equal(runtime.OD.app.getState().current.id, "alpha", "jump reopens the bookmarked conversation");
+
+  runtime.OD.app.renameBookmark(activeBookmark.id, "  重要的一页  ");
+  assert.equal(runtime.OD.app.getState().bookmarks[0].label, "重要的一页");
+  assert.match(elements.get("bookmarksList").innerHTML, /重要的一页/);
+  assert.equal(elements.get("bookmarksCount").textContent, "1");
+
+  runtime.OD.app.removeBookmark(activeBookmark.id);
+  assert.equal(runtime.OD.app.getState().bookmarks.length, 0);
+  assert.match(elements.get("bookmarksList").innerHTML, /存书签/, "empty state invites saving a bookmark");
+});
+
+test("a bookmark whose source was removed stays listed but refuses to jump", async () => {
+  const { runtime, elements } = await loadAppRuntime("asc");
+  runtime.OD.app.loadArchive({
+    conversations: [{
+      id: "gone",
+      title: "会被移除的一段",
+      createdAt: "2025-01-01T00:00:00.000Z",
+      messages: [{ id: "gone-1", role: "assistant", content: "正文" }]
+    }]
+  }, "Removable");
+  runtime.OD.app.openConversation("gone");
+  const bookmark = runtime.OD.app.addBookmark();
+
+  const sourceId = runtime.OD.app.getState().sources[0].id;
+  runtime.OD.app.removeSource(sourceId);
+  assert.equal(runtime.OD.app.getState().bookmarks.length, 1, "the bookmark itself is not deleted");
+  assert.match(elements.get("bookmarksList").innerHTML, /来源不在书库中/);
+  assert.equal(runtime.OD.app.jumpToBookmark(bookmark.id), false, "jump refuses instead of opening nothing");
 });

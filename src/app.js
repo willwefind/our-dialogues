@@ -32,6 +32,8 @@ window.OD = window.OD || {};
     titleLabels: new Map(),
     groupState: { sources: {}, characters: {} },
     searchForcedOpen: false,
+    bookmarks: [],
+    editingBookmarkId: null,
     booted: false
   };
 
@@ -136,6 +138,7 @@ window.OD = window.OD || {};
         sources: { ...state.groupState.sources },
         characters: { ...state.groupState.characters }
       },
+      bookmarks: state.bookmarks.map(bookmark => ({ ...bookmark })),
       updatedAt: new Date().toISOString()
     };
   }
@@ -376,6 +379,130 @@ window.OD = window.OD || {};
     </details>`;
   }
 
+  function bookmarkSnippet(conversation, messageId) {
+    const message = (conversation.messages || []).find(item => String(item.id) === String(messageId));
+    return message ? OD.schema.textOf(message.content) : "";
+  }
+
+  function addBookmark() {
+    if (!state.current) {
+      setStatus("先打开一段对话，再存书签。", true);
+      return null;
+    }
+    const source = state.library.sourceForConversation(state.current);
+    const messageId = messageAnchor();
+    const bookmark = OD.bookmarks.create({
+      sourceId: source?.id ?? null,
+      sourceLabel: source?.label || "",
+      conversationId: state.current.id,
+      conversationTitle: displayConversationTitle(state.current),
+      messageId,
+      snippet: messageId ? bookmarkSnippet(state.current, messageId) : ""
+    });
+    state.bookmarks = OD.bookmarks.add(state.bookmarks, bookmark);
+    renderBookmarks();
+    void saveReaderState();
+    setStatus(`🔖 已存书签：${OD.bookmarks.displayTitle(bookmark)}`);
+    return bookmark;
+  }
+
+  function removeBookmark(id) {
+    state.bookmarks = OD.bookmarks.remove(state.bookmarks, id);
+    if (state.editingBookmarkId === String(id)) state.editingBookmarkId = null;
+    renderBookmarks();
+    void saveReaderState();
+  }
+
+  function renameBookmark(id, label) {
+    state.bookmarks = OD.bookmarks.rename(state.bookmarks, id, label);
+    state.editingBookmarkId = null;
+    renderBookmarks();
+    void saveReaderState();
+  }
+
+  function jumpToBookmark(id) {
+    const bookmark = state.bookmarks.find(item => item.id === String(id));
+    if (!bookmark) return false;
+    const exists = (state.archive?.conversations || []).some(item => item.id === bookmark.conversationId);
+    if (!exists) {
+      setStatus("这个书签指向的来源不在当前书库里；重新导入该来源后就能跳转。", true);
+      return false;
+    }
+    openConversation(bookmark.conversationId, { restorePosition: { messageId: bookmark.messageId } });
+    if (bookmark.messageId) {
+      const target = [...$("messages").querySelectorAll("[data-message-id]")]
+        .find(element => element?.dataset?.messageId === bookmark.messageId);
+      target?.classList?.add?.("bookmark-flash");
+    }
+    return true;
+  }
+
+  function renderBookmarks() {
+    const list = $("bookmarksList");
+    const count = $("bookmarksCount");
+    if (!list || !count) return;
+    count.textContent = state.bookmarks.length ? String(state.bookmarks.length) : "";
+    if (!state.bookmarks.length) {
+      list.innerHTML = `<div class="bookmarks-empty">读到想回来的地方，点上方「🔖 存书签」。</div>`;
+      return;
+    }
+    const available = new Set((state.archive?.conversations || []).map(conversation => conversation.id));
+    list.innerHTML = state.bookmarks.map(bookmark => {
+      const missing = !available.has(bookmark.conversationId);
+      const editing = state.editingBookmarkId === bookmark.id;
+      const title = editing
+        ? `<input class="bookmark-rename" data-bookmark-rename="${esc(bookmark.id)}" value="${esc(bookmark.label)}" placeholder="${esc(bookmark.conversationTitle)}" aria-label="书签名称">`
+        : `<div class="bookmark-title">${esc(OD.bookmarks.displayTitle(bookmark))}</div>`;
+      return `<div class="bookmark${missing ? " missing" : ""}" data-bookmark-id="${esc(bookmark.id)}">
+        <div class="bookmark-head">
+          ${title}
+          <span class="bookmark-actions">
+            <button type="button" data-bookmark-edit="${esc(bookmark.id)}" title="改名" aria-label="改名">✎</button>
+            <button type="button" data-bookmark-remove="${esc(bookmark.id)}" title="删除书签" aria-label="删除书签">✕</button>
+          </span>
+        </div>
+        ${bookmark.snippet ? `<div class="bookmark-snippet">${esc(bookmark.snippet)}</div>` : ""}
+        <div class="bookmark-meta">${esc(bookmark.sourceLabel || "")}${missing ? " ·（来源不在书库中）" : ""}${bookmark.createdAt ? ` · ${esc(fmtDate(bookmark.createdAt))}` : ""}</div>
+      </div>`;
+    }).join("");
+    [...document.querySelectorAll("#bookmarksList .bookmark")].forEach(element => {
+      element.addEventListener("click", () => jumpToBookmark(element.dataset.bookmarkId));
+    });
+    [...document.querySelectorAll("[data-bookmark-remove]")].forEach(button => {
+      button.addEventListener("click", event => {
+        event.preventDefault();
+        event.stopPropagation();
+        removeBookmark(button.dataset.bookmarkRemove);
+      });
+    });
+    [...document.querySelectorAll("[data-bookmark-edit]")].forEach(button => {
+      button.addEventListener("click", event => {
+        event.preventDefault();
+        event.stopPropagation();
+        state.editingBookmarkId = button.dataset.bookmarkEdit;
+        renderBookmarks();
+        const input = document.querySelector?.("[data-bookmark-rename]");
+        input?.focus?.();
+        input?.select?.();
+      });
+    });
+    [...document.querySelectorAll("[data-bookmark-rename]")].forEach(input => {
+      input.addEventListener("click", event => event.stopPropagation());
+      input.addEventListener("keydown", event => {
+        if (event.key === "Enter") renameBookmark(input.dataset.bookmarkRename, input.value);
+        if (event.key === "Escape") {
+          state.editingBookmarkId = null;
+          renderBookmarks();
+        }
+      });
+      input.addEventListener("blur", () => {
+        if (state.editingBookmarkId === input.dataset.bookmarkRename) {
+          renameBookmark(input.dataset.bookmarkRename, input.value);
+        }
+      });
+    });
+  }
+
   function renderSourceControls() {
     const sources = state.library.sources();
     document.body.classList.toggle("has-library", sources.length > 0);
@@ -440,6 +567,7 @@ window.OD = window.OD || {};
     });
 
     $("archiveMeta").textContent = `${state.filtered.length} / ${all.length} 段对话 · ${state.library.size} 个来源`;
+    renderBookmarks();
     return state.filtered;
   }
 
@@ -1177,6 +1305,7 @@ window.OD = window.OD || {};
         characters: { ...(groupState.characters && typeof groupState.characters === "object" ? groupState.characters : {}) }
       };
     }
+    if (Array.isArray(settings.bookmarks)) state.bookmarks = OD.bookmarks.normalize(settings.bookmarks);
   }
 
   async function bootPersistentLibrary() {
@@ -1379,6 +1508,7 @@ window.OD = window.OD || {};
   $("toTop").addEventListener("click", () => scrollMain("top"));
   $("toEnd").addEventListener("click", () => scrollMain("end"));
   $("sidebarToggle").addEventListener("click", () => $("sidebar").classList.toggle("closed"));
+  $("bookmarkAdd").addEventListener("click", () => addBookmark());
   $("main").addEventListener("scroll", () => void saveReaderState());
   document.addEventListener?.("keydown", event => {
     const target = event.target;
@@ -1410,6 +1540,10 @@ window.OD = window.OD || {};
     reconnectSource,
     chooseDirectory,
     openConversation,
+    addBookmark,
+    removeBookmark,
+    renameBookmark,
+    jumpToBookmark,
     getState: () => ({
       archive: state.archive,
       current: state.current,
@@ -1432,7 +1566,8 @@ window.OD = window.OD || {};
       readerPreferences: { ...state.readerPrefs },
       page: state.pageIndex,
       pageCount: state.pages.length,
-      readingPosition: readerSettings().readingPosition
+      readingPosition: readerSettings().readingPosition,
+      bookmarks: state.bookmarks.map(bookmark => ({ ...bookmark }))
     }),
     auditPersistentLibrary: refreshAcceptanceAudit
   };
