@@ -926,3 +926,30 @@ test("library search can target one chosen source, decoupled from the catalog fi
   assert.equal(hits.length, 1);
   assert.equal(hits[0].conversationId, "in-a");
 });
+
+test("choosing another voice audio folder adds to the pool instead of replacing it", async () => {
+  const { runtime } = await loadAppRuntime("asc");
+  const voiceFile = (relativePath) => {
+    const name = relativePath.split("/").pop();
+    const file = new runtime.File([`synthetic:${name}`], name, { type: "audio/mpeg" });
+    Object.defineProperty(file, "webkitRelativePath", { value: relativePath });
+    return file;
+  };
+
+  await runtime.OD.app.loadSolVoiceFolder([
+    voiceFile("VoiceArchive/sol/audio/sol-1.mp3"),
+    voiceFile("VoiceArchive/ciel/ciel-1.mp3")
+  ]);
+  assert.equal(runtime.OD.app.getState().voiceAudioFileCount, 2);
+
+  await runtime.OD.app.loadSolVoiceFolder([voiceFile("CielHouseAudio/house-1.mp3")]);
+  assert.equal(runtime.OD.app.getState().voiceAudioFileCount, 3,
+    "the House folder joins the pool without wiping the VoiceArchive");
+
+  await runtime.OD.app.loadSolVoiceFolder([voiceFile("VoiceArchive/ciel/ciel-1.mp3")]);
+  assert.equal(runtime.OD.app.getState().voiceAudioFileCount, 3,
+    "re-picking the same path refreshes instead of duplicating");
+
+  runtime.OD.app.clearSolVoice();
+  assert.equal(runtime.OD.app.getState().voiceAudioFileCount, 0);
+});

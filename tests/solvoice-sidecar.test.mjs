@@ -315,5 +315,5 @@ test("clips carry a voice label: private document override wins, tool name is th
     mappingDocument: base,
     audioFiles: audio
   });
-  assert.equal(fallback.clipsForMessage("m1")[0].voiceLabel, "CielVoice", "the tool name is the neutral fallback");
+  assert.equal(fallback.clipsForMessage("m1")[0].voiceLabel, "Claude 语音", "the fallback is platform-neutral, never a personal name");
 });

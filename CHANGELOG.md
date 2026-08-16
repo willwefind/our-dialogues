@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Make voice audio folder selection additive: choosing another folder (e.g. Ciel House audio after the VoiceArchive) merges into the session's audio pool with path+size deduplication instead of replacing it.
+- Make voice player fallback labels platform-neutral（ChatGPT 语音 / Claude 语音）so another person's archive never displays personal names; personal display names come only from a private mapping's `voiceLabel`, and the CielVoice mapping builder omits the field unless one is passed.
 - Add IndexedDB-backed persistent normalized text sources, preferences, recent conversation, and reading-position restore.
 - Keep binary attachments and SolVoice audio out of persistence, with source-specific reconnect prompts and optional persistent directory handles.
 - Add safe Mufy `source-rich-block` parsing and Reader-owned status-card, details, row, note, and progress rendering.

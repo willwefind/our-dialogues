@@ -15,11 +15,12 @@ window.OD = window.OD || {};
   const MAPPING_FILE_NAME = "chatgpt-solvoice.json";
   /* One sidecar mechanism, several voice mappings. Each mapping format binds
      to exactly one source platform so clips can never attach across sources. */
-  /* defaultVoiceLabel names the capture tool, not a person; a private mapping
-     file may override it with `voiceLabel` for a personal display name. */
+  /* The default player label is platform-neutral so another person's archive
+     never displays our names; a private mapping file may set `voiceLabel`
+     for a personal display name that stays on that user's machine. */
   const MAPPING_KINDS = Object.freeze({
-    [FORMAT]: Object.freeze({ version: VERSION, platform: "chatgpt", fileName: MAPPING_FILE_NAME, defaultVoiceLabel: "SolVoice" }),
-    "our-dialogues.cielvoice-claude-mapping": Object.freeze({ version: 1, platform: "claude", fileName: "claude-cielvoice.json", defaultVoiceLabel: "CielVoice" })
+    [FORMAT]: Object.freeze({ version: VERSION, platform: "chatgpt", fileName: MAPPING_FILE_NAME, defaultVoiceLabel: "ChatGPT 语音" }),
+    "our-dialogues.cielvoice-claude-mapping": Object.freeze({ version: 1, platform: "claude", fileName: "claude-cielvoice.json", defaultVoiceLabel: "Claude 语音" })
   });
 
   function normalizePath(value) {

@@ -1403,6 +1403,16 @@ window.OD = window.OD || {};
     return state.solVoiceSession;
   }
 
+  /* Voice folders are additive: choosing the House audio after the
+     VoiceArchive must never wipe the Sol/Ciel files already selected.
+     The same path re-picked simply refreshes to the newer File. */
+  function mergeVoiceAudioFiles(existing, incoming) {
+    const keyOf = file => `${OD.solVoiceSidecar.normalizePath(file.webkitRelativePath || file.name).toLowerCase()}|${file.size}`;
+    const merged = new Map((existing || []).map(file => [keyOf(file), file]));
+    for (const file of incoming || []) merged.set(keyOf(file), file);
+    return [...merged.values()];
+  }
+
   function upsertVoiceMapping(document) {
     const existing = Array.isArray(state.solVoiceMapping) ? state.solVoiceMapping : [];
     state.solVoiceMapping = [
@@ -1428,9 +1438,12 @@ window.OD = window.OD || {};
         console.warn("Skipped an unrecognized voice mapping file", error);
       }
     }
-    state.solVoiceAudioFiles = selected.filter(file =>
-      /\.(?:mp3|m4a|aac|wav|ogg|oga|flac|opus)$/i.test(
-        OD.solVoiceSidecar.normalizePath(file.webkitRelativePath || file.name)
+    state.solVoiceAudioFiles = mergeVoiceAudioFiles(
+      state.solVoiceAudioFiles,
+      selected.filter(file =>
+        /\.(?:mp3|m4a|aac|wav|ogg|oga|flac|opus)$/i.test(
+          OD.solVoiceSidecar.normalizePath(file.webkitRelativePath || file.name)
+        )
       )
     );
     const session = rebuildSolVoiceSession();
@@ -2139,6 +2152,7 @@ window.OD = window.OD || {};
       hasLocalAssets: !!state.assetSession,
       hasSolVoice: !!state.solVoiceSession,
       solVoiceStats: state.solVoiceSession?.stats || null,
+      voiceAudioFileCount: state.solVoiceAudioFiles.length,
       filteredCount: state.filtered.length,
       filteredIds: state.filtered.map(conversation => conversation.id),
       lastSavedAt: state.lastSavedAt,

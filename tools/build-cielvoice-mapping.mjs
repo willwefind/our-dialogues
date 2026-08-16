@@ -23,7 +23,8 @@ if (!conversationsPath || !voiceArchivePath) {
   process.exit(1);
 }
 // The display label stays inside the private mapping file, never in the repo.
-const voiceLabel = (voiceLabelArg || "CielVoice").trim();
+// Without one, the Reader falls back to a neutral platform label.
+const voiceLabel = (voiceLabelArg || "").trim() || null;
 
 const normalizeText = value => String(value ?? "").replace(/\s+/g, " ").trim();
 
@@ -83,7 +84,7 @@ for (const [text, calls] of speakCallsByText) {
 const document = {
   format: "our-dialogues.cielvoice-claude-mapping",
   version: 1,
-  voiceLabel,
+  ...(voiceLabel ? { voiceLabel } : {}),
   generatedAt: new Date().toISOString(),
   source: "build-cielvoice-mapping",
   matching: "exact-whitespace-normalized-text",
