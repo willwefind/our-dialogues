@@ -133,3 +133,18 @@ mark.annotation.annotation-flash{animation:bookmark-flash 1.4s ease 2}
 .search-hit:hover{background:var(--user)}
 .search-snippet{margin-top:3px;font-size:11.5px;line-height:1.6;color:var(--muted);word-break:break-word}
 .search-snippet b{color:var(--accent);font-weight:600}
+
+/* ── Sidebar tool tabs (one row, one pane at a time) ── */
+.tool-tabs{display:flex;gap:4px;margin:0 14px 6px}
+.tool-tabs button{flex:1;min-width:0;display:flex;align-items:center;justify-content:center;gap:3px;border:1px solid var(--line);border-radius:8px;background:var(--paper);color:var(--muted);padding:6px 3px;cursor:pointer;font:11px/1.2 ui-sans-serif,system-ui,sans-serif;white-space:nowrap}
+.tool-tabs button:hover{border-color:var(--accent);color:var(--ink)}
+.tool-tabs button[aria-pressed="true"]{border-color:var(--accent);color:var(--accent);font-weight:600;background:var(--user)}
+.tool-panels{flex:none;margin:0 14px 8px;border:1px solid var(--line);border-radius:9px;background:var(--paper);padding-top:4px}
+
+/* ── Aa reading-preferences popover ── */
+.reader-prefs-panel{position:fixed;top:60px;right:18px;z-index:30;width:238px;padding:12px;border:1px solid var(--line);border-radius:12px;background:var(--panel);box-shadow:0 10px 38px rgba(0,0,0,.18);font:12px/1.4 ui-sans-serif,system-ui,sans-serif}
+.pref-row{display:flex;align-items:center;gap:7px;margin-bottom:9px}
+.pref-row:last-child{margin-bottom:0}
+.pref-label{flex:none;width:58px;color:var(--muted);font-size:11px}
+.pref-row select{flex:1;min-width:0;background:var(--paper);color:var(--ink);border:1px solid var(--line);border-radius:7px;padding:4px 6px}
+.pref-row .ghost{padding:4px 12px}

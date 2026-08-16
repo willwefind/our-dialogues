@@ -70,12 +70,15 @@ async function loadAppRuntime(savedSortMode="asc", options={}) {
     "fontSmaller", "fontLarger", "lineHeight", "contentWidth", "fontFamily",
     "readingMode", "pageLength", "pageNavigation", "previousPage", "nextPage",
     "pageIndicator", "pageJump", "pageCount", "scrollJumpers", "toTop", "toEnd",
-    "bookmarkAdd", "bookmarksPanel", "bookmarksList", "bookmarksCount",
-    "annotationsPanel", "annotationsList", "annotationsCount", "highlightButton",
+    "bookmarkAdd", "bookmarksList", "bookmarksCount",
+    "annotationsList", "annotationsCount", "highlightButton",
     "annotationEditor", "annotationColors", "annotationNote",
     "annotationSave", "annotationCancel", "annotationDelete", "importPanel",
-    "recentPanel", "recentList", "recentCount",
-    "searchPanel", "searchHitCount", "searchScopeCurrent", "searchScopeLibrary", "searchQuery", "searchResults"
+    "recentList", "recentCount",
+    "searchHitCount", "searchScopeCurrent", "searchScopeLibrary", "searchQuery", "searchResults",
+    "toolTabRecent", "toolTabBookmarks", "toolTabAnnotations", "toolTabSearch",
+    "toolPanels", "recentPane", "bookmarksPane", "annotationsPane", "searchPane",
+    "readerPrefsToggle", "readerPrefsPanel"
   ];
   const elements = new Map(ids.map(id => [id, fakeElement(id)]));
   const sortAscending = fakeElement("sortAscending");
@@ -844,4 +847,39 @@ test("full-text search scopes to the current conversation or the whole library a
   hits = runtime.OD.app.performSearch();
   assert.equal(hits.length, 0);
   assert.match(elements.get("searchResults").innerHTML, /没搜到/);
+});
+
+test("sidebar tool tabs open one pane at a time, toggle closed, and persist the choice", async () => {
+  const { runtime, elements, stored } = await loadAppRuntime("asc");
+
+  assert.equal(elements.get("toolPanels").hidden, true, "no pane is open by default");
+
+  elements.get("toolTabBookmarks").click();
+  assert.equal(elements.get("toolPanels").hidden, false);
+  assert.equal(elements.get("bookmarksPane").hidden, false);
+  assert.equal(elements.get("recentPane").hidden, true);
+  assert.equal(elements.get("searchPane").hidden, true);
+  assert.equal(elements.get("toolTabBookmarks").getAttribute("aria-pressed"), "true");
+
+  elements.get("toolTabSearch").click();
+  assert.equal(elements.get("bookmarksPane").hidden, true, "opening another tab closes the previous pane");
+  assert.equal(elements.get("searchPane").hidden, false);
+
+  const mirror = JSON.parse(stored.get("our-dialogues.reader-state.v1"));
+  assert.equal(mirror.toolTab, "search", "the open tab persists with reader settings");
+
+  elements.get("toolTabSearch").click();
+  assert.equal(elements.get("toolPanels").hidden, true, "clicking the active tab closes everything");
+  assert.equal(runtime.OD.app.getState().current, null, "tab flips never open conversations");
+});
+
+test("the Aa popover toggles and an outside click closes it", async () => {
+  const { elements, dispatchDocument } = await loadAppRuntime("asc");
+  const panel = elements.get("readerPrefsPanel");
+  assert.equal(panel.hidden, true);
+
+  elements.get("readerPrefsToggle").click();
+  assert.equal(panel.hidden, false);
+  dispatchDocument("click");
+  assert.equal(panel.hidden, true, "clicking elsewhere closes the popover");
 });

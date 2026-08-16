@@ -76,27 +76,31 @@
         <button id="sortDescending" type="button" data-sort-mode="desc" title="倒序：最新到最早" aria-label="倒序：最新到最早">倒序</button>
       </div>
     </div>
-    <details id="recentPanel" class="bookmarks-panel">
-      <summary>📖 最近阅读 <span id="recentCount" class="bookmarks-count"></span></summary>
-      <div id="recentList" class="bookmarks-list"></div>
-    </details>
-    <details id="bookmarksPanel" class="bookmarks-panel">
-      <summary>🔖 书签 <span id="bookmarksCount" class="bookmarks-count"></span></summary>
-      <div id="bookmarksList" class="bookmarks-list"></div>
-    </details>
-    <details id="annotationsPanel" class="bookmarks-panel">
-      <summary>🖍 划线与小注 <span id="annotationsCount" class="bookmarks-count"></span></summary>
-      <div id="annotationsList" class="bookmarks-list"></div>
-    </details>
-    <details id="searchPanel" class="bookmarks-panel">
-      <summary>🔍 全文搜索 <span id="searchHitCount" class="bookmarks-count"></span></summary>
-      <div class="search-scope" role="group" aria-label="搜索范围">
-        <button id="searchScopeCurrent" type="button">当前对话</button>
-        <button id="searchScopeLibrary" type="button">全部书库</button>
+    <div class="tool-tabs" role="tablist" aria-label="阅读工具">
+      <button id="toolTabRecent" type="button" title="最近阅读">📖 最近<span id="recentCount" class="bookmarks-count"></span></button>
+      <button id="toolTabBookmarks" type="button" title="书签">🔖 书签<span id="bookmarksCount" class="bookmarks-count"></span></button>
+      <button id="toolTabAnnotations" type="button" title="划线与小注">🖍 划线<span id="annotationsCount" class="bookmarks-count"></span></button>
+      <button id="toolTabSearch" type="button" title="全文搜索">🔍 搜索<span id="searchHitCount" class="bookmarks-count"></span></button>
+    </div>
+    <div id="toolPanels" class="tool-panels" hidden>
+      <div id="recentPane">
+        <div id="recentList" class="bookmarks-list"></div>
       </div>
-      <input id="searchQuery" type="search" placeholder="搜关键词，回车" aria-label="全文搜索关键词">
-      <div id="searchResults" class="bookmarks-list"></div>
-    </details>
+      <div id="bookmarksPane" hidden>
+        <div id="bookmarksList" class="bookmarks-list"></div>
+      </div>
+      <div id="annotationsPane" hidden>
+        <div id="annotationsList" class="bookmarks-list"></div>
+      </div>
+      <div id="searchPane" hidden>
+        <div class="search-scope" role="group" aria-label="搜索范围">
+          <button id="searchScopeCurrent" type="button">当前对话</button>
+          <button id="searchScopeLibrary" type="button">全部书库</button>
+        </div>
+        <input id="searchQuery" type="search" placeholder="搜关键词，回车" aria-label="全文搜索关键词">
+        <div id="searchResults" class="bookmarks-list"></div>
+      </div>
+    </div>
     <nav id="conversationList" class="conversation-list"></nav>
   </aside>
 
@@ -104,25 +108,40 @@
     <div class="toolbar">
       <button id="sidebarToggle" class="ghost" title="显示/隐藏侧栏">☰</button>
       <div id="currentTitle" class="current-title">尚未载入档案</div>
-      <div class="reader-preferences" aria-label="阅读设置">
+      <button id="readerPrefsToggle" class="ghost" type="button" title="阅读设置：字号、行距、宽度、字体、翻页方式、主题" aria-haspopup="true">Aa</button>
+      <button id="bookmarkAdd" class="ghost" type="button" title="把当前读到的位置存为书签；同一位置再存会刷新它">🔖 存书签</button>
+      <label><input id="hideUser" type="checkbox"> 隐藏我的发言</label>
+      <label><input id="showThinking" type="checkbox"> 展开 Thinking / Trace</label>
+    </div>
+
+    <div id="readerPrefsPanel" class="reader-prefs-panel" hidden>
+      <div class="pref-row"><span class="pref-label">字号</span>
         <button id="fontSmaller" class="ghost" type="button" title="减小字号">A−</button>
         <button id="fontLarger" class="ghost" type="button" title="增大字号">A+</button>
+      </div>
+      <div class="pref-row"><span class="pref-label">行距</span>
         <select id="lineHeight" aria-label="行距">
-          <option value="1.7">行距紧</option>
-          <option value="1.95" selected>行距中</option>
-          <option value="2.2">行距松</option>
+          <option value="1.7">紧</option>
+          <option value="1.95" selected>中</option>
+          <option value="2.2">松</option>
         </select>
+      </div>
+      <div class="pref-row"><span class="pref-label">正文宽度</span>
         <select id="contentWidth" aria-label="正文宽度">
-          <option value="640">正文窄</option>
-          <option value="800" selected>正文中</option>
-          <option value="960">正文宽</option>
+          <option value="640">窄</option>
+          <option value="800" selected>中</option>
+          <option value="960">宽</option>
         </select>
+      </div>
+      <div class="pref-row"><span class="pref-label">字体</span>
         <select id="fontFamily" aria-label="正文字体">
           <option value="serif" selected>默认衬线</option>
           <option value="song">宋体</option>
           <option value="kai">楷体</option>
           <option value="sans">黑体</option>
         </select>
+      </div>
+      <div class="pref-row"><span class="pref-label">翻页方式</span>
         <select id="readingMode" aria-label="阅读模式">
           <option value="scroll" selected>滚动</option>
           <option value="page">分页</option>
@@ -133,14 +152,13 @@
           <option value="long">页长</option>
         </select>
       </div>
-      <button id="bookmarkAdd" class="ghost" type="button" title="把当前读到的位置存为书签；同一位置再存会刷新它">🔖 存书签</button>
-      <label><input id="hideUser" type="checkbox"> 隐藏我的发言</label>
-      <label><input id="showThinking" type="checkbox"> 展开 Thinking / Trace</label>
-      <select id="theme">
-        <option value="paper">纸</option>
-        <option value="night">夜</option>
-        <option value="mist">雾</option>
-      </select>
+      <div class="pref-row"><span class="pref-label">主题</span>
+        <select id="theme">
+          <option value="paper">纸</option>
+          <option value="night">夜</option>
+          <option value="mist">雾</option>
+        </select>
+      </div>
     </div>
 
     <section id="welcome" class="welcome">

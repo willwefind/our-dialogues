@@ -40,6 +40,7 @@ window.OD = window.OD || {};
     readingProgress: {},
     readingOrder: [],
     searchScope: "current",
+    toolTab: null,
     booted: false
   };
 
@@ -150,6 +151,7 @@ window.OD = window.OD || {};
       importOpen: state.importOpen,
       readingProgress: state.readingProgress,
       searchScope: state.searchScope,
+      toolTab: state.toolTab,
       updatedAt: new Date().toISOString()
     };
   }
@@ -701,6 +703,31 @@ window.OD = window.OD || {};
         }
       });
     });
+  }
+
+  const TOOL_PANES = {
+    recent: ["toolTabRecent", "recentPane"],
+    bookmarks: ["toolTabBookmarks", "bookmarksPane"],
+    annotations: ["toolTabAnnotations", "annotationsPane"],
+    search: ["toolTabSearch", "searchPane"]
+  };
+
+  function syncToolTabs() {
+    const panels = $("toolPanels");
+    if (!panels) return;
+    panels.hidden = !state.toolTab;
+    for (const [name, [tabId, paneId]] of Object.entries(TOOL_PANES)) {
+      $(tabId)?.setAttribute?.("aria-pressed", String(state.toolTab === name));
+      const pane = $(paneId);
+      if (pane) pane.hidden = state.toolTab !== name;
+    }
+  }
+
+  function setToolTab(name) {
+    state.toolTab = state.toolTab === name ? null : name;
+    syncToolTabs();
+    if (state.toolTab === "search") $("searchQuery")?.focus?.();
+    void saveReaderState();
   }
 
   function syncSearchScope() {
@@ -1617,6 +1644,10 @@ window.OD = window.OD || {};
       state.readingProgress = OD.readingProgress.normalize(settings.readingProgress);
     }
     if (["current", "library"].includes(settings.searchScope)) state.searchScope = settings.searchScope;
+    if (settings.toolTab === null || ["recent", "bookmarks", "annotations", "search"].includes(settings.toolTab)) {
+      state.toolTab = settings.toolTab ?? null;
+    }
+    syncToolTabs();
   }
 
   async function bootPersistentLibrary() {
@@ -1820,6 +1851,22 @@ window.OD = window.OD || {};
   $("toEnd").addEventListener("click", () => scrollMain("end"));
   $("sidebarToggle").addEventListener("click", () => $("sidebar").classList.toggle("closed"));
   $("bookmarkAdd").addEventListener("click", () => addBookmark());
+  $("toolTabRecent").addEventListener("click", () => setToolTab("recent"));
+  $("toolTabBookmarks").addEventListener("click", () => setToolTab("bookmarks"));
+  $("toolTabAnnotations").addEventListener("click", () => setToolTab("annotations"));
+  $("toolTabSearch").addEventListener("click", () => setToolTab("search"));
+  syncToolTabs();
+  $("readerPrefsPanel").hidden = true;
+  $("readerPrefsToggle").addEventListener("click", event => {
+    event.stopPropagation?.();
+    $("readerPrefsPanel").hidden = !$("readerPrefsPanel").hidden;
+  });
+  document.addEventListener("click", event => {
+    const panel = $("readerPrefsPanel");
+    if (!panel || panel.hidden) return;
+    if (event?.target?.closest?.("#readerPrefsPanel, #readerPrefsToggle")) return;
+    panel.hidden = true;
+  });
   $("searchQuery").addEventListener("keydown", event => {
     if (event.key === "Enter") {
       event.preventDefault?.();
