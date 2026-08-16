@@ -76,6 +76,10 @@
         <button id="sortDescending" type="button" data-sort-mode="desc" title="倒序：最新到最早" aria-label="倒序：最新到最早">倒序</button>
       </div>
     </div>
+    <details id="recentPanel" class="bookmarks-panel">
+      <summary>📖 最近阅读 <span id="recentCount" class="bookmarks-count"></span></summary>
+      <div id="recentList" class="bookmarks-list"></div>
+    </details>
     <details id="bookmarksPanel" class="bookmarks-panel">
       <summary>🔖 书签 <span id="bookmarksCount" class="bookmarks-count"></span></summary>
       <div id="bookmarksList" class="bookmarks-list"></div>
@@ -176,6 +180,7 @@
   <script src="src/core/mufy-title-resolver.js"></script>
   <script src="src/core/bookmarks.js"></script>
   <script src="src/core/annotations.js"></script>
+  <script src="src/core/reading-progress.js"></script>
   <script src="src/core/zip.js"></script>
   <script src="src/core/chatgpt-export-folder.js"></script>
   <script src="src/core/solvoice-sidecar.js"></script>

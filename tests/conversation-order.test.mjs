@@ -73,7 +73,8 @@ async function loadAppRuntime(savedSortMode="asc", options={}) {
     "bookmarkAdd", "bookmarksPanel", "bookmarksList", "bookmarksCount",
     "annotationsPanel", "annotationsList", "annotationsCount", "highlightButton",
     "annotationEditor", "annotationColors", "annotationNote",
-    "annotationSave", "annotationCancel", "annotationDelete", "importPanel"
+    "annotationSave", "annotationCancel", "annotationDelete", "importPanel",
+    "recentPanel", "recentList", "recentCount"
   ];
   const elements = new Map(ids.map(id => [id, fakeElement(id)]));
   const sortAscending = fakeElement("sortAscending");
@@ -124,7 +125,8 @@ async function loadAppRuntime(savedSortMode="asc", options={}) {
     "src/core/reader-parity.js",
     "src/core/mufy-title-resolver.js",
     "src/core/bookmarks.js",
-    "src/core/annotations.js"
+    "src/core/annotations.js",
+    "src/core/reading-progress.js"
   ];
   if (options.driver) runtimeFiles.push("src/core/persistent-library.js");
   for (const relativePath of runtimeFiles) {
@@ -692,4 +694,105 @@ test("the import section opens on an empty library, folds after import, and a ma
   const sourceId = runtime.OD.app.getState().sources[0].id;
   runtime.OD.app.removeSource(sourceId);
   assert.equal(panel.open, true, "the recorded choice wins over the empty-library default");
+});
+
+test("each conversation resumes its own reading position and the recent panel tracks progress", async () => {
+  const { runtime, elements, stored } = await loadAppRuntime("asc");
+  const messages = n => Array.from({ length: 4 }, (_, i) => ({ id: `${n}-m${i + 1}`, role: "assistant", content: `${n} 第 ${i + 1} 条` }));
+  runtime.OD.app.loadArchive({
+    conversations: [
+      { id: "alpha", title: "第一段", createdAt: "2025-01-01T00:00:00.000Z", messages: messages("alpha") },
+      { id: "beta", title: "第二段", createdAt: "2026-01-01T00:00:00.000Z", messages: messages("beta") }
+    ]
+  }, "Synthetic");
+
+  runtime.OD.app.openConversation("alpha");
+  elements.get("main").scrollTop = 350;
+  elements.get("main").dispatch("scroll");
+
+  let progress = runtime.OD.app.getState().readingProgress.alpha;
+  assert.equal(progress.messageId, "alpha-m4", "the anchor follows the visible message");
+  assert.equal(progress.percent, 100, "reaching the last message counts as finished");
+
+  runtime.OD.app.openConversation("beta");
+  assert.equal(runtime.OD.app.getState().current.id, "beta");
+  assert.deepEqual([...runtime.OD.app.getState().recentConversations], ["beta", "alpha"]);
+
+  elements.get("main").scrollTop = 0;
+  runtime.OD.app.openConversation("alpha");
+  assert.ok(elements.get("main").scrollTop > 0, "a plain reopen resumes the stored position instead of the top");
+
+  const mirror = JSON.parse(stored.get("our-dialogues.reader-state.v1"));
+  assert.ok(mirror.readingProgress.alpha, "progress persists with reader settings");
+  assert.ok(mirror.readingProgress.beta);
+
+  assert.match(elements.get("recentList").innerHTML, /已读完/, "the recent panel shows finished progress");
+  assert.match(elements.get("conversationList").innerHTML, /已读完/, "the conversation list carries the progress label");
+});
+
+test("bookmark jumps still win over resumed progress and missing recents refuse politely", async () => {
+  const { runtime, elements } = await loadAppRuntime("asc");
+  runtime.OD.app.loadArchive({
+    conversations: [{
+      id: "alpha",
+      title: "第一段",
+      createdAt: "2025-01-01T00:00:00.000Z",
+      messages: Array.from({ length: 4 }, (_, i) => ({ id: `alpha-m${i + 1}`, role: "assistant", content: `第 ${i + 1} 条` }))
+    }]
+  }, "Synthetic");
+
+  runtime.OD.app.openConversation("alpha");
+  const bookmark = runtime.OD.app.addBookmark();
+  elements.get("main").scrollTop = 350;
+  elements.get("main").dispatch("scroll");
+
+  runtime.OD.app.jumpToBookmark(bookmark.id);
+  assert.ok(elements.get("main").scrollTop < 350, "an explicit bookmark jump beats the stored progress");
+
+  const sourceId = runtime.OD.app.getState().sources[0].id;
+  runtime.OD.app.removeSource(sourceId);
+  assert.match(elements.get("recentList").innerHTML, /来源不在书库中/, "a removed source is labelled in the recent panel");
+});
+
+test("previous/next follow the sidebar's visible order, not the flat date order", async () => {
+  const { runtime, elements } = await loadAppRuntime("asc");
+  runtime.OD.app.loadArchive({
+    source: { platform: "mufy", exporter: "mufy-batch-export" },
+    conversations: [
+      {
+        id: "greeting-a",
+        title: "开场白",
+        createdAt: null,
+        context: { sourceMetadata: { characterId: "char-a", characterName: "角色甲", isGreeting: true } },
+        messages: [{ id: "greeting-a-1", role: "assistant", content: "开场白正文" }]
+      },
+      {
+        id: "session-a1",
+        title: "甲的一段",
+        createdAt: "2024-01-01T00:00:00.000Z",
+        context: { sourceMetadata: { characterId: "char-a", characterName: "角色甲" } },
+        messages: [{ id: "session-a1-1", role: "assistant", content: "甲的正文" }]
+      },
+      {
+        id: "session-b1",
+        title: "乙的一段",
+        createdAt: "2025-01-01T00:00:00.000Z",
+        context: { sourceMetadata: { characterId: "char-b", characterName: "角色乙" } },
+        messages: [{ id: "session-b1-1", role: "assistant", content: "乙的正文" }]
+      }
+    ]
+  }, "Mufy folder");
+
+  // Flat ascending date order is [session-a1, session-b1, greeting-a] — the
+  // undated greeting lands last. The sidebar shows 角色甲 → [开场白, 甲的一段],
+  // then 角色乙 → [乙的一段]; navigation must walk that visible order.
+  runtime.OD.app.openConversation("greeting-a");
+  elements.get("nextPage").click();
+  assert.equal(runtime.OD.app.getState().current.id, "session-a1", "next from the greeting is its own character's first session");
+  elements.get("nextPage").click();
+  assert.equal(runtime.OD.app.getState().current.id, "session-b1", "then the next character's session");
+  elements.get("previousPage").click();
+  assert.equal(runtime.OD.app.getState().current.id, "session-a1");
+  elements.get("previousPage").click();
+  assert.equal(runtime.OD.app.getState().current.id, "greeting-a", "previous walks back to the pinned greeting");
 });

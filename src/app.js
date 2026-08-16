@@ -37,6 +37,8 @@ window.OD = window.OD || {};
     annotations: [],
     annotationColor: "yellow",
     importOpen: null,
+    readingProgress: {},
+    readingOrder: [],
     booted: false
   };
 
@@ -145,6 +147,7 @@ window.OD = window.OD || {};
       annotations: state.annotations.map(annotation => ({ ...annotation })),
       annotationColor: state.annotationColor,
       importOpen: state.importOpen,
+      readingProgress: state.readingProgress,
       updatedAt: new Date().toISOString()
     };
   }
@@ -197,13 +200,31 @@ window.OD = window.OD || {};
     document.body.classList.toggle("page-mode", state.readerPrefs.readingMode === "page");
   }
 
+  /* Every save also settles the per-conversation account: message anchor
+     first, then page and scroll — the pattern proven per character in the
+     standalone Mufy reader. */
+  function recordReadingProgress() {
+    if (!state.current) return;
+    const source = state.library.sourceForConversation(state.current);
+    const messageId = messageAnchor();
+    state.readingProgress = OD.readingProgress.record(state.readingProgress, state.current.id, {
+      sourceId: source?.id ?? null,
+      messageId,
+      page: state.pageIndex,
+      scrollTop: Number($("main").scrollTop || 0),
+      percent: OD.readingProgress.percent(state.current.messages, messageId)
+    });
+  }
+
   function saveReaderState({ immediate = false } = {}) {
+    recordReadingProgress();
     const settings = readerSettings();
     updateAcceptanceReadingPosition(settings.readingPosition);
     try { localStorage.setItem(SETTINGS_MIRROR_KEY, JSON.stringify(settings)); } catch (_) {}
     if (!state.persistence?.supported) return Promise.resolve();
     const write = async () => {
       state.saveTimer = null;
+      renderRecent();
       try {
         await state.persistence.saveSettings(settings);
       } catch (error) {
@@ -315,12 +336,19 @@ window.OD = window.OD || {};
     return state.titleLabels.get(String(conversation?.id)) || String(conversation?.title || "");
   }
 
+  function progressLabel(entry) {
+    if (!entry) return "";
+    if (OD.readingProgress.isFinished(entry)) return "已读完";
+    return entry.percent > 0 ? `读到 ${entry.percent}%` : "";
+  }
+
   function conversationMarkup(c) {
     const active = state.current?.id === c.id ? " on" : "";
     const room = c.context?.room?.name ? ` · ${esc(c.context.room.name)}` : "";
+    const progress = progressLabel(state.readingProgress[c.id]);
     return `<div class="conv${active}" data-id="${esc(c.id)}">
       <div class="conv-title">${esc(displayConversationTitle(c))}</div>
-      <div class="conv-meta">${c.messages.length} 条${room}${c.createdAt ? ` · ${esc(fmtDate(c.createdAt))}` : ""}</div>
+      <div class="conv-meta">${c.messages.length} 条${room}${c.createdAt ? ` · ${esc(fmtDate(c.createdAt))}` : ""}${progress ? ` · <span class="conv-progress">${esc(progress)}</span>` : ""}</div>
     </div>`;
   }
 
@@ -341,7 +369,7 @@ window.OD = window.OD || {};
     return conversation.context?.sourceMetadata?.isGreeting === true;
   }
 
-  function sourceMarkup(source, conversations, searching) {
+  function sourceMarkup(source, conversations, searching, readingOrder) {
     let children = "";
     if (source.source?.platform === "mufy") {
       const characters = new Map();
@@ -358,6 +386,7 @@ window.OD = window.OD || {};
           ...character.conversations.filter(isGreetingConversation),
           ...character.conversations.filter(conversation => !isGreetingConversation(conversation))
         ];
+        readingOrder?.push(...ordered);
         const characterKey = `${source.id}::${character.key}`;
         const stored = state.groupState.characters[characterKey];
         const containsCurrent = character.conversations.some(conversation => conversation.id === state.current?.id);
@@ -371,6 +400,7 @@ window.OD = window.OD || {};
       </details>`;
       }).join("");
     } else {
+      readingOrder?.push(...conversations);
       children = `<div class="source-conversations">${conversations.map(conversationMarkup).join("")}</div>`;
     }
     const storedSource = state.groupState.sources[source.id];
@@ -634,6 +664,43 @@ window.OD = window.OD || {};
     panel.open = shouldOpen;
   }
 
+  function renderRecent() {
+    const list = $("recentList");
+    const count = $("recentCount");
+    if (!list || !count) return;
+    const entries = OD.readingProgress.recent(state.readingProgress, 10);
+    count.textContent = entries.length ? String(entries.length) : "";
+    if (!entries.length) {
+      list.innerHTML = `<div class="bookmarks-empty">打开任意一段对话，这里会记住你读到哪。</div>`;
+      return;
+    }
+    const conversations = new Map((state.archive?.conversations || []).map(conversation => [conversation.id, conversation]));
+    list.innerHTML = entries.map(entry => {
+      const conversation = conversations.get(entry.conversationId);
+      const missing = !conversation;
+      const title = conversation ? displayConversationTitle(conversation) : entry.conversationId;
+      const finished = OD.readingProgress.isFinished(entry);
+      const label = finished ? "已读完" : (entry.percent > 0 ? `读到 ${entry.percent}%` : "刚开始");
+      return `<div class="recent-item${missing ? " missing" : ""}" data-recent-id="${esc(entry.conversationId)}">
+        <div class="bookmark-head">
+          <div class="bookmark-title">${esc(title)}</div>
+          <span class="recent-progress${finished ? " finished" : ""}">${esc(label)}</span>
+        </div>
+        <div class="bookmark-meta">${missing ? "（来源不在书库中）" : esc(fmtDate(entry.updatedAt))}</div>
+      </div>`;
+    }).join("");
+    [...document.querySelectorAll("#recentList .recent-item")].forEach(element => {
+      element.addEventListener("click", () => {
+        const id = element.dataset.recentId;
+        if ((state.archive?.conversations || []).some(conversation => conversation.id === id)) {
+          openConversation(id);
+        } else {
+          setStatus("这段对话的来源不在当前书库里；重新导入该来源后就能继续读。", true);
+        }
+      });
+    });
+  }
+
   function renderSourceControls() {
     const sources = state.library.sources();
     document.body.classList.toggle("has-library", sources.length > 0);
@@ -667,14 +734,19 @@ window.OD = window.OD || {};
     // visible; those forced states are not recorded as the user's choice.
     const searching = String($("search").value || "").trim() !== "";
     state.searchForcedOpen = searching;
+    // The sidebar's visible order doubles as the reading order, so
+    // previous/next always move to what the eye sees as the neighbour.
+    const readingOrder = [];
     $("conversationList").innerHTML = visibleSources.map(source => sourceMarkup(
       source,
       OD.conversationOrder.sortConversations(
         source.conversations.filter(conversation => filteredIds.has(conversation.id)),
         state.sortMode
       ),
-      searching
+      searching,
+      readingOrder
     )).join("");
+    state.readingOrder = readingOrder;
 
     [...document.querySelectorAll(".conv")].forEach(el => {
       el.addEventListener("click", () => openConversation(el.dataset.id));
@@ -701,6 +773,7 @@ window.OD = window.OD || {};
     $("archiveMeta").textContent = `${state.filtered.length} / ${all.length} 段对话 · ${state.library.size} 个来源`;
     renderBookmarks();
     renderAnnotations();
+    renderRecent();
     return state.filtered;
   }
 
@@ -1053,9 +1126,10 @@ window.OD = window.OD || {};
 
   function renderPageNavigation() {
     const pageMode = state.readerPrefs.readingMode === "page";
-    const conversationIndex = state.filtered.findIndex(conversation => conversation.id === state.current?.id);
+    const order = state.readingOrder.length ? state.readingOrder : state.filtered;
+    const conversationIndex = order.findIndex(conversation => conversation.id === state.current?.id);
     const hasPrevious = state.pageIndex > 0 || conversationIndex > 0;
-    const hasNext = state.pageIndex < state.pages.length - 1 || (conversationIndex >= 0 && conversationIndex < state.filtered.length - 1);
+    const hasNext = state.pageIndex < state.pages.length - 1 || (conversationIndex >= 0 && conversationIndex < order.length - 1);
     $("previousPage").disabled = !hasPrevious;
     $("nextPage").disabled = !hasNext;
     $("previousPage").textContent = state.pageIndex > 0 ? "← 上一页" : "← 上一段";
@@ -1085,6 +1159,19 @@ window.OD = window.OD || {};
   function openConversation(id, { restorePosition = null, page = null } = {}) {
     const c = (state.archive?.conversations || []).find(x => x.id === id);
     if (!c) return;
+    // A plain open (no explicit target) resumes this conversation's own
+    // reading progress, like picking a book back up at its own bookmark.
+    // Explicit targets — boot restore, page turns, bookmark and annotation
+    // jumps — always win.
+    const switching = state.current?.id !== c.id;
+    let resumed = false;
+    if (!restorePosition && page === null) {
+      const progress = state.readingProgress[c.id];
+      if (progress && (progress.messageId || progress.page > 0 || progress.scrollTop > 0)) {
+        restorePosition = { messageId: progress.messageId, page: progress.page, scrollTop: progress.scrollTop };
+        resumed = progress.percent > 0 || progress.page > 0 || progress.scrollTop > 0;
+      }
+    }
     releaseRenderedAssets();
     const source = state.library.sourceForConversation(c);
     state.assetSession = source?.assetSession || null;
@@ -1123,14 +1210,16 @@ window.OD = window.OD || {};
     prepareLazySolVoice(renderedSolVoice);
     renderList();
     renderPageNavigation();
+    if (resumed && switching) setStatus("回到上次读到的地方。");
     void saveReaderState();
   }
 
   function goPrevious() {
     if (!state.current) return;
     if (state.pageIndex > 0) return openConversation(state.current.id, { page: state.pageIndex - 1 });
-    const index = state.filtered.findIndex(conversation => conversation.id === state.current.id);
-    const previous = state.filtered[index - 1];
+    const order = state.readingOrder.length ? state.readingOrder : state.filtered;
+    const index = order.findIndex(conversation => conversation.id === state.current.id);
+    const previous = index > 0 ? order[index - 1] : null;
     if (!previous) return;
     const pages = OD.readerParity.paginateMessages(previous.messages, {
       mode: state.readerPrefs.readingMode,
@@ -1143,8 +1232,9 @@ window.OD = window.OD || {};
   function goNext() {
     if (!state.current) return;
     if (state.pageIndex < state.pages.length - 1) return openConversation(state.current.id, { page: state.pageIndex + 1 });
-    const index = state.filtered.findIndex(conversation => conversation.id === state.current.id);
-    const next = state.filtered[index + 1];
+    const order = state.readingOrder.length ? state.readingOrder : state.filtered;
+    const index = order.findIndex(conversation => conversation.id === state.current.id);
+    const next = index >= 0 ? order[index + 1] : null;
     if (next) openConversation(next.id, { page: 0 });
   }
 
@@ -1448,6 +1538,9 @@ window.OD = window.OD || {};
     if (Array.isArray(settings.annotations)) state.annotations = OD.annotations.normalize(settings.annotations);
     if (typeof settings.annotationColor === "string") state.annotationColor = OD.annotations.normalizeColor(settings.annotationColor);
     if (typeof settings.importOpen === "boolean") state.importOpen = settings.importOpen;
+    if (settings.readingProgress && typeof settings.readingProgress === "object") {
+      state.readingProgress = OD.readingProgress.normalize(settings.readingProgress);
+    }
   }
 
   async function bootPersistentLibrary() {
@@ -1867,7 +1960,9 @@ window.OD = window.OD || {};
       readingPosition: readerSettings().readingPosition,
       bookmarks: state.bookmarks.map(bookmark => ({ ...bookmark })),
       annotations: state.annotations.map(annotation => ({ ...annotation })),
-      annotationColor: state.annotationColor
+      annotationColor: state.annotationColor,
+      readingProgress: { ...state.readingProgress },
+      recentConversations: OD.readingProgress.recent(state.readingProgress, 10).map(entry => entry.conversationId)
     }),
     auditPersistentLibrary: refreshAcceptanceAudit
   };

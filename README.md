@@ -29,6 +29,7 @@ Currently included:
 - Reader parity core: persistent font size, line height, content width, font family, theme, scroll/page modes, character-volume page sizes, page jumps, cross-conversation navigation, and keyboard/Home/End controls
 - Multiple reading bookmarks anchored to `sourceId + conversationId + messageId`, with jump, rename, delete, and persistence alongside reader settings
 - Highlights and notes in five highlighter colors, anchored to `messageId + selectedText + surrounding context` (never DOM offsets), with click-to-edit, jump, delete, and persistence
+- Per-conversation reading progress: every conversation resumes at its own last position, a recency-capped 最近阅读 panel lists what you were reading with 读到 n% / 已读完 labels, and the conversation list carries the same progress marks
 - Dedicated conservative Mufy title resolver with provenance and duplicate display disambiguation
 - Safe Mufy rich-block rendering for common status cards, details, rows, notes, and progress bars
 - Strict adapter capabilities and metadata-only diagnostics for unknown JSON/ZIP inputs

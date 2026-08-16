@@ -111,3 +111,11 @@ mark.annotation.annotation-flash{animation:bookmark-flash 1.4s ease 2}
 .import-panel>summary::before{content:"›";flex:none;color:var(--muted);transform:rotate(90deg);transition:transform .15s}
 .import-panel:not([open])>summary::before{transform:none}
 .import-panel>summary:hover{color:var(--ink)}
+
+/* ── Recent reading ── */
+.recent-item{padding:8px 9px;border-radius:8px;cursor:pointer;border:1px solid transparent;margin-bottom:3px}
+.recent-item:hover{background:var(--user)}
+.recent-item.missing{opacity:.55;cursor:default}
+.recent-progress{flex:none;font-size:9.5px;color:var(--muted);align-self:baseline;white-space:nowrap}
+.recent-progress.finished{color:var(--accent)}
+.conv-progress{color:var(--accent)}
