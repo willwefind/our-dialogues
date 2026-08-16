@@ -28,6 +28,7 @@ Currently included:
 - Thinking/reasoning and exporter source-trace expand toggle when a source actually contains them
 - Reader parity core: persistent font size, line height, content width, font family, theme, scroll/page modes, character-volume page sizes, page jumps, cross-conversation navigation, and keyboard/Home/End controls
 - Multiple reading bookmarks anchored to `sourceId + conversationId + messageId`, with jump, rename, delete, and persistence alongside reader settings
+- Highlights and notes in five highlighter colors, anchored to `messageId + selectedText + surrounding context` (never DOM offsets), with click-to-edit, jump, delete, and persistence
 - Dedicated conservative Mufy title resolver with provenance and duplicate display disambiguation
 - Safe Mufy rich-block rendering for common status cards, details, rows, notes, and progress bars
 - Strict adapter capabilities and metadata-only diagnostics for unknown JSON/ZIP inputs

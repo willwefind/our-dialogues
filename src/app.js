@@ -34,6 +34,8 @@ window.OD = window.OD || {};
     searchForcedOpen: false,
     bookmarks: [],
     editingBookmarkId: null,
+    annotations: [],
+    annotationColor: "yellow",
     booted: false
   };
 
@@ -139,6 +141,8 @@ window.OD = window.OD || {};
         characters: { ...state.groupState.characters }
       },
       bookmarks: state.bookmarks.map(bookmark => ({ ...bookmark })),
+      annotations: state.annotations.map(annotation => ({ ...annotation })),
+      annotationColor: state.annotationColor,
       updatedAt: new Date().toISOString()
     };
   }
@@ -503,6 +507,116 @@ window.OD = window.OD || {};
     });
   }
 
+  /* Re-render the current page in place — saving or removing a highlight must
+     not scroll the reader back to the top the way a full reopen would. */
+  function refreshCurrentMessages() {
+    if (!state.current) return;
+    const scrollTop = Number($("main").scrollTop || 0);
+    const renderedAttachments = [];
+    const renderedSolVoice = [];
+    $("messages").innerHTML = (state.pages[state.pageIndex] || [])
+      .map(message => messageMarkup(message, renderedAttachments, renderedSolVoice))
+      .join("");
+    prepareLazyAttachments(renderedAttachments);
+    prepareLazySolVoice(renderedSolVoice);
+    $("main").scrollTop = scrollTop;
+  }
+
+  function addAnnotation(fields) {
+    if (!state.current) {
+      setStatus("先打开一段对话，再划线。", true);
+      return null;
+    }
+    const source = state.library.sourceForConversation(state.current);
+    const annotation = OD.annotations.create({
+      color: state.annotationColor,
+      ...fields,
+      sourceId: source?.id ?? null,
+      sourceLabel: source?.label || "",
+      conversationId: state.current.id,
+      conversationTitle: displayConversationTitle(state.current)
+    });
+    if (!annotation) {
+      setStatus("没有可以标记的文字。", true);
+      return null;
+    }
+    state.annotationColor = annotation.color;
+    state.annotations = OD.annotations.add(state.annotations, annotation);
+    refreshCurrentMessages();
+    renderAnnotations();
+    void saveReaderState();
+    setStatus(`🖍 已划线${annotation.note ? "，小注也存了" : ""}。`);
+    return annotation;
+  }
+
+  function updateAnnotation(id, patch) {
+    state.annotations = OD.annotations.update(state.annotations, id, patch);
+    if (patch && "color" in patch) state.annotationColor = OD.annotations.normalizeColor(patch.color);
+    refreshCurrentMessages();
+    renderAnnotations();
+    void saveReaderState();
+  }
+
+  function removeAnnotation(id) {
+    state.annotations = OD.annotations.remove(state.annotations, id);
+    refreshCurrentMessages();
+    renderAnnotations();
+    void saveReaderState();
+  }
+
+  function jumpToAnnotation(id) {
+    const annotation = state.annotations.find(item => item.id === String(id));
+    if (!annotation) return false;
+    const exists = (state.archive?.conversations || []).some(item => item.id === annotation.conversationId);
+    if (!exists) {
+      setStatus("这条划线指向的来源不在当前书库里；重新导入该来源后就能跳转。", true);
+      return false;
+    }
+    openConversation(annotation.conversationId, { restorePosition: { messageId: annotation.messageId } });
+    const mark = $("messages").querySelector?.(`mark[data-annotation-id="${annotation.id}"]`);
+    mark?.classList?.add?.("annotation-flash");
+    return true;
+  }
+
+  function renderAnnotations() {
+    const list = $("annotationsList");
+    const count = $("annotationsCount");
+    if (!list || !count) return;
+    count.textContent = state.annotations.length ? String(state.annotations.length) : "";
+    if (!state.annotations.length) {
+      list.innerHTML = `<div class="bookmarks-empty">在正文里划选一段文字，点冒出来的「🖍 标记这段」，可以挑颜色、写小注。</div>`;
+      return;
+    }
+    const available = new Set((state.archive?.conversations || []).map(conversation => conversation.id));
+    list.innerHTML = state.annotations.map(annotation => {
+      const missing = !available.has(annotation.conversationId);
+      const excerpt = annotation.selectedText.length > 46
+        ? `${annotation.selectedText.slice(0, 46)}…`
+        : annotation.selectedText;
+      return `<div class="annotation-item${missing ? " missing" : ""}" data-annotation-item="${esc(annotation.id)}">
+        <div class="bookmark-head">
+          <span class="annotation-dot hl-${esc(annotation.color)}" aria-hidden="true"></span>
+          <div class="bookmark-title">${esc(excerpt)}</div>
+          <span class="bookmark-actions">
+            <button type="button" data-annotation-remove="${esc(annotation.id)}" title="删除划线" aria-label="删除划线">✕</button>
+          </span>
+        </div>
+        ${annotation.note ? `<div class="bookmark-snippet">📝 ${esc(annotation.note)}</div>` : ""}
+        <div class="bookmark-meta">${esc(annotation.conversationTitle || "")}${missing ? " ·（来源不在书库中）" : ""}${annotation.createdAt ? ` · ${esc(fmtDate(annotation.createdAt))}` : ""}</div>
+      </div>`;
+    }).join("");
+    [...document.querySelectorAll("#annotationsList .annotation-item")].forEach(element => {
+      element.addEventListener("click", () => jumpToAnnotation(element.dataset.annotationItem));
+    });
+    [...document.querySelectorAll("[data-annotation-remove]")].forEach(button => {
+      button.addEventListener("click", event => {
+        event.preventDefault();
+        event.stopPropagation();
+        removeAnnotation(button.dataset.annotationRemove);
+      });
+    });
+  }
+
   function renderSourceControls() {
     const sources = state.library.sources();
     document.body.classList.toggle("has-library", sources.length > 0);
@@ -568,6 +682,7 @@ window.OD = window.OD || {};
 
     $("archiveMeta").textContent = `${state.filtered.length} / ${all.length} 段对话 · ${state.library.size} 个来源`;
     renderBookmarks();
+    renderAnnotations();
     return state.filtered;
   }
 
@@ -872,17 +987,23 @@ window.OD = window.OD || {};
     return `<section class="source-rich-block source-rich-status source-rich-kind-${kind} source-rich-${variant}">${block.title ? `<header>${esc(block.title)}</header>` : ""}${block.subtitle ? `<div class="source-rich-subtitle">${esc(block.subtitle)}</div>` : ""}${content}</section>`;
   }
 
-  function messageContentMarkup(content) {
+  function messageContentMarkup(message) {
+    const content = message.content;
     const items = Array.isArray(content) ? content : [{ type: "text", text: String(content ?? "") }];
+    const marks = state.current
+      ? OD.annotations.forMessage(state.annotations, state.current.id, message.id)
+      : [];
     return items.map(item => {
       if (item?.type === "source-rich-block") return richBlockMarkup(item);
       const text = item?.text == null ? "" : String(item.text);
-      return text ? `<div class="message-body">${esc(text)}</div>` : "";
+      if (!text) return "";
+      const body = marks.length ? OD.annotations.markupText(text, marks, { escape: esc }) : esc(text);
+      return `<div class="message-body">${body}</div>`;
     }).join("");
   }
 
   function messageMarkup(message, renderedAttachments, renderedSolVoice) {
-    const contentHTML = messageContentMarkup(message.content);
+    const contentHTML = messageContentMarkup(message);
     const thinking = OD.schema.textOf(message.thinking);
     const recaps = Array.isArray(message.metadata?.reasoningRecap) ? message.metadata.reasoningRecap.filter(Boolean) : [];
     const sourceTrace = Array.isArray(message.metadata?.sourceTrace)
@@ -1306,6 +1427,8 @@ window.OD = window.OD || {};
       };
     }
     if (Array.isArray(settings.bookmarks)) state.bookmarks = OD.bookmarks.normalize(settings.bookmarks);
+    if (Array.isArray(settings.annotations)) state.annotations = OD.annotations.normalize(settings.annotations);
+    if (typeof settings.annotationColor === "string") state.annotationColor = OD.annotations.normalizeColor(settings.annotationColor);
   }
 
   async function bootPersistentLibrary() {
@@ -1509,6 +1632,148 @@ window.OD = window.OD || {};
   $("toEnd").addEventListener("click", () => scrollMain("end"));
   $("sidebarToggle").addEventListener("click", () => $("sidebar").classList.toggle("closed"));
   $("bookmarkAdd").addEventListener("click", () => addBookmark());
+
+  /* ── Highlight selection capture and editor (real-browser path) ──
+     The anchor is computed against the raw part text via the selection's
+     offset inside its .message-body, so what is stored matches what
+     annotations.locate() will search for at render time. */
+  let annotationEditorState = null;
+
+  function selectionDraft() {
+    if (typeof getSelection !== "function") return null;
+    const selection = getSelection();
+    if (!selection || selection.isCollapsed || !selection.rangeCount || !state.current) return null;
+    const range = selection.getRangeAt(0);
+    const bodyOf = node => {
+      for (let current = node; current; current = current.parentNode) {
+        if (current.classList?.contains?.("message-body")) return current;
+      }
+      return null;
+    };
+    const body = bodyOf(range.startContainer);
+    if (!body || body !== bodyOf(range.endContainer)) return null;
+    const messageElement = body.closest?.("[data-message-id]");
+    if (!messageElement) return null;
+    const prefix = range.cloneRange();
+    prefix.selectNodeContents(body);
+    prefix.setEnd(range.startContainer, range.startOffset);
+    const start = prefix.toString().length;
+    const raw = body.textContent || "";
+    const length = range.toString().length;
+    const selectedText = raw.slice(start, start + length);
+    if (selectedText.trim().length < 2) return null;
+    const rect = range.getBoundingClientRect();
+    return {
+      messageId: messageElement.dataset.messageId,
+      selectedText,
+      contextBefore: raw.slice(Math.max(0, start - 30), start),
+      contextAfter: raw.slice(start + length, start + length + 30),
+      x: rect.left + rect.width / 2,
+      y: rect.top
+    };
+  }
+
+  function hideAnnotationUI() {
+    $("highlightButton").hidden = true;
+    $("annotationEditor").hidden = true;
+    annotationEditorState = null;
+  }
+
+  function syncAnnotationSwatches(color) {
+    for (const swatch of document.querySelectorAll("[data-annotation-color]")) {
+      swatch.setAttribute("aria-pressed", String(swatch.dataset.annotationColor === color));
+    }
+  }
+
+  function placeFloating(element, x, y) {
+    if (!element.style) return;
+    const width = Number(window.innerWidth || 1280);
+    element.style.left = `${Math.max(8, Math.min(width - 300, x - 70))}px`;
+    element.style.top = `${Math.max(8, y - 44)}px`;
+  }
+
+  function openAnnotationEditor(editorState, position) {
+    annotationEditorState = editorState;
+    const editor = $("annotationEditor");
+    $("annotationNote").value = editorState.note || "";
+    $("annotationDelete").hidden = editorState.mode !== "edit";
+    syncAnnotationSwatches(editorState.color);
+    editor.hidden = false;
+    if (position) placeFloating(editor, position.x, position.y);
+    $("annotationNote").focus?.();
+  }
+
+  document.addEventListener("pointerup", event => {
+    if (event?.target?.closest?.("#annotationEditor, #highlightButton")) return;
+    // A short delay lets the selection settle, especially on touch screens.
+    setTimeout(() => {
+      const draft = selectionDraft();
+      const button = $("highlightButton");
+      if (!draft) {
+        if ($("annotationEditor").hidden) button.hidden = true;
+        return;
+      }
+      $("annotationEditor").hidden = true;
+      annotationEditorState = null;
+      button.hidden = false;
+      placeFloating(button, draft.x, draft.y);
+      button.dataset.pending = JSON.stringify(draft);
+    }, 30);
+  });
+
+  $("highlightButton").addEventListener("click", () => {
+    const button = $("highlightButton");
+    let draft = null;
+    try { draft = JSON.parse(button.dataset.pending || "null"); } catch (_) {}
+    button.hidden = true;
+    if (!draft) return;
+    openAnnotationEditor(
+      { mode: "new", draft, color: state.annotationColor, note: "" },
+      { x: draft.x, y: draft.y + 44 }
+    );
+  });
+
+  $("messages").addEventListener("click", event => {
+    const mark = event?.target?.closest?.("mark.annotation");
+    if (!mark) return;
+    const annotation = state.annotations.find(item => item.id === mark.dataset.annotationId);
+    if (!annotation) return;
+    const rect = mark.getBoundingClientRect?.() || { left: 120, top: 120, width: 0 };
+    openAnnotationEditor(
+      { mode: "edit", id: annotation.id, color: annotation.color, note: annotation.note },
+      { x: rect.left + rect.width / 2, y: rect.top + 24 }
+    );
+  });
+
+  $("annotationSave").addEventListener("click", () => {
+    if (!annotationEditorState) return;
+    const note = $("annotationNote").value;
+    if (annotationEditorState.mode === "edit") {
+      updateAnnotation(annotationEditorState.id, { note, color: annotationEditorState.color });
+    } else {
+      addAnnotation({ ...annotationEditorState.draft, color: annotationEditorState.color, note });
+    }
+    hideAnnotationUI();
+    if (typeof getSelection === "function") getSelection()?.removeAllRanges?.();
+  });
+  $("annotationCancel").addEventListener("click", hideAnnotationUI);
+  $("annotationDelete").addEventListener("click", () => {
+    if (annotationEditorState?.mode === "edit") removeAnnotation(annotationEditorState.id);
+    hideAnnotationUI();
+  });
+
+  $("annotationColors").innerHTML = OD.annotations.COLORS.map(color =>
+    `<button type="button" class="annotation-swatch hl-${color}" data-annotation-color="${color}" title="${
+      ({ yellow: "黄", green: "绿", pink: "粉", blue: "蓝", purple: "紫" })[color] || color
+    }" aria-label="荧光笔：${color}"></button>`
+  ).join("");
+  [...document.querySelectorAll("[data-annotation-color]")].forEach(swatch => {
+    swatch.addEventListener("click", () => {
+      if (!annotationEditorState) return;
+      annotationEditorState.color = swatch.dataset.annotationColor;
+      syncAnnotationSwatches(annotationEditorState.color);
+    });
+  });
   $("main").addEventListener("scroll", () => void saveReaderState());
   document.addEventListener?.("keydown", event => {
     const target = event.target;
@@ -1544,6 +1809,10 @@ window.OD = window.OD || {};
     removeBookmark,
     renameBookmark,
     jumpToBookmark,
+    addAnnotation,
+    updateAnnotation,
+    removeAnnotation,
+    jumpToAnnotation,
     getState: () => ({
       archive: state.archive,
       current: state.current,
@@ -1567,7 +1836,9 @@ window.OD = window.OD || {};
       page: state.pageIndex,
       pageCount: state.pages.length,
       readingPosition: readerSettings().readingPosition,
-      bookmarks: state.bookmarks.map(bookmark => ({ ...bookmark }))
+      bookmarks: state.bookmarks.map(bookmark => ({ ...bookmark })),
+      annotations: state.annotations.map(annotation => ({ ...annotation })),
+      annotationColor: state.annotationColor
     }),
     auditPersistentLibrary: refreshAcceptanceAudit
   };

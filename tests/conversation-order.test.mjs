@@ -70,7 +70,10 @@ async function loadAppRuntime(savedSortMode="asc", options={}) {
     "fontSmaller", "fontLarger", "lineHeight", "contentWidth", "fontFamily",
     "readingMode", "pageLength", "pageNavigation", "previousPage", "nextPage",
     "pageIndicator", "pageJump", "pageCount", "scrollJumpers", "toTop", "toEnd",
-    "bookmarkAdd", "bookmarksPanel", "bookmarksList", "bookmarksCount"
+    "bookmarkAdd", "bookmarksPanel", "bookmarksList", "bookmarksCount",
+    "annotationsPanel", "annotationsList", "annotationsCount", "highlightButton",
+    "annotationEditor", "annotationColors", "annotationNote",
+    "annotationSave", "annotationCancel", "annotationDelete"
   ];
   const elements = new Map(ids.map(id => [id, fakeElement(id)]));
   const sortAscending = fakeElement("sortAscending");
@@ -120,7 +123,8 @@ async function loadAppRuntime(savedSortMode="asc", options={}) {
     "src/core/source-library.js",
     "src/core/reader-parity.js",
     "src/core/mufy-title-resolver.js",
-    "src/core/bookmarks.js"
+    "src/core/bookmarks.js",
+    "src/core/annotations.js"
   ];
   if (options.driver) runtimeFiles.push("src/core/persistent-library.js");
   for (const relativePath of runtimeFiles) {
@@ -588,4 +592,79 @@ test("a bookmark whose source was removed stays listed but refuses to jump", asy
   assert.equal(runtime.OD.app.getState().bookmarks.length, 1, "the bookmark itself is not deleted");
   assert.match(elements.get("bookmarksList").innerHTML, /来源不在书库中/);
   assert.equal(runtime.OD.app.jumpToBookmark(bookmark.id), false, "jump refuses instead of opening nothing");
+});
+
+test("annotations render colored marks in the message, persist, jump, update, and remove", async () => {
+  const { runtime, elements, stored } = await loadAppRuntime("asc");
+  runtime.OD.app.loadArchive({
+    conversations: [
+      {
+        id: "alpha",
+        title: "第一段",
+        createdAt: "2025-01-01T00:00:00.000Z",
+        messages: [{ id: "alpha-1", role: "assistant", content: "前文。重点的一句话。重点的一句话又出现了。" }]
+      },
+      {
+        id: "beta",
+        title: "第二段",
+        createdAt: "2026-01-01T00:00:00.000Z",
+        messages: [{ id: "beta-1", role: "assistant", content: "另一段的话" }]
+      }
+    ]
+  }, "Synthetic");
+  runtime.OD.app.openConversation("alpha");
+
+  const annotation = runtime.OD.app.addAnnotation({
+    messageId: "alpha-1",
+    selectedText: "重点的一句话",
+    contextBefore: "。",
+    contextAfter: "又出现了",
+    color: "green",
+    note: "这里要记住"
+  });
+  assert.equal(annotation.conversationId, "alpha");
+  assert.equal(annotation.color, "green");
+  assert.match(
+    elements.get("messages").innerHTML,
+    /<mark class="annotation hl-green noted" data-annotation-id="[^"]+">重点的一句话<\/mark>又出现了/,
+    "context picks the second occurrence and the mark carries its color"
+  );
+  assert.match(elements.get("annotationsList").innerHTML, /这里要记住/);
+  assert.equal(elements.get("annotationsCount").textContent, "1");
+
+  const mirror = JSON.parse(stored.get("our-dialogues.reader-state.v1"));
+  assert.equal(mirror.annotations.length, 1, "annotations persist with reader settings");
+  assert.equal(mirror.annotationColor, "green", "the last-used pen color persists");
+
+  runtime.OD.app.updateAnnotation(annotation.id, { color: "pink", note: "" });
+  assert.match(elements.get("messages").innerHTML, /hl-pink/, "recoloring re-renders the mark");
+  assert.doesNotMatch(elements.get("messages").innerHTML, /noted/, "clearing the note drops the noted style");
+
+  runtime.OD.app.openConversation("beta");
+  assert.equal(runtime.OD.app.jumpToAnnotation(annotation.id), true);
+  assert.equal(runtime.OD.app.getState().current.id, "alpha", "jump reopens the annotated conversation");
+
+  runtime.OD.app.removeAnnotation(annotation.id);
+  assert.equal(runtime.OD.app.getState().annotations.length, 0);
+  assert.doesNotMatch(elements.get("messages").innerHTML, /<mark/, "removing the annotation removes the mark");
+});
+
+test("an annotation whose source was removed stays listed but refuses to jump", async () => {
+  const { runtime, elements } = await loadAppRuntime("asc");
+  runtime.OD.app.loadArchive({
+    conversations: [{
+      id: "gone",
+      title: "会被移除的一段",
+      createdAt: "2025-01-01T00:00:00.000Z",
+      messages: [{ id: "gone-1", role: "assistant", content: "被划过线的正文" }]
+    }]
+  }, "Removable");
+  runtime.OD.app.openConversation("gone");
+  const annotation = runtime.OD.app.addAnnotation({ messageId: "gone-1", selectedText: "划过线" });
+
+  const sourceId = runtime.OD.app.getState().sources[0].id;
+  runtime.OD.app.removeSource(sourceId);
+  assert.equal(runtime.OD.app.getState().annotations.length, 1, "the annotation itself is not deleted");
+  assert.match(elements.get("annotationsList").innerHTML, /来源不在书库中/);
+  assert.equal(runtime.OD.app.jumpToAnnotation(annotation.id), false);
 });

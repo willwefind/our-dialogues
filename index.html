@@ -78,6 +78,10 @@
       <summary>🔖 书签 <span id="bookmarksCount" class="bookmarks-count"></span></summary>
       <div id="bookmarksList" class="bookmarks-list"></div>
     </details>
+    <details id="annotationsPanel" class="bookmarks-panel">
+      <summary>🖍 划线与小注 <span id="annotationsCount" class="bookmarks-count"></span></summary>
+      <div id="annotationsList" class="bookmarks-list"></div>
+    </details>
     <nav id="conversationList" class="conversation-list"></nav>
   </aside>
 
@@ -151,6 +155,17 @@
     </div>
   </main>
 
+  <button id="highlightButton" class="highlight-button" type="button" hidden>🖍 标记这段</button>
+  <div id="annotationEditor" class="annotation-editor" hidden>
+    <div id="annotationColors" class="annotation-colors" role="group" aria-label="荧光笔颜色"></div>
+    <textarea id="annotationNote" placeholder="写点小注（留空＝只划线）" aria-label="小注"></textarea>
+    <div class="annotation-editor-actions">
+      <button id="annotationSave" type="button">保存</button>
+      <button id="annotationCancel" type="button">取消</button>
+      <button id="annotationDelete" type="button" hidden>删除</button>
+    </div>
+  </div>
+
   <script src="src/core/schema.js"></script>
   <script src="src/core/conversation-order.js"></script>
   <script src="src/core/source-library.js"></script>
@@ -158,6 +173,7 @@
   <script src="src/core/reader-parity.js"></script>
   <script src="src/core/mufy-title-resolver.js"></script>
   <script src="src/core/bookmarks.js"></script>
+  <script src="src/core/annotations.js"></script>
   <script src="src/core/zip.js"></script>
   <script src="src/core/chatgpt-export-folder.js"></script>
   <script src="src/core/solvoice-sidecar.js"></script>
