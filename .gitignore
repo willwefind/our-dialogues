@@ -15,6 +15,7 @@ mappings/
 **/mappings/
 chatgpt-solvoice.json
 chatgpt-solvoice-summary.json
+claude-cielvoice.json
 *.mapping.local.json
 reader-solvoice-verification*.json
 

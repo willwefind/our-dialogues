@@ -40,6 +40,7 @@ window.OD = window.OD || {};
     readingProgress: {},
     readingOrder: [],
     searchScope: "current",
+    searchSourceId: "all",
     toolTab: null,
     booted: false
   };
@@ -72,11 +73,15 @@ window.OD = window.OD || {};
   function solVoiceStatusText() {
     const stats = state.solVoiceSession?.stats;
     if (stats) {
-      return `SolVoice strong ${stats.strongMappingsTotal} · messages ${stats.strongMappingsWhoseMessageIdExists}/${stats.strongMappingsTotal} · audio ${stats.audioFileResolvedCount}/${stats.strongMappingsTotal} · players ${stats.attachedPlayerCount} · missing message ${stats.missingMessageCount} · missing audio ${stats.missingAudioCount}`;
+      const gaps = [
+        stats.missingMessageCount ? `缺消息 ${stats.missingMessageCount}` : "",
+        stats.missingAudioCount ? `缺音频 ${stats.missingAudioCount}` : ""
+      ].filter(Boolean).join(" · ");
+      return `语音已连接 ${stats.attachedPlayerCount} 段（strong ${stats.strongMappingsTotal}）${gaps ? ` · ${gaps}` : ""}`;
     }
-    if (state.solVoiceMapping && !state.archive) return "SolVoice mapping ready · load a ChatGPT export";
-    if (state.solVoiceMapping) return "SolVoice mapping ready · choose VoiceArchive or sol/audio";
-    if (state.solVoiceAudioFiles.length) return `SolVoice audio folder ready (${state.solVoiceAudioFiles.length} files) · choose mapping`;
+    if (state.solVoiceMapping && !state.archive) return "语音映射就绪 · 请先导入对应的聊天导出";
+    if (state.solVoiceMapping) return "语音映射就绪 · 请选择 VoiceArchive 或音频文件夹";
+    if (state.solVoiceAudioFiles.length) return `音频文件夹就绪（${state.solVoiceAudioFiles.length} 个文件）· 请选择映射`;
     return "";
   }
 
@@ -151,6 +156,7 @@ window.OD = window.OD || {};
       importOpen: state.importOpen,
       readingProgress: state.readingProgress,
       searchScope: state.searchScope,
+      searchSourceId: state.searchSourceId,
       toolTab: state.toolTab,
       updatedAt: new Date().toISOString()
     };
@@ -764,13 +770,14 @@ window.OD = window.OD || {};
       }
       outcome = OD.messageSearch.searchConversation(state.current, query);
     } else {
-      // Library scope honors the source filter but deliberately ignores the
-      // catalog filter box — that box narrows the sidebar, not this search.
+      // Library scope has its own source selector and deliberately ignores
+      // both the catalog filter box and the catalog's source dropdown —
+      // this pane chooses its own range.
       const allSources = state.library.sources();
-      const visibleSources = state.sourceFilter === "all"
+      const targetSources = state.searchSourceId === "all"
         ? allSources
-        : allSources.filter(source => source.id === state.sourceFilter);
-      outcome = OD.messageSearch.searchLibrary(visibleSources.flatMap(source => source.conversations), query);
+        : allSources.filter(source => source.id === state.searchSourceId);
+      outcome = OD.messageSearch.searchLibrary(targetSources.flatMap(source => source.conversations), query);
     }
     const { hits, truncated } = outcome;
     countElement.textContent = hits.length ? `${hits.length}${truncated ? "+" : ""}` : "";
@@ -803,10 +810,25 @@ window.OD = window.OD || {};
     if (String($("searchQuery")?.value || "").trim()) performSearch();
   }
 
+  function renderSearchSourceControl() {
+    const control = $("searchSource");
+    if (!control) return;
+    const sources = state.library.sources();
+    if (state.searchSourceId !== "all" && !sources.some(source => source.id === state.searchSourceId)) {
+      state.searchSourceId = "all";
+    }
+    control.innerHTML = [
+      `<option value="all">全部来源</option>`,
+      ...sources.map(source => `<option value="${esc(source.id)}">${esc(source.label)}（${source.conversations.length}）</option>`)
+    ].join("");
+    control.value = state.searchSourceId;
+  }
+
   function renderSourceControls() {
     const sources = state.library.sources();
     document.body.classList.toggle("has-library", sources.length > 0);
     syncImportPanel();
+    renderSearchSourceControl();
     const selected = sources.some(source => source.id === state.sourceFilter) ? state.sourceFilter : "all";
     state.sourceFilter = selected;
     $("sourceFilter").innerHTML = [
@@ -1082,7 +1104,7 @@ window.OD = window.OD || {};
   function solVoiceMarkup(clip, index) {
     return `<figure class="solvoice-player lazy-solvoice" data-solvoice-index="${index}">
       <figcaption class="solvoice-caption">
-        <span>SolVoice</span>
+        <span>${esc(clip.voiceLabel || "语音")}</span>
         <small title="Reader v1 only attaches confidence=strong mappings">local · strong</small>
       </figcaption>
       <div class="solvoice-viewport">
@@ -1212,7 +1234,10 @@ window.OD = window.OD || {};
       const index = renderedSolVoice.push(clip) - 1;
       return solVoiceMarkup(clip, index);
     }).join("") || "";
-    const sourceTraceHTML = sourceTrace.length ? `<div class="source-trace"><strong>Exporter source trace · heuristic, not official thinking</strong>\n${sourceTrace.map(item => item.type === "marker"
+    const traceLabel = message.metadata?.sourceTraceKind === "official-tools"
+      ? "Tool activity · recorded in the official export"
+      : "Exporter source trace · heuristic, not official thinking";
+    const sourceTraceHTML = sourceTrace.length ? `<div class="source-trace"><strong>${esc(traceLabel)}</strong>\n${sourceTrace.map(item => item.type === "marker"
       ? `<span class="source-trace-marker">[${esc(item.marker || "marker")}] ${esc(item.text)}</span>`
       : esc(item.text)).join("\n\n")}</div>` : "";
     return `<section class="message${reasoningOnly ? " reasoning-only" : ""}" data-role="${esc(message.role)}" data-message-id="${esc(message.id)}">
@@ -1349,26 +1374,45 @@ window.OD = window.OD || {};
     }
     state.solVoiceSession = null;
 
-    const chatGPTConversations = state.library.sources()
-      .filter(source => source.source?.platform === "chatgpt")
-      .flatMap(source => source.conversations);
-    if (chatGPTConversations.length && state.solVoiceMapping) {
-      state.solVoiceSession = OD.solVoiceSidecar.buildSession({
-        archive: { ...state.archive, conversations: chatGPTConversations },
-        mappingDocument: state.solVoiceMapping,
+    const documents = Array.isArray(state.solVoiceMapping)
+      ? state.solVoiceMapping
+      : (state.solVoiceMapping ? [state.solVoiceMapping] : []);
+    if (!documents.length) {
+      state.statusError = false;
+      if (rerender && currentId && state.archive) openConversation(currentId);
+      renderStatus();
+      return null;
+    }
+    const sessions = documents.map(mappingDocument => {
+      const platform = OD.solVoiceSidecar.mappingPlatform(mappingDocument);
+      const conversations = state.library.sources()
+        .filter(source => source.source?.platform === platform)
+        .flatMap(source => source.conversations);
+      if (!conversations.length) return null;
+      return OD.solVoiceSidecar.buildSession({
+        archive: { ...state.archive, source: { platform }, conversations },
+        mappingDocument,
         audioFiles: state.solVoiceAudioFiles,
         urlAPI: URL
       });
-    }
+    });
+    state.solVoiceSession = OD.solVoiceSidecar.combineSessions(sessions, URL);
     state.statusError = false;
     if (rerender && currentId && state.archive) openConversation(currentId);
     renderStatus();
     return state.solVoiceSession;
   }
 
+  function upsertVoiceMapping(document) {
+    const existing = Array.isArray(state.solVoiceMapping) ? state.solVoiceMapping : [];
+    state.solVoiceMapping = [
+      ...existing.filter(item => item.format !== document.format),
+      document
+    ];
+  }
+
   async function loadSolVoiceMapping(file) {
-    const document = OD.solVoiceSidecar.parseMapping(await file.text());
-    state.solVoiceMapping = document;
+    upsertVoiceMapping(OD.solVoiceSidecar.parseMapping(await file.text()));
     const session = rebuildSolVoiceSession();
     state.statusText = state.archiveStatusText;
     renderStatus();
@@ -1377,9 +1421,12 @@ window.OD = window.OD || {};
 
   async function loadSolVoiceFolder(files) {
     const selected = [...files];
-    const mappingFile = OD.solVoiceSidecar.findMappingFile(selected);
-    if (mappingFile) {
-      state.solVoiceMapping = OD.solVoiceSidecar.parseMapping(await mappingFile.text());
+    for (const mappingFile of OD.solVoiceSidecar.findMappingFiles(selected)) {
+      try {
+        upsertVoiceMapping(OD.solVoiceSidecar.parseMapping(await mappingFile.text()));
+      } catch (error) {
+        console.warn("Skipped an unrecognized voice mapping file", error);
+      }
     }
     state.solVoiceAudioFiles = selected.filter(file =>
       /\.(?:mp3|m4a|aac|wav|ogg|oga|flac|opus)$/i.test(
@@ -1644,6 +1691,7 @@ window.OD = window.OD || {};
       state.readingProgress = OD.readingProgress.normalize(settings.readingProgress);
     }
     if (["current", "library"].includes(settings.searchScope)) state.searchScope = settings.searchScope;
+    if (typeof settings.searchSourceId === "string" && settings.searchSourceId) state.searchSourceId = settings.searchSourceId;
     if (settings.toolTab === null || ["recent", "bookmarks", "annotations", "search"].includes(settings.toolTab)) {
       state.toolTab = settings.toolTab ?? null;
     }
@@ -1875,6 +1923,13 @@ window.OD = window.OD || {};
   });
   $("searchScopeCurrent").addEventListener("click", () => setSearchScope("current"));
   $("searchScopeLibrary").addEventListener("click", () => setSearchScope("library"));
+  $("searchSource").addEventListener("change", event => {
+    state.searchSourceId = event.target.value || "all";
+    if (state.searchSourceId !== "all") state.searchScope = "library";
+    syncSearchScope();
+    void saveReaderState();
+    if (String($("searchQuery")?.value || "").trim()) performSearch();
+  });
   syncSearchScope();
   $("importPanel").addEventListener("toggle", () => {
     const panel = $("importPanel");

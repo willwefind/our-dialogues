@@ -1,0 +1,130 @@
+[
+  {
+    "uuid": "synthetic-conv-0001",
+    "name": "Synthetic branching chat",
+    "summary": "A wholly synthetic fixture conversation.",
+    "created_at": "2026-08-01T10:00:00.000Z",
+    "updated_at": "2026-08-01T11:00:00.000Z",
+    "account": { "uuid": "synthetic-account" },
+    "chat_messages": [
+      {
+        "uuid": "sm-1",
+        "text": "Synthetic question one",
+        "content": [
+          { "type": "text", "text": "Synthetic question one" }
+        ],
+        "sender": "human",
+        "created_at": "2026-08-01T10:00:01.000Z",
+        "updated_at": "2026-08-01T10:00:01.000Z",
+        "attachments": [
+          { "file_name": "synthetic-notes.txt", "file_size": 42, "file_type": "text/plain", "extracted_content": "synthetic extracted body" }
+        ],
+        "files": [],
+        "parent_message_uuid": "00000000-0000-4000-8000-000000000000"
+      },
+      {
+        "uuid": "sm-2-old",
+        "text": "Abandoned synthetic reply",
+        "content": [
+          { "type": "text", "text": "Abandoned synthetic reply" }
+        ],
+        "sender": "assistant",
+        "created_at": "2026-08-01T10:01:00.000Z",
+        "updated_at": "2026-08-01T10:01:00.000Z",
+        "attachments": [],
+        "files": [],
+        "parent_message_uuid": "sm-1"
+      },
+      {
+        "uuid": "sm-2-new",
+        "text": "Active synthetic reply",
+        "content": [
+          { "type": "thinking", "thinking": "Synthetic official thinking text", "summaries": [], "cut_off": false },
+          { "type": "tool_use", "name": "synthetic_tool", "input": { "query": "synthetic lookup" } },
+          { "type": "tool_result", "name": "synthetic_tool", "content": [{ "type": "text", "text": "synthetic tool output" }], "is_error": false },
+          { "type": "token_budget", "remaining": 1000 },
+          { "type": "text", "text": "Active synthetic reply" }
+        ],
+        "sender": "assistant",
+        "created_at": "2026-08-01T10:05:00.000Z",
+        "updated_at": "2026-08-01T10:05:00.000Z",
+        "attachments": [],
+        "files": [
+          { "file_uuid": "synthetic-file-uuid", "file_name": "synthetic-image.png" }
+        ],
+        "parent_message_uuid": "sm-1"
+      },
+      {
+        "uuid": "sm-3",
+        "text": "Synthetic follow-up on the active branch",
+        "content": [
+          { "type": "text", "text": "Synthetic follow-up on the active branch" }
+        ],
+        "sender": "human",
+        "created_at": "2026-08-01T10:06:00.000Z",
+        "updated_at": "2026-08-01T10:06:00.000Z",
+        "attachments": [],
+        "files": [],
+        "parent_message_uuid": "sm-2-new"
+      }
+    ]
+  },
+  {
+    "uuid": "synthetic-conv-0002",
+    "name": "",
+    "summary": "Synthetic summary line used as the title fallback.",
+    "created_at": "2026-08-02T09:00:00.000Z",
+    "updated_at": "2026-08-02T09:10:00.000Z",
+    "account": { "uuid": "synthetic-account" },
+    "chat_messages": [
+      {
+        "uuid": "sm-b1",
+        "text": "Second synthetic conversation",
+        "content": [
+          { "type": "text", "text": "Second synthetic conversation" }
+        ],
+        "sender": "human",
+        "created_at": "2026-08-02T09:00:01.000Z",
+        "updated_at": "2026-08-02T09:00:01.000Z",
+        "attachments": [],
+        "files": [],
+        "parent_message_uuid": "00000000-0000-4000-8000-000000000000"
+      },
+      {
+        "uuid": "sm-b2",
+        "text": "Synthetic linear answer",
+        "content": [
+          { "type": "text", "text": "Synthetic linear answer" }
+        ],
+        "sender": "assistant",
+        "created_at": "2026-08-02T09:01:00.000Z",
+        "updated_at": "2026-08-02T09:01:00.000Z",
+        "attachments": [],
+        "files": [],
+        "parent_message_uuid": "sm-b1"
+      },
+      {
+        "uuid": "sm-b3",
+        "text": "",
+        "content": [],
+        "sender": "human",
+        "created_at": "2026-08-02T09:02:00.000Z",
+        "updated_at": "2026-08-02T09:02:00.000Z",
+        "attachments": [],
+        "files": [],
+        "parent_message_uuid": "sm-b2"
+      },
+      {
+        "uuid": "sm-b4",
+        "text": "",
+        "content": [],
+        "sender": "assistant",
+        "created_at": "2026-08-02T09:02:01.000Z",
+        "updated_at": "2026-08-02T09:02:01.000Z",
+        "attachments": [],
+        "files": [],
+        "parent_message_uuid": "sm-b3"
+      }
+    ]
+  }
+]

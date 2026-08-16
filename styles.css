@@ -148,3 +148,6 @@ mark.annotation.annotation-flash{animation:bookmark-flash 1.4s ease 2}
 .pref-label{flex:none;width:58px;color:var(--muted);font-size:11px}
 .pref-row select{flex:1;min-width:0;background:var(--paper);color:var(--ink);border:1px solid var(--line);border-radius:7px;padding:4px 6px}
 .pref-row .ghost{padding:4px 12px}
+
+/* ── Search source selector ── */
+#searchSource{display:block;width:calc(100% - 16px);margin:0 8px 7px;background:var(--paper);color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:5px 8px;font-size:11.5px}

@@ -13,6 +13,14 @@ window.OD = window.OD || {};
   const AUTO_ATTACH_CONFIDENCES = Object.freeze(["strong"]);
   const AUTO_ATTACH_SET = new Set(AUTO_ATTACH_CONFIDENCES);
   const MAPPING_FILE_NAME = "chatgpt-solvoice.json";
+  /* One sidecar mechanism, several voice mappings. Each mapping format binds
+     to exactly one source platform so clips can never attach across sources. */
+  /* defaultVoiceLabel names the capture tool, not a person; a private mapping
+     file may override it with `voiceLabel` for a personal display name. */
+  const MAPPING_KINDS = Object.freeze({
+    [FORMAT]: Object.freeze({ version: VERSION, platform: "chatgpt", fileName: MAPPING_FILE_NAME, defaultVoiceLabel: "SolVoice" }),
+    "our-dialogues.cielvoice-claude-mapping": Object.freeze({ version: 1, platform: "claude", fileName: "claude-cielvoice.json", defaultVoiceLabel: "CielVoice" })
+  });
 
   function normalizePath(value) {
     return String(value || "")
@@ -29,25 +37,36 @@ window.OD = window.OD || {};
     if (!document || typeof document !== "object") {
       throw new Error("SolVoice mapping must be a JSON object.");
     }
-    if (document.format !== FORMAT || Number(document.version) !== VERSION) {
-      throw new Error(`Unsupported SolVoice mapping; expected ${FORMAT} v${VERSION}.`);
+    const kind = MAPPING_KINDS[document.format];
+    if (!kind || Number(document.version) !== kind.version) {
+      throw new Error(`Unsupported voice mapping; expected one of: ${
+        Object.entries(MAPPING_KINDS).map(([format, item]) => `${format} v${item.version}`).join(", ")
+      }.`);
     }
     if (!Array.isArray(document.mappings)) {
-      throw new Error("SolVoice mapping has no mappings array.");
+      throw new Error("Voice mapping has no mappings array.");
     }
     return document;
+  }
+
+  function mappingPlatform(document) {
+    return MAPPING_KINDS[document?.format]?.platform || null;
   }
 
   function filePath(file) {
     return normalizePath(file?.webkitRelativePath || file?.relativePath || file?.name);
   }
 
-  function findMappingFile(files) {
-    return [...(files || [])].find(file => {
+  function findMappingFiles(files) {
+    const names = Object.values(MAPPING_KINDS).map(kind => kind.fileName);
+    return [...(files || [])].filter(file => {
       const candidate = filePath(file).toLowerCase();
-      return candidate === MAPPING_FILE_NAME
-        || candidate.endsWith(`/mappings/${MAPPING_FILE_NAME}`);
-    }) || null;
+      return names.some(name => candidate === name || candidate.endsWith(`/mappings/${name}`));
+    });
+  }
+
+  function findMappingFile(files) {
+    return findMappingFiles(files)[0] || null;
   }
 
   function createAudioIndex(files) {
@@ -107,9 +126,9 @@ window.OD = window.OD || {};
     };
   }
 
-  function messageIndex(archive) {
+  function messageIndex(archive, platform) {
     const messages = new Map();
-    if (archive?.source?.platform !== "chatgpt") return messages;
+    if (archive?.source?.platform !== platform) return messages;
     for (const conversation of archive?.conversations || []) {
       for (const message of conversation?.messages || []) {
         if (message?.role !== "assistant" || !message?.id || messages.has(String(message.id))) continue;
@@ -119,8 +138,9 @@ window.OD = window.OD || {};
     return messages;
   }
 
-  function clipFrom(mapping, file, conversationId) {
+  function clipFrom(mapping, file, conversationId, voiceLabel) {
     return {
+      voiceLabel: voiceLabel || null,
       historyItemId: mapping.historyItemId == null ? null : String(mapping.historyItemId),
       audioPath: mapping.audioPath == null ? null : String(mapping.audioPath),
       voiceCreatedAt: mapping.voiceCreatedAt || null,
@@ -149,7 +169,10 @@ window.OD = window.OD || {};
 
   function buildSession({ archive, mappingDocument, audioFiles = [], urlAPI = URL } = {}) {
     const document = parseMapping(mappingDocument);
-    const messages = messageIndex(archive);
+    const messages = messageIndex(archive, mappingPlatform(document));
+    const voiceLabel = (typeof document.voiceLabel === "string" && document.voiceLabel.trim())
+      ? document.voiceLabel.trim()
+      : MAPPING_KINDS[document.format].defaultVoiceLabel;
     const audioIndex = createAudioIndex(audioFiles);
     const clipsByMessageId = new Map();
     let strongMappingsTotal = 0;
@@ -172,7 +195,7 @@ window.OD = window.OD || {};
 
       const messageId = String(mapping.messageId);
       const clips = clipsByMessageId.get(messageId) || [];
-      clips.push(clipFrom(mapping, file, target.conversation.id));
+      clips.push(clipFrom(mapping, file, target.conversation.id, voiceLabel));
       clipsByMessageId.set(messageId, clips);
       attachedPlayerCount += 1;
     }
@@ -208,16 +231,52 @@ window.OD = window.OD || {};
     };
   }
 
+  /* Several per-platform sessions presented as one. The shared URL pool can
+     mint object URLs for any clip because clips carry their own File. */
+  function combineSessions(sessions, urlAPI = URL) {
+    const active = (sessions || []).filter(Boolean);
+    if (!active.length) return null;
+    if (active.length === 1) return active[0];
+    const stats = {};
+    for (const session of active) {
+      for (const [key, value] of Object.entries(session.stats || {})) {
+        if (Number.isFinite(value)) stats[key] = (stats[key] || 0) + value;
+      }
+    }
+    const objectURLs = createObjectURLPool(urlAPI);
+    return {
+      mappingFormat: "combined",
+      mappingVersion: 0,
+      policy: { autoAttachConfidences: [...AUTO_ATTACH_CONFIDENCES] },
+      stats: Object.freeze(stats),
+      objectURLs,
+      clipsForMessage(messageId) {
+        return active.flatMap(session => session.clipsForMessage(messageId));
+      },
+      entries() {
+        return active.flatMap(session => session.entries());
+      },
+      dispose() {
+        objectURLs.revokeAll();
+        for (const session of active) session.dispose();
+      }
+    };
+  }
+
   OD.solVoiceSidecar = {
     FORMAT,
     VERSION,
     AUTO_ATTACH_CONFIDENCES,
     MAPPING_FILE_NAME,
+    MAPPING_KINDS,
     normalizePath,
     parseMapping,
+    mappingPlatform,
     findMappingFile,
+    findMappingFiles,
     createAudioIndex,
     createObjectURLPool,
-    buildSession
+    buildSession,
+    combineSessions
   };
 })(window.OD);

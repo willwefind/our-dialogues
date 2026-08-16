@@ -198,3 +198,122 @@ test("mapping validation rejects unsupported schema versions", async () => {
     /expected .* v2/i
   );
 });
+
+test("CielVoice claude mapping attaches only to claude-platform conversations", async () => {
+  const OD = await loadRuntime();
+  const claudeArchive = OD.schema.archive({
+    platform: "claude",
+    exporter: "claude-official-export",
+    conversations: [{
+      id: "claude-conv-1",
+      messages: [{ id: "claude-msg-1", role: "assistant", content: [{ type: "text", text: "说过的话" }] }]
+    }]
+  });
+  const cielMapping = {
+    format: "our-dialogues.cielvoice-claude-mapping",
+    version: 1,
+    mappings: [{
+      historyItemId: "h1",
+      audioPath: "ciel/clip-1.mp3",
+      messageId: "claude-msg-1",
+      confidence: "strong",
+      matchedBy: "exact-text"
+    }]
+  };
+  const audio = [localFile("VoiceArchive/ciel/clip-1.mp3")];
+
+  const session = OD.solVoiceSidecar.buildSession({
+    archive: claudeArchive,
+    mappingDocument: cielMapping,
+    audioFiles: audio
+  });
+  assert.equal(session.stats.attachedPlayerCount, 1);
+  assert.equal(session.clipsForMessage("claude-msg-1").length, 1);
+
+  const chatgptArchive = archive(OD, [
+    { id: "claude-msg-1", role: "assistant", content: [{ type: "text", text: "同名但不同来源" }] }
+  ]);
+  const crossSession = OD.solVoiceSidecar.buildSession({
+    archive: chatgptArchive,
+    mappingDocument: cielMapping,
+    audioFiles: audio
+  });
+  assert.equal(crossSession.stats.attachedPlayerCount, 0,
+    "a claude mapping never attaches to a chatgpt-platform archive");
+});
+
+test("combined sessions merge clips and stats across voice mappings and dispose together", async () => {
+  const OD = await loadRuntime();
+  const chatgptSession = OD.solVoiceSidecar.buildSession({
+    archive: archive(OD, [{ id: "gpt-msg-1", role: "assistant", content: [{ type: "text", text: "sol line" }] }]),
+    mappingDocument: mappingDocument([mapping("strong", "gpt-msg-1", "sol/audio/sol-1.mp3")]),
+    audioFiles: [localFile("VoiceArchive/sol/audio/sol-1.mp3")]
+  });
+  const claudeSession = OD.solVoiceSidecar.buildSession({
+    archive: OD.schema.archive({
+      platform: "claude",
+      exporter: "claude-official-export",
+      conversations: [{ id: "c1", messages: [{ id: "claude-msg-1", role: "assistant", content: [{ type: "text", text: "ciel line" }] }] }]
+    }),
+    mappingDocument: {
+      format: "our-dialogues.cielvoice-claude-mapping",
+      version: 1,
+      mappings: [{ historyItemId: "h2", audioPath: "ciel/clip-2.mp3", messageId: "claude-msg-1", confidence: "strong" }]
+    },
+    audioFiles: [localFile("VoiceArchive/ciel/clip-2.mp3")]
+  });
+
+  const combined = OD.solVoiceSidecar.combineSessions([chatgptSession, claudeSession]);
+  assert.equal(combined.stats.attachedPlayerCount, 2);
+  assert.equal(combined.clipsForMessage("gpt-msg-1").length, 1);
+  assert.equal(combined.clipsForMessage("claude-msg-1").length, 1);
+
+  const url = combined.objectURLs.get(combined.clipsForMessage("claude-msg-1")[0]);
+  assert.ok(url, "the combined pool can mint URLs for any session's clip");
+  combined.dispose();
+  assert.equal(combined.clipsForMessage("gpt-msg-1").length, 0, "dispose clears every underlying session");
+
+  assert.equal(OD.solVoiceSidecar.combineSessions([null, chatgptSession]), chatgptSession,
+    "a single live session is returned as-is");
+  assert.equal(OD.solVoiceSidecar.combineSessions([]), null);
+});
+
+test("folder discovery finds both voice mapping filenames", async () => {
+  const OD = await loadRuntime();
+  const files = [
+    localFile("VoiceArchive/mappings/chatgpt-solvoice.json"),
+    localFile("VoiceArchive/mappings/claude-cielvoice.json"),
+    localFile("VoiceArchive/ciel/clip.mp3")
+  ];
+  const found = Array.from(OD.solVoiceSidecar.findMappingFiles(files), file => file.name).sort();
+  assert.deepEqual(found, ["chatgpt-solvoice.json", "claude-cielvoice.json"]);
+});
+
+test("clips carry a voice label: private document override wins, tool name is the fallback", async () => {
+  const OD = await loadRuntime();
+  const claudeArchive = OD.schema.archive({
+    platform: "claude",
+    exporter: "claude-official-export",
+    conversations: [{ id: "c1", messages: [{ id: "m1", role: "assistant", content: [{ type: "text", text: "line" }] }] }]
+  });
+  const base = {
+    format: "our-dialogues.cielvoice-claude-mapping",
+    version: 1,
+    mappings: [{ historyItemId: "h1", audioPath: "ciel/clip.mp3", messageId: "m1", confidence: "strong" }]
+  };
+  const audio = [localFile("VoiceArchive/ciel/clip.mp3")];
+
+  const labelled = OD.solVoiceSidecar.buildSession({
+    archive: claudeArchive,
+    mappingDocument: { ...base, voiceLabel: "Ciel" },
+    audioFiles: audio
+  });
+  assert.equal(labelled.clipsForMessage("m1")[0].voiceLabel, "Ciel", "the private mapping's label wins");
+
+  const fallback = OD.solVoiceSidecar.buildSession({
+    archive: claudeArchive,
+    mappingDocument: base,
+    audioFiles: audio
+  });
+  assert.equal(fallback.clipsForMessage("m1")[0].voiceLabel, "CielVoice", "the tool name is the neutral fallback");
+});

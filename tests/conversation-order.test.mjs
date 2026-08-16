@@ -75,7 +75,7 @@ async function loadAppRuntime(savedSortMode="asc", options={}) {
     "annotationEditor", "annotationColors", "annotationNote",
     "annotationSave", "annotationCancel", "annotationDelete", "importPanel",
     "recentList", "recentCount",
-    "searchHitCount", "searchScopeCurrent", "searchScopeLibrary", "searchQuery", "searchResults",
+    "searchHitCount", "searchScopeCurrent", "searchScopeLibrary", "searchSource", "searchQuery", "searchResults",
     "toolTabRecent", "toolTabBookmarks", "toolTabAnnotations", "toolTabSearch",
     "toolPanels", "recentPane", "bookmarksPane", "annotationsPane", "searchPane",
     "readerPrefsToggle", "readerPrefsPanel"
@@ -131,7 +131,8 @@ async function loadAppRuntime(savedSortMode="asc", options={}) {
     "src/core/bookmarks.js",
     "src/core/annotations.js",
     "src/core/reading-progress.js",
-    "src/core/message-search.js"
+    "src/core/message-search.js",
+    "src/core/solvoice-sidecar.js"
   ];
   if (options.driver) runtimeFiles.push("src/core/persistent-library.js");
   for (const relativePath of runtimeFiles) {
@@ -882,4 +883,46 @@ test("the Aa popover toggles and an outside click closes it", async () => {
   assert.equal(panel.hidden, false);
   dispatchDocument("click");
   assert.equal(panel.hidden, true, "clicking elsewhere closes the popover");
+});
+
+test("library search can target one chosen source, decoupled from the catalog filters", async () => {
+  const { runtime, elements, stored } = await loadAppRuntime("asc");
+  runtime.OD.app.loadArchive({
+    conversations: [{
+      id: "in-a",
+      title: "来源A的一段",
+      createdAt: "2025-01-01T00:00:00.000Z",
+      messages: [{ id: "a-m1", role: "assistant", content: "两个来源都有的关键词" }]
+    }]
+  }, "Source A");
+  runtime.OD.app.loadArchive({
+    conversations: [{
+      id: "in-b",
+      title: "来源B的一段",
+      createdAt: "2026-01-01T00:00:00.000Z",
+      messages: [{ id: "b-m1", role: "assistant", content: "两个来源都有的关键词" }]
+    }]
+  }, "Source B");
+
+  elements.get("searchQuery").value = "关键词";
+  runtime.OD.app.setSearchScope("library");
+  let hits = runtime.OD.app.performSearch();
+  assert.equal(hits.length, 2, "all sources by default");
+
+  const sourceB = runtime.OD.app.getState().sources.find(source => source.label === "Source B");
+  const control = elements.get("searchSource");
+  control.value = sourceB.id;
+  control.dispatch("change");
+  hits = runtime.OD.app.performSearch();
+  assert.equal(hits.length, 1, "narrowed to the chosen source");
+  assert.equal(hits[0].conversationId, "in-b");
+
+  const mirror = JSON.parse(stored.get("our-dialogues.reader-state.v1"));
+  assert.equal(mirror.searchSourceId, sourceB.id, "the chosen search source persists");
+
+  runtime.OD.app.removeSource(sourceB.id);
+  hits = runtime.OD.app.performSearch();
+  assert.equal(runtime.OD.app.getState().searchSourceId ?? "all", "all", "a removed source falls back to all");
+  assert.equal(hits.length, 1);
+  assert.equal(hits[0].conversationId, "in-a");
 });

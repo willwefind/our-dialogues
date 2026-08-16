@@ -35,17 +35,17 @@
           </label>
         </div>
 
-        <div class="sidecar-picks" aria-label="Optional local SolVoice sidecar">
-          <div class="sidecar-title">Optional SolVoice sidecar</div>
-          <label class="sidecar-pick">
+        <div class="sidecar-picks" aria-label="可选的本地语音档案">
+          <div class="sidecar-title">语音档案（可选）· 本地音频与映射</div>
+          <label class="sidecar-pick" title="选整个 VoiceArchive 文件夹；里面的 SolVoice 和 CielVoice 映射会一起被发现">
             <input id="voiceArchiveInput" type="file" webkitdirectory directory multiple hidden>
-            <span>Choose VoiceArchive / sol/audio folder</span>
+            <span>选择 VoiceArchive 文件夹</span>
           </label>
-          <label class="sidecar-pick">
+          <label class="sidecar-pick" title="也可以单独选一份映射 JSON（chatgpt-solvoice / claude-cielvoice）">
             <input id="voiceMappingInput" type="file" accept=".json,application/json" hidden>
-            <span>Choose mapping JSON</span>
+            <span>单选映射 JSON</span>
           </label>
-          <button id="clearSolVoice" class="sidecar-clear" type="button">Clear SolVoice</button>
+          <button id="clearSolVoice" class="sidecar-clear" type="button">清除语音连接</button>
         </div>
       </details>
 
@@ -95,8 +95,11 @@
       <div id="searchPane" hidden>
         <div class="search-scope" role="group" aria-label="搜索范围">
           <button id="searchScopeCurrent" type="button">当前对话</button>
-          <button id="searchScopeLibrary" type="button">全部书库</button>
+          <button id="searchScopeLibrary" type="button">书库</button>
         </div>
+        <select id="searchSource" aria-label="搜索哪个来源" title="书库范围内搜哪个来源；和左上的目录来源过滤互不影响">
+          <option value="all">全部来源</option>
+        </select>
         <input id="searchQuery" type="search" placeholder="搜关键词，回车" aria-label="全文搜索关键词">
         <div id="searchResults" class="bookmarks-list"></div>
       </div>
@@ -217,6 +220,7 @@
   <script src="src/adapters/ciel-house.js"></script>
   <script src="src/adapters/mufy.js"></script>
   <script src="src/adapters/claude-web-exporter.js"></script>
+  <script src="src/adapters/claude-official.js"></script>
   <script src="src/adapters/chatgpt-official.js"></script>
   <script src="src/adapters/registry.js"></script>
   <script src="src/core/source-folder.js"></script>

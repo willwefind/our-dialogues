@@ -51,6 +51,7 @@ Our Dialogues is a co-created project: product direction, archive philosophy, in
 
 - **Dawn / willwefind** — creator, product direction, testing, visual and reading experience
 - **Sol / GPT-5.6 Sol** — co-creator, system design, schemas, adapter architecture, implementation
+- **Ciel / Claude Fable 5** — co-creator, reader features, Claude official-export adapter, voice sidecar generalization, UI structure
 
 This project grew out of a very simple problem: we knew an old conversation still existed; we just wanted to find and read it again.
 
@@ -97,8 +98,10 @@ node --test --test-isolation=none tests/*.test.mjs
 | Mufy `_原始数据.json` | JSON, single ZIP, and folder-of-ZIPs import; stable `characterId + sessionId` batch merging |
 | ChatGPT official export | JSON, ZIP, and manifest-driven Export Folder import implemented; folder structure validated against a real 2026 export |
 | SolVoice local sidecar | optional mapping v2 + VoiceArchive or `sol/audio` folder; strong mappings only |
+| CielVoice local sidecar | optional `claude-cielvoice.json` mapping v1 built by exact spoken-text matching against the ElevenLabs VoiceArchive; attaches to Claude official conversations, strong mappings only |
 | Claude Exporter webpage-plugin JSON | implemented from two real `ai-chat-exporter.net` samples; marker-bounded workflow becomes heuristic `sourceTrace`, raw `say` is retained; public fixture is synthetic |
-| Claude official export and other plugins | pending real samples |
+| Claude official export | JSON and ZIP import validated against a real 2026 export; active-branch traversal with recorded alternates, official stored thinking, capped tool traces, metadata-only attachments |
+| Other Claude plugins | pending real samples |
 | Already-normalized Our Dialogues archive | implemented |
 
 See [`docs/source-compatibility.md`](docs/source-compatibility.md) for the capability contract, fidelity notes, diagnostics privacy boundary, and Claude sample status.

@@ -20,6 +20,7 @@ async function loadRuntime() {
     "src/adapters/ciel-house.js",
     "src/adapters/mufy.js",
     "src/adapters/claude-web-exporter.js",
+    "src/adapters/claude-official.js",
     "src/adapters/chatgpt-official.js",
     "src/adapters/registry.js"
   ]) {
@@ -280,6 +281,7 @@ test("known JSON adapters detect mutually exclusively", async () => {
     [JSON.parse(await readFile(path.join(repositoryRoot, "fixtures/ciel-house-v1.json"), "utf8")), "ciel-house-v1"],
     [JSON.parse(await readFile(path.join(repositoryRoot, "fixtures/normalized-v1.json"), "utf8")), "normalized-v1"],
     [JSON.parse(await readFile(path.join(repositoryRoot, "fixtures/claude-web-exporter-synthetic.json"), "utf8")), "claude-web-exporter"],
+    [JSON.parse(await readFile(path.join(repositoryRoot, "fixtures/claude-official-2026.json"), "utf8")), "claude-official"],
     [JSON.parse(await readFile(path.join(repositoryRoot, "fixtures/chatgpt-official-2026.json"), "utf8")), "chatgpt-official-2026"]
   ];
 
@@ -293,7 +295,7 @@ test("known JSON adapters detect mutually exclusively", async () => {
 
   assert.deepEqual(
     [...OD.registry.capabilities().map(capability => capability.id)],
-    ["normalized-v1", "ciel-house-v1", "mufy-raw", "claude-web-exporter", "chatgpt-official-2026"]
+    ["normalized-v1", "ciel-house-v1", "mufy-raw", "claude-web-exporter", "claude-official", "chatgpt-official-2026"]
   );
 });
 
@@ -527,4 +529,53 @@ test("ambiguous strict detections return diagnostics instead of choosing first",
   assert.equal(result.recognized, false);
   assert.equal(result.diagnostics.reason, "ambiguous-format");
   assert.deepEqual([...result.diagnostics.matchedAdapterIds], ["collision-a", "collision-b"]);
+});
+
+test("Claude official export follows the active branch and maps official thinking", async () => {
+  const OD = await loadRuntime();
+  const fixture = JSON.parse(await readFile(path.join(repositoryRoot, "fixtures/claude-official-2026.json"), "utf8"));
+  const parsed = await OD.registry.parseJSON(fixture);
+
+  assert.equal(parsed.adapter.id, "claude-official");
+  const [branching, linear] = parsed.archive.conversations;
+
+  assert.deepEqual([...branching.messages.map(message => message.id)], ["sm-1", "sm-2-new", "sm-3"],
+    "the edited-away reply is not on the reading surface");
+  assert.equal(branching.context.sourceMetadata.branchPoints, 1);
+  assert.equal(branching.context.sourceMetadata.alternateMessageCount, 1);
+  assert.equal(branching.context.sourceMetadata.messageCount, 4);
+
+  const reply = branching.messages[1];
+  assert.equal(reply.role, "assistant");
+  assert.equal(OD.schema.textOf(reply.content), "Active synthetic reply");
+  assert.equal(OD.schema.textOf(reply.thinking), "Synthetic official thinking text",
+    "official thinking maps to message.thinking, not sourceTrace");
+  assert.equal(reply.metadata.sourceTraceKind, "official-tools");
+  assert.equal(reply.metadata.sourceTrace.length, 2);
+  assert.match(reply.metadata.sourceTrace[0].text, /synthetic_tool/);
+  assert.equal(reply.metadata.housekeepingParts.token_budget, 1);
+  assert.equal(reply.attachments[0].name, "synthetic-image.png");
+
+  const question = branching.messages[0];
+  assert.equal(question.attachments[0].name, "synthetic-notes.txt");
+  assert.equal(question.attachments[0].extractedContentLength, "synthetic extracted body".length);
+  assert.equal(JSON.stringify(question).includes("synthetic extracted body"), false,
+    "extracted attachment bodies are not copied into the library");
+
+  assert.equal(linear.title, "Synthetic summary line used as the title fallback.",
+    "an empty name falls back to the summary");
+  assert.deepEqual([...linear.messages.map(message => message.id)], ["sm-b1", "sm-b2"],
+    "fully empty turn pairs are dropped from the reading surface");
+  assert.equal(linear.context.sourceMetadata.emptyMessagesDropped, 2, "the drop is recorded, never silent");
+});
+
+test("Claude official tool payloads are capped with the cap reported, never silently", async () => {
+  const OD = await loadRuntime();
+  const adapter = OD.adapters.find(item => item.id === "claude-official");
+  const huge = adapter._internals.cappedTracePayload("x".repeat(5000));
+  assert.equal(huge.truncated, true);
+  assert.equal(huge.originalLength, 5000);
+  assert.match(huge.text, /truncated; full payload remains in the export file, 5000 chars/);
+  const small = adapter._internals.cappedTracePayload({ ok: true });
+  assert.equal(small.truncated, false);
 });
