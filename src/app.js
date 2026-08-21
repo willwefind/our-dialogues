@@ -797,13 +797,22 @@ window.OD = window.OD || {};
       return null;
     }
     const stamp = new Date().toISOString().slice(0, 10);
-    return kind === "list-markdown"
-      ? { filename: OD.exporter.safeFilename(`our-dialogues-${stamp}（${state.filtered.length} 段）`, "md"),
-          mimeType: "text/markdown",
-          content: OD.exporter.conversationsToMarkdown(state.filtered, { sourceLabelOf }) }
-      : { filename: OD.exporter.safeFilename(`our-dialogues-${stamp}（${state.filtered.length} 段）`, "jsonl"),
-          mimeType: "application/x-ndjson",
-          content: OD.exporter.conversationsToJSONL(state.filtered) };
+    const listName = extension =>
+      OD.exporter.safeFilename(`our-dialogues-${stamp}（${state.filtered.length} 段）`, extension);
+    if (kind === "list-markdown") {
+      return { filename: listName("md"), mimeType: "text/markdown",
+        content: OD.exporter.conversationsToMarkdown(state.filtered, { sourceLabelOf }) };
+    }
+    if (kind === "list-epub") {
+      return { filename: listName("epub"), mimeType: "application/epub+zip",
+        content: OD.epub.buildEpub({
+          title: `Our Dialogues · ${stamp}`,
+          conversations: state.filtered,
+          sourceLabelOf
+        }) };
+    }
+    return { filename: listName("jsonl"), mimeType: "application/x-ndjson",
+      content: OD.exporter.conversationsToJSONL(state.filtered) };
   }
 
   function triggerDownload(payload) {
@@ -2194,6 +2203,7 @@ window.OD = window.OD || {};
   $("exportCurrentJson").addEventListener("click", () => exportAs("current-json"));
   $("exportListMd").addEventListener("click", () => exportAs("list-markdown"));
   $("exportListJsonl").addEventListener("click", () => exportAs("list-jsonl"));
+  $("exportListEpub").addEventListener("click", () => exportAs("list-epub"));
   $("tagEditor").hidden = true;
   $("favoriteToggle").addEventListener("click", () => toggleFavorite());
   $("tagToggle").addEventListener("click", event => {

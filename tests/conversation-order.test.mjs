@@ -82,7 +82,7 @@ async function loadAppRuntime(savedSortMode="asc", options={}) {
     "favoriteToggle", "tagToggle", "tagEditor", "tagChips", "tagInput", "tagSuggestions",
     "favoritesFilter", "tagFilter",
     "exportToggle", "exportMenu", "exportCurrentMd", "exportCurrentJson", "exportListMd", "exportListJsonl",
-    "demoImport"
+    "exportListEpub", "demoImport"
   ];
   const elements = new Map(ids.map(id => [id, fakeElement(id)]));
   const sortAscending = fakeElement("sortAscending");
@@ -100,6 +100,8 @@ async function loadAppRuntime(savedSortMode="asc", options={}) {
     Blob,
     File,
     Date,
+    TextEncoder,
+    TextDecoder,
     setTimeout,
     clearTimeout,
     localStorage: {
@@ -139,7 +141,9 @@ async function loadAppRuntime(savedSortMode="asc", options={}) {
     "src/core/message-search.js",
     "src/core/solvoice-sidecar.js",
     "src/core/organization.js",
-    "src/core/export.js"
+    "src/core/export.js",
+    "src/core/zip-writer.js",
+    "src/core/epub.js"
   ];
   if (options.driver) runtimeFiles.push("src/core/persistent-library.js");
   for (const relativePath of runtimeFiles) {
@@ -1110,4 +1114,10 @@ test("exports carry the reading surface and respect the filtered list", async ()
   const narrowed = runtime.OD.app.buildExport("list-markdown");
   assert.match(narrowed.content, /第二段/);
   assert.doesNotMatch(narrowed.content, /第一段/, "list exports follow the live filters");
+
+  runtime.OD.app.setTagFilter("");
+  const epub = runtime.OD.app.buildExport("list-epub");
+  assert.equal(epub.mimeType, "application/epub+zip");
+  assert.match(epub.filename, /\.epub$/);
+  assert.ok(epub.content.length > 500, "EPUB bytes are produced");
 });

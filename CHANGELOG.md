@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Add EPUB export: 当前列表 → a real EPUB 3 book (one chapter per conversation, native TOC via nav.xhtml, XML-escaped titles/text, the same reading-surface boundary with excluded thinking/trace counts noted per chapter), built by a new dependency-free STORE-only zip writer whose output round-trips through this project's own zip reader in tests and extracts cleanly with the system unzipper.
 - Sync the AGPL-3.0 relicense from main into the working branch and align the README's license section; refresh the stale Planned-next list.
 - Add library organization: per-conversation favorites (⭐ toolbar toggle, star in the catalog, 只看收藏 filter) and tags (🏷 editor popover with chips and suggestions from existing tags, tag chips in the catalog, a tag filter with usage counts); both persist with reader settings, compose with search/source filters, and a vanished tag resets its filter instead of stranding an empty catalog.
 - Add reading-surface export: current conversation → Markdown or normalized JSON, current filtered list → Markdown collection or JSONL; Markdown reports excluded thinking/tool-trace counts instead of dropping them silently, list exports follow the live filters, and downloads are generated locally.
