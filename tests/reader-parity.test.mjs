@@ -73,3 +73,23 @@ test("message anchors select the containing page and page values clamp", async (
   assert.equal(core.clampPage(90, pages), 1);
   assert.equal(core.clampPage(-2, pages), 0);
 });
+
+test("every fontFamily option in the Reader HTML has a defined font stack, and bundled faces keep fallbacks", async () => {
+  const { readFile } = await import("node:fs/promises");
+  const path = await import("node:path");
+  const html = await readFile(path.join(repositoryRoot, "index.html"), "utf8");
+  const select = html.match(/<select id="fontFamily"[\s\S]*?<\/select>/)[0];
+  const optionValues = [...select.matchAll(/<option value="([^"]+)"/g)].map(match => match[1]);
+  const parity = await loadCore();
+  const knownKeys = Object.keys(parity.FONT_FAMILIES);
+
+  assert.ok(optionValues.length >= 10, "the font menu offers a real selection");
+  for (const value of optionValues) {
+    assert.ok(knownKeys.includes(value), `option "${value}" must exist in FONT_FAMILIES`);
+  }
+  for (const [key, stack] of Object.entries(parity.FONT_FAMILIES)) {
+    assert.match(stack, /,(?:.*serif|.*sans-serif)\s*$/i, `"${key}" stack must end in a generic fallback`);
+  }
+  assert.equal(parity.normalizePreferences({ fontFamily: "huiwen" }).fontFamily, "huiwen");
+  assert.equal(parity.normalizePreferences({ fontFamily: "not-a-font" }).fontFamily, "serif", "unknown keys fall back to the default");
+});

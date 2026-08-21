@@ -209,3 +209,15 @@ mark.annotation.annotation-flash{animation:bookmark-flash 1.4s ease 2}
 .export-menu button{display:block;width:100%;margin-bottom:6px;border:1px solid var(--line);border-radius:8px;background:var(--paper);color:var(--ink);padding:8px 10px;cursor:pointer;font-size:12px;text-align:left}
 .export-menu button:hover{border-color:var(--accent)}
 .export-note{margin:4px 0 0;color:var(--muted);font-size:10px;line-height:1.6}
+
+/* ── Bundled reading fonts ──
+   Loaded only when selected (browsers fetch a face on first use). A missing
+   file falls back to the system stack without breaking anything — the same
+   contract the standalone Mufy reader proved. kinghwa-oldsong ships as a
+   documented local-only font (too heavy for the repo); see fonts/README.md. */
+@font-face{font-family:"Huiwen Mincho";src:url("fonts/huiwen-mincho/huiwen-mincho.otf") format("opentype");font-display:swap}
+@font-face{font-family:"Zhuque Fangsong";src:url("fonts/zhuque-fangsong/ZhuqueFangsong-Regular.ttf") format("truetype");font-display:swap}
+@font-face{font-family:"KingHwa OldSong";src:url("fonts/kinghwa-oldsong/kinghwa-oldsong.ttf") format("truetype");font-display:swap}
+@font-face{font-family:"IM Fell English";src:url("fonts/im-fell-english/IMFellEnglish-Regular.ttf") format("truetype");font-display:swap}
+@font-face{font-family:"IM Fell English";src:url("fonts/im-fell-english/IMFellEnglish-Italic.ttf") format("truetype");font-style:italic;font-display:swap}
+@font-face{font-family:"Special Elite";src:url("fonts/special-elite/SpecialElite-Regular.ttf") format("truetype");font-display:swap}

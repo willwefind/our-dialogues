@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Add bundled reading fonts, shiju-style (one folder per font with its license committed): 汇文明朝体 and 朱雀仿宋 plus OFL/Apache English faces (IM Fell English, Special Elite) with 打字机·明朝 and 古籍英文·明朝 pairing stacks; 京華老宋体 is declared but ships local-only (32 MB — folder, license note, and README instructions committed, binary gitignored). Faces load only when selected, every stack ends in system fallbacks so a missing file degrades gracefully, and the Aa font menu grows to grouped 内置/系统 choices including 仿宋 and 等线. A regression test keeps the font menu and FONT_FAMILIES in lockstep and every stack ending in a generic fallback.
 - Add single-file HTML export for the current conversation and the filtered list: one self-contained readable page (inline styles, anchor TOC when there is more than one conversation, escaped text, same reading-surface boundary with excluded counts noted) that opens anywhere offline.
 - Add EPUB export: 当前列表 → a real EPUB 3 book (one chapter per conversation, native TOC via nav.xhtml, XML-escaped titles/text, the same reading-surface boundary with excluded thinking/trace counts noted per chapter), built by a new dependency-free STORE-only zip writer whose output round-trips through this project's own zip reader in tests and extracts cleanly with the system unzipper.
 - Sync the AGPL-3.0 relicense from main into the working branch and align the README's license section; refresh the stale Planned-next list.

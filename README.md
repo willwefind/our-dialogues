@@ -33,6 +33,7 @@ Currently included:
 - Message-level full-text search with current-conversation, whole-library, and per-source scopes: every occurrence is its own hit with context, and clicking a hit jumps exactly to its `messageId` with a flash
 - Phone layout: the sidebar becomes a backdrop drawer, the toolbar stays one row, and the welcome card steers mobile users to multi-select JSON / ZIP import
 - Favorites and tags with catalog filters, persisted with reader settings
+- Bundled reading fonts with licenses (汇文明朝体, 朱雀仿宋, IM Fell English, Special Elite; 京華老宋体 as a documented local-only face) — see [`fonts/README.md`](fonts/README.md)
 - Reading-surface export: conversation → Markdown / normalized JSON / single-file HTML; filtered list → Markdown collection / JSONL / EPUB 3 e-book (one chapter per conversation, native e-reader TOC) / single-file HTML with an anchor TOC — excluded thinking/trace counts always reported
 - One-click synthetic demo library (http(s) only) for trying the Reader without real data
 - Dedicated conservative Mufy title resolver with provenance and duplicate display disambiguation

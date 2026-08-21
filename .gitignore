@@ -56,3 +56,5 @@ Thumbs.db
 .vscode/
 .idea/
 .claude/
+fonts/kinghwa-oldsong/*.ttf
+fonts/kinghwa-oldsong/*.otf

@@ -11,11 +11,20 @@ window.OD = window.OD || {};
     readingMode: "scroll",
     pageLength: "mid"
   });
+  /* Bundled faces come first in their stacks so a present font wins and a
+     missing file falls straight through to the system fonts behind it. */
   const FONT_FAMILIES = Object.freeze({
     serif: 'ui-serif,"Noto Serif SC","Source Han Serif SC","Songti SC",serif',
+    huiwen: '"Huiwen Mincho","Noto Serif SC","Songti SC",serif',
+    zhuque: '"Zhuque Fangsong","FangSong","STFangsong",serif',
+    kinghwa: '"KingHwa OldSong","Noto Serif SC","Songti SC",serif',
+    typewriter: '"Special Elite","Huiwen Mincho","Noto Serif SC",serif',
+    fell: '"IM Fell English","Huiwen Mincho","Noto Serif SC",serif',
     song: '"Songti SC","STSong","Noto Serif CJK SC","SimSun",serif',
     kai: '"Kaiti SC","STKaiti","KaiTi",serif',
-    sans: '"PingFang SC","Microsoft YaHei","Noto Sans CJK SC",sans-serif'
+    fangsong: '"FangSong","STFangsong","仿宋",serif',
+    sans: '"PingFang SC","Microsoft YaHei","Noto Sans CJK SC",sans-serif',
+    dengxian: '"DengXian","等线","PingFang SC",sans-serif'
   });
 
   function oneOf(value, allowed, fallback) {

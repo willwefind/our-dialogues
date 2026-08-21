@@ -165,11 +165,22 @@
         </select>
       </div>
       <div class="pref-row"><span class="pref-label">字体</span>
-        <select id="fontFamily" aria-label="正文字体">
-          <option value="serif" selected>默认衬线</option>
-          <option value="song">宋体</option>
-          <option value="kai">楷体</option>
-          <option value="sans">黑体</option>
+        <select id="fontFamily" aria-label="正文字体" title="内置字体选中后才开始加载；字体文件缺失时自动退回系统字体">
+          <optgroup label="内置字体">
+            <option value="huiwen">汇文明朝体</option>
+            <option value="zhuque">朱雀仿宋</option>
+            <option value="typewriter">打字机 · 明朝</option>
+            <option value="fell">古籍英文 · 明朝</option>
+            <option value="kinghwa">京華老宋（需本地字体文件）</option>
+          </optgroup>
+          <optgroup label="系统字体">
+            <option value="serif" selected>默认衬线</option>
+            <option value="song">宋体</option>
+            <option value="kai">楷体</option>
+            <option value="fangsong">仿宋</option>
+            <option value="sans">黑体</option>
+            <option value="dengxian">等线</option>
+          </optgroup>
         </select>
       </div>
       <div class="pref-row"><span class="pref-label">翻页方式</span>
