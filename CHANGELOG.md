@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Sync the AGPL-3.0 relicense from main into the working branch and align the README's license section; refresh the stale Planned-next list.
+- Add library organization: per-conversation favorites (⭐ toolbar toggle, star in the catalog, 只看收藏 filter) and tags (🏷 editor popover with chips and suggestions from existing tags, tag chips in the catalog, a tag filter with usage counts); both persist with reader settings, compose with search/source filters, and a vanished tag resets its filter instead of stranding an empty catalog.
+- Add reading-surface export: current conversation → Markdown or normalized JSON, current filtered list → Markdown collection or JSONL; Markdown reports excluded thinking/tool-trace counts instead of dropping them silently, list exports follow the live filters, and downloads are generated locally.
+- Add a one-click synthetic demo library on http(s) so a stranger can try the Reader without real data; duplicate-import protection keeps a second click from doubling the sources.
+- Add `start-reader.sh` for macOS/Linux (fixed port for a stable IndexedDB origin, best-effort browser open) with a `.gitattributes` rule keeping shell scripts LF.
+- Add CONTRIBUTING.md: never post real conversations (synthetic samples or key-names-only structure reports), strict-detection and honest-rendering rules, and an adapter how-to.
 - Never strand the narrow-screen drawer: narrowing the window mid-session auto-closes the sidebar (☰ would be buried under it) and re-syncs the backdrop, watching both matchMedia change and window resize since some environments deliver only one; the drawer also gains an explicit ✕ close button on narrow screens.
 - Make the Reader phone-usable: on narrow screens the sidebar becomes a drawer over the text (starts closed, ☰ opens it, a backdrop tap or opening a conversation closes it), the toolbar stays one thumb-height row (显示开关 moved into the Aa popover for all screen sizes), the Aa popover fits and scrolls within the viewport, touch targets grow, and the welcome card warns that mobile folder pickers degrade — use 选择 JSON / ZIP multi-select instead, a lesson inherited from the standalone Mufy reader.
 - Make voice audio folder selection additive: choosing another folder (e.g. Ciel House audio after the VoiceArchive) merges into the session's audio pool with path+size deduplication instead of replacing it.

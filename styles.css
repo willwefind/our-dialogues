@@ -181,3 +181,31 @@ mark.annotation.annotation-flash{animation:bookmark-flash 1.4s ease 2}
 .pref-row-toggle{border-top:1px solid var(--line);padding-top:9px}
 .pref-row-toggle+.pref-row-toggle{border-top:0;padding-top:0}
 .pref-row-toggle label{display:flex;align-items:center;gap:7px;color:var(--ink);font-size:12px;cursor:pointer}
+
+/* ── Favorites and tags ── */
+.organize-tools{display:flex;align-items:center;gap:6px;padding:0 14px 8px;font:10px/1.3 ui-sans-serif,system-ui,sans-serif}
+.organize-tools button{flex:none;border:1px solid var(--line);border-radius:7px;background:var(--paper);color:var(--muted);padding:5px 8px;cursor:pointer}
+.organize-tools button:hover{border-color:var(--accent);color:var(--ink)}
+.organize-tools button[aria-pressed="true"]{border-color:var(--accent);color:var(--accent);font-weight:600;background:var(--user)}
+.organize-tools select{flex:1;min-width:0;border:1px solid var(--line);border-radius:7px;background:var(--paper);color:var(--muted);padding:5px 7px}
+.conv-star{font-size:11px}
+.conv-tag{display:inline-block;margin-left:4px;padding:1px 6px;border:1px solid var(--line);border-radius:999px;background:var(--paper);color:var(--muted);font-size:9px;vertical-align:middle}
+.tag-editor{width:min(92vw,280px)}
+.tag-editor-title{width:auto;margin-bottom:8px}
+.tag-chips{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:9px}
+.tag-chip{display:inline-flex;align-items:center;gap:4px;padding:3px 6px 3px 9px;border:1px solid var(--line);border-radius:999px;background:var(--paper);color:var(--ink);font-size:11.5px}
+.tag-chip button{border:0;background:transparent;color:var(--muted);cursor:pointer;padding:0 2px;font-size:10px;line-height:1}
+.tag-chip button:hover{color:#b33224}
+.tag-empty{color:var(--muted);font-size:11px}
+#tagInput{display:block;width:100%;border:1px solid var(--line);border-radius:8px;background:var(--paper);color:var(--ink);padding:6px 9px;font-size:12px;outline:none}
+#tagInput:focus{border-color:var(--accent)}
+.tag-suggestions{display:flex;flex-wrap:wrap;align-items:center;gap:5px;margin-top:9px}
+.tag-suggest-label{color:var(--muted);font-size:10px}
+.tag-suggest{border:1px dashed var(--line);border-radius:999px;background:transparent;color:var(--muted);padding:2px 8px;cursor:pointer;font-size:10.5px}
+.tag-suggest:hover{border-color:var(--accent);color:var(--accent)}
+
+/* ── Export menu ── */
+.export-menu{width:min(92vw,250px)}
+.export-menu button{display:block;width:100%;margin-bottom:6px;border:1px solid var(--line);border-radius:8px;background:var(--paper);color:var(--ink);padding:8px 10px;cursor:pointer;font-size:12px;text-align:left}
+.export-menu button:hover{border-color:var(--accent)}
+.export-note{margin:4px 0 0;color:var(--muted);font-size:10px;line-height:1.6}

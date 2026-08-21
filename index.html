@@ -70,6 +70,12 @@
       <button id="clearSources" type="button" disabled>清空全部</button>
     </div>
 
+    <div class="organize-tools">
+      <button id="favoritesFilter" type="button" aria-pressed="false" title="只看收藏的对话">⭐ 只看收藏</button>
+      <select id="tagFilter" aria-label="按标签筛选">
+        <option value="">全部标签</option>
+      </select>
+    </div>
     <div class="archive-tools">
       <div id="archiveMeta" class="archive-meta"></div>
       <div class="sort-control" role="group" aria-label="按对话创建时间排序">
@@ -115,6 +121,25 @@
       <div id="currentTitle" class="current-title">尚未载入档案</div>
       <button id="readerPrefsToggle" class="ghost" type="button" title="阅读设置：字号、行距、宽度、字体、翻页方式、主题、显示开关" aria-haspopup="true">Aa</button>
       <button id="bookmarkAdd" class="ghost" type="button" title="把当前读到的位置存为书签；同一位置再存会刷新它">🔖 存书签</button>
+      <button id="favoriteToggle" class="ghost" type="button" title="收藏 / 取消收藏当前对话" aria-pressed="false">☆</button>
+      <button id="tagToggle" class="ghost" type="button" title="给当前对话加标签" aria-haspopup="true">🏷</button>
+      <button id="exportToggle" class="ghost" type="button" title="导出当前对话或当前列表" aria-haspopup="true">⬇</button>
+    </div>
+
+    <div id="exportMenu" class="reader-prefs-panel export-menu" hidden>
+      <div class="pref-label tag-editor-title">导出（本地生成，不上传）</div>
+      <button id="exportCurrentMd" type="button">当前对话 → Markdown</button>
+      <button id="exportCurrentJson" type="button">当前对话 → JSON（规范化）</button>
+      <button id="exportListMd" type="button">当前列表 → Markdown 合集</button>
+      <button id="exportListJsonl" type="button">当前列表 → JSONL</button>
+      <p class="small export-note">「当前列表」= 左侧目录此刻筛出的对话（搜索、来源、收藏、标签过滤都会生效）。</p>
+    </div>
+
+    <div id="tagEditor" class="reader-prefs-panel tag-editor" hidden>
+      <div class="pref-label tag-editor-title">当前对话的标签</div>
+      <div id="tagChips" class="tag-chips"></div>
+      <input id="tagInput" type="text" maxlength="24" placeholder="输入标签，回车添加" aria-label="新标签">
+      <div id="tagSuggestions" class="tag-suggestions"></div>
     </div>
 
     <div id="readerPrefsPanel" class="reader-prefs-panel" hidden>
@@ -173,6 +198,7 @@
         <p>选择 ChatGPT 官方 Export 文件夹、包含多个 Mufy ZIP 的文件夹，或载入已有的 AI 对话 JSON / ZIP。Reader 会在本地识别并转换为统一阅读结构。</p>
         <p class="small">文件不会上传。官方导出的对话分片会自动合并，图片、音频、视频和其他附件只在滚动到附近时才从本地文件创建临时地址。</p>
         <p class="small" id="mobileHint" hidden><b>手机上请用「选择 JSON / ZIP」一次多选文件。</b>「选择文件夹」在手机浏览器里常退化成一次只能选一个，几十个文件会点到崩溃——别走那条。</p>
+        <button id="demoImport" class="pick pick-secondary demo-import" type="button" hidden>👀 先看一个示例书库（全合成数据，一键载入）</button>
       </div>
     </section>
 
@@ -215,6 +241,8 @@
   <script src="src/core/annotations.js"></script>
   <script src="src/core/reading-progress.js"></script>
   <script src="src/core/message-search.js"></script>
+  <script src="src/core/organization.js"></script>
+  <script src="src/core/export.js"></script>
   <script src="src/core/zip.js"></script>
   <script src="src/core/chatgpt-export-folder.js"></script>
   <script src="src/core/solvoice-sidecar.js"></script>

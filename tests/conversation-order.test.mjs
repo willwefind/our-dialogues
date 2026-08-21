@@ -78,7 +78,11 @@ async function loadAppRuntime(savedSortMode="asc", options={}) {
     "searchHitCount", "searchScopeCurrent", "searchScopeLibrary", "searchSource", "searchQuery", "searchResults",
     "toolTabRecent", "toolTabBookmarks", "toolTabAnnotations", "toolTabSearch",
     "toolPanels", "recentPane", "bookmarksPane", "annotationsPane", "searchPane",
-    "readerPrefsToggle", "readerPrefsPanel", "sidebarClose", "sidebarBackdrop", "mobileHint"
+    "readerPrefsToggle", "readerPrefsPanel", "sidebarClose", "sidebarBackdrop", "mobileHint",
+    "favoriteToggle", "tagToggle", "tagEditor", "tagChips", "tagInput", "tagSuggestions",
+    "favoritesFilter", "tagFilter",
+    "exportToggle", "exportMenu", "exportCurrentMd", "exportCurrentJson", "exportListMd", "exportListJsonl",
+    "demoImport"
   ];
   const elements = new Map(ids.map(id => [id, fakeElement(id)]));
   const sortAscending = fakeElement("sortAscending");
@@ -133,7 +137,9 @@ async function loadAppRuntime(savedSortMode="asc", options={}) {
     "src/core/annotations.js",
     "src/core/reading-progress.js",
     "src/core/message-search.js",
-    "src/core/solvoice-sidecar.js"
+    "src/core/solvoice-sidecar.js",
+    "src/core/organization.js",
+    "src/core/export.js"
   ];
   if (options.driver) runtimeFiles.push("src/core/persistent-library.js");
   for (const relativePath of runtimeFiles) {
@@ -984,4 +990,124 @@ test("crossing the narrow breakpoint never strands the drawer without a way out"
   mediaQuery.matches = false;
   mediaListeners.forEach(listener => listener({ matches: false }));
   assert.equal(backdrop.hidden, true, "leaving narrow retires the backdrop");
+});
+
+test("favorites and tags mark conversations, filter the catalog, and persist", async () => {
+  const { runtime, elements, stored } = await loadAppRuntime("asc");
+  runtime.OD.app.loadArchive({
+    conversations: [
+      { id: "fav-a", title: "要收藏的", createdAt: "2025-01-01T00:00:00.000Z",
+        messages: [{ id: "a-1", role: "assistant", content: "正文A" }] },
+      { id: "plain-b", title: "普通的", createdAt: "2026-01-01T00:00:00.000Z",
+        messages: [{ id: "b-1", role: "assistant", content: "正文B" }] }
+    ]
+  }, "Synthetic");
+
+  runtime.OD.app.openConversation("fav-a");
+  assert.equal(runtime.OD.app.toggleFavorite(), true);
+  assert.equal(elements.get("favoriteToggle").textContent, "⭐");
+  assert.match(elements.get("conversationList").innerHTML, /conv-star/);
+
+  runtime.OD.app.setConversationTags("fav-a", ["日常", " 旅行 "]);
+  const state = runtime.OD.app.getState();
+  assert.deepEqual([...state.organization.tags["fav-a"]], ["日常", "旅行"]);
+  assert.match(elements.get("conversationList").innerHTML, /conv-tag/);
+  assert.match(elements.get("tagFilter").innerHTML, /日常（1）/);
+
+  runtime.OD.app.setFavoritesOnly(true);
+  assert.deepEqual([...runtime.OD.app.getState().filteredIds], ["fav-a"], "favorites-only hides unstarred conversations");
+  runtime.OD.app.setFavoritesOnly(false);
+
+  runtime.OD.app.setTagFilter("旅行");
+  assert.deepEqual([...runtime.OD.app.getState().filteredIds], ["fav-a"]);
+  runtime.OD.app.setTagFilter("");
+  assert.equal(runtime.OD.app.getState().filteredIds.length, 2);
+
+  const mirror = JSON.parse(stored.get("our-dialogues.reader-state.v1"));
+  assert.equal(mirror.organization.favorites["fav-a"] != null, true, "favorites persist with settings");
+  assert.deepEqual([...mirror.organization.tags["fav-a"]], ["日常", "旅行"]);
+
+  assert.equal(runtime.OD.app.toggleFavorite(), false, "toggling again unstars");
+  assert.equal(elements.get("favoriteToggle").textContent, "☆");
+});
+
+test("removing the last use of a tag resets a stale tag filter instead of stranding it", async () => {
+  const { runtime } = await loadAppRuntime("asc");
+  runtime.OD.app.loadArchive({
+    conversations: [{ id: "only", title: "唯一", createdAt: "2025-01-01T00:00:00.000Z",
+      messages: [{ id: "m1", role: "assistant", content: "正文" }] }]
+  }, "Synthetic");
+  runtime.OD.app.openConversation("only");
+  runtime.OD.app.setConversationTags("only", ["临时"]);
+  runtime.OD.app.setTagFilter("临时");
+  assert.equal(runtime.OD.app.getState().tagFilter, "临时");
+
+  runtime.OD.app.setConversationTags("only", []);
+  assert.equal(runtime.OD.app.getState().tagFilter, "", "the vanished tag no longer filters");
+  assert.equal(runtime.OD.app.getState().filteredIds.length, 1, "the catalog is not silently empty");
+});
+
+test("the demo library loads synthetic sources once and skips duplicates on a second click", async () => {
+  const { runtime } = await loadAppRuntime("asc");
+  runtime.OD.registry = {
+    async parseJSON(data) {
+      return { recognized: true, adapter: { label: data.label }, archive: data.archive };
+    }
+  };
+  const served = new Map([
+    ["fixtures/normalized-v1.json", { label: "Normalized", archive: { conversations: [{ id: "demo-n", title: "示例甲", createdAt: "2025-01-01T00:00:00.000Z", messages: [{ id: "n-1", role: "assistant", content: "合成正文" }] }] } }],
+    ["fixtures/ciel-house-v1.json", { label: "Ciel House", archive: { conversations: [{ id: "demo-c", title: "示例乙", createdAt: "2025-02-01T00:00:00.000Z", messages: [{ id: "c-1", role: "assistant", content: "合成正文二" }] }] } }]
+  ]);
+  const fetcher = async url => served.has(url)
+    ? { ok: true, json: async () => served.get(url) }
+    : { ok: false };
+
+  const added = await runtime.OD.app.loadDemoLibrary(fetcher);
+  assert.equal(added, 2, "every reachable fixture becomes a source");
+  const labels = runtime.OD.app.getState().sources.map(source => source.label);
+  assert.deepEqual([...labels], ["示例 · Normalized", "示例 · Ciel House"]);
+
+  await runtime.OD.app.loadDemoLibrary(fetcher);
+  assert.equal(runtime.OD.app.getState().sources.length, 2, "a second click never duplicates the demo sources");
+});
+
+test("exports carry the reading surface and respect the filtered list", async () => {
+  const { runtime } = await loadAppRuntime("asc");
+  assert.equal(runtime.OD.app.buildExport("current-markdown"), null, "no current conversation before any import");
+
+  runtime.OD.app.loadArchive({
+    conversations: [
+      { id: "exp-a", title: "第一段", createdAt: "2025-01-01T00:00:00.000Z",
+        messages: [
+          { id: "a-1", role: "user", speaker: "You", content: "问题" },
+          { id: "a-2", role: "assistant", speaker: "Ciel", content: "回答",
+            thinking: "内部思考", metadata: { sourceTrace: [{ type: "tool_use", text: "→ tool" }] } }
+        ] },
+      { id: "exp-b", title: "第二段", createdAt: "2026-01-01T00:00:00.000Z",
+        messages: [{ id: "b-1", role: "assistant", speaker: "Ciel", content: "另一段" }] }
+    ]
+  }, "Synthetic");
+
+  runtime.OD.app.openConversation("exp-a");
+  const markdown = runtime.OD.app.buildExport("current-markdown");
+  assert.equal(markdown.filename, "第一段.md");
+  assert.match(markdown.content, /# 第一段/);
+  assert.match(markdown.content, /\*\*Ciel\*\*/);
+  assert.match(markdown.content, /回答/);
+  assert.match(markdown.content, /未包含在本导出中：思考 1 条 · 工具轨迹 1 条/);
+  assert.doesNotMatch(markdown.content, /内部思考/, "thinking text never leaks into Markdown");
+
+  const json = runtime.OD.app.buildExport("current-json");
+  assert.equal(JSON.parse(json.content).id, "exp-a");
+
+  const jsonl = runtime.OD.app.buildExport("list-jsonl");
+  const lines = jsonl.content.trim().split("\n");
+  assert.equal(lines.length, 2);
+  assert.deepEqual(lines.map(line => JSON.parse(line).id), ["exp-a", "exp-b"]);
+
+  runtime.OD.app.setConversationTags("exp-b", ["只要这个"]);
+  runtime.OD.app.setTagFilter("只要这个");
+  const narrowed = runtime.OD.app.buildExport("list-markdown");
+  assert.match(narrowed.content, /第二段/);
+  assert.doesNotMatch(narrowed.content, /第一段/, "list exports follow the live filters");
 });

@@ -36,6 +36,9 @@ window.OD = window.OD || {};
     editingBookmarkId: null,
     annotations: [],
     annotationColor: "yellow",
+    organization: { favorites: {}, tags: {} },
+    favoritesOnly: false,
+    tagFilter: "",
     importOpen: null,
     readingProgress: {},
     readingOrder: [],
@@ -158,6 +161,9 @@ window.OD = window.OD || {};
       searchScope: state.searchScope,
       searchSourceId: state.searchSourceId,
       toolTab: state.toolTab,
+      organization: OD.organization.normalize(state.organization),
+      favoritesOnly: !!state.favoritesOnly,
+      tagFilter: state.tagFilter || "",
       updatedAt: new Date().toISOString()
     };
   }
@@ -356,9 +362,12 @@ window.OD = window.OD || {};
     const active = state.current?.id === c.id ? " on" : "";
     const room = c.context?.room?.name ? ` · ${esc(c.context.room.name)}` : "";
     const progress = progressLabel(state.readingProgress[c.id]);
+    const favorite = OD.organization.isFavorite(state.organization, c.id) ? `<span class="conv-star" title="已收藏">⭐</span> ` : "";
+    const tagChips = OD.organization.tagsOf(state.organization, c.id).slice(0, 3)
+      .map(tag => `<span class="conv-tag">${esc(tag)}</span>`).join("");
     return `<div class="conv${active}" data-id="${esc(c.id)}">
-      <div class="conv-title">${esc(displayConversationTitle(c))}</div>
-      <div class="conv-meta">${c.messages.length} 条${room}${c.createdAt ? ` · ${esc(fmtDate(c.createdAt))}` : ""}${progress ? ` · <span class="conv-progress">${esc(progress)}</span>` : ""}</div>
+      <div class="conv-title">${favorite}${esc(displayConversationTitle(c))}</div>
+      <div class="conv-meta">${c.messages.length} 条${room}${c.createdAt ? ` · ${esc(fmtDate(c.createdAt))}` : ""}${progress ? ` · <span class="conv-progress">${esc(progress)}</span>` : ""}${tagChips ? ` ${tagChips}` : ""}</div>
     </div>`;
   }
 
@@ -736,6 +745,184 @@ window.OD = window.OD || {};
     void saveReaderState();
   }
 
+  /* One-click synthetic sample library, so a stranger can see what the
+     Reader is before trusting it with real archives. Served from the repo's
+     public fixtures; needs http(s), so the button stays hidden on file://. */
+  const DEMO_FIXTURES = [
+    "fixtures/normalized-v1.json",
+    "fixtures/ciel-house-v1.json",
+    "fixtures/chatgpt-official-2026.json",
+    "fixtures/claude-official-2026.json"
+  ];
+
+  async function loadDemoLibrary(fetcher) {
+    const fetchOne = fetcher || (url => window.fetch(url));
+    let added = 0;
+    for (const url of DEMO_FIXTURES) {
+      try {
+        const response = await fetchOne(url);
+        if (!response?.ok) continue;
+        const parsed = await OD.registry.parseJSON(await response.json());
+        if (!parsed?.recognized) continue;
+        loadArchive(parsed.archive, `示例 · ${parsed.adapter.label}`);
+        added += 1;
+      } catch (error) {
+        console.warn("示例文件载入失败", url, error);
+      }
+    }
+    setStatus(added
+      ? `已载入合成示例书库；每个示例来源都可以随时用 × 移除。`
+      : "示例文件载入失败；请检查网络后重试。", !added);
+    return added;
+  }
+
+  /* buildExport returns {filename, mimeType, content}; the download itself is
+     a separate browser-only step so tests can assert on the payload. */
+  function buildExport(kind) {
+    const sourceLabelOf = conversation => state.library.sourceForConversation(conversation)?.label || "";
+    if (kind === "current-markdown" || kind === "current-json") {
+      if (!state.current) {
+        setStatus("先打开一段对话，再导出。", true);
+        return null;
+      }
+      const title = displayConversationTitle(state.current);
+      return kind === "current-markdown"
+        ? { filename: OD.exporter.safeFilename(title, "md"), mimeType: "text/markdown",
+            content: OD.exporter.conversationToMarkdown(state.current, { sourceLabel: sourceLabelOf(state.current) }) }
+        : { filename: OD.exporter.safeFilename(title, "json"), mimeType: "application/json",
+            content: OD.exporter.conversationToJSON(state.current) };
+    }
+    if (!state.filtered.length) {
+      setStatus("当前列表是空的；调整筛选后再导出。", true);
+      return null;
+    }
+    const stamp = new Date().toISOString().slice(0, 10);
+    return kind === "list-markdown"
+      ? { filename: OD.exporter.safeFilename(`our-dialogues-${stamp}（${state.filtered.length} 段）`, "md"),
+          mimeType: "text/markdown",
+          content: OD.exporter.conversationsToMarkdown(state.filtered, { sourceLabelOf }) }
+      : { filename: OD.exporter.safeFilename(`our-dialogues-${stamp}（${state.filtered.length} 段）`, "jsonl"),
+          mimeType: "application/x-ndjson",
+          content: OD.exporter.conversationsToJSONL(state.filtered) };
+  }
+
+  function triggerDownload(payload) {
+    if (!payload) return false;
+    if (typeof document.createElement !== "function" || typeof Blob === "undefined" || !URL?.createObjectURL) {
+      setStatus("这个环境无法触发下载。", true);
+      return false;
+    }
+    const url = URL.createObjectURL(new Blob([payload.content], { type: payload.mimeType }));
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = payload.filename;
+    document.body?.appendChild?.(link);
+    link.click();
+    link.remove?.();
+    setTimeout(() => URL.revokeObjectURL(url), 4000);
+    setStatus(`已导出 ${payload.filename}。`);
+    return true;
+  }
+
+  function exportAs(kind) {
+    return triggerDownload(buildExport(kind));
+  }
+
+  function syncOrganizeControls() {
+    const star = $("favoriteToggle");
+    if (star) {
+      const active = state.current ? OD.organization.isFavorite(state.organization, state.current.id) : false;
+      star.textContent = active ? "⭐" : "☆";
+      star.setAttribute?.("aria-pressed", String(active));
+    }
+    $("favoritesFilter")?.setAttribute?.("aria-pressed", String(!!state.favoritesOnly));
+    const filter = $("tagFilter");
+    if (filter) {
+      const tags = OD.organization.allTags(state.organization);
+      if (state.tagFilter && !tags.some(item => item.tag === state.tagFilter)) state.tagFilter = "";
+      filter.innerHTML = [
+        `<option value="">全部标签</option>`,
+        ...tags.map(item => `<option value="${esc(item.tag)}">${esc(item.tag)}（${item.count}）</option>`)
+      ].join("");
+      filter.value = state.tagFilter;
+    }
+  }
+
+  function toggleFavorite(conversationId = state.current?.id) {
+    if (!conversationId) {
+      setStatus("先打开一段对话，再收藏。", true);
+      return false;
+    }
+    state.organization = OD.organization.toggleFavorite(state.organization, conversationId);
+    const active = OD.organization.isFavorite(state.organization, conversationId);
+    setStatus(active ? "⭐ 已收藏这段对话。" : "已取消收藏。");
+    syncOrganizeControls();
+    renderList();
+    void saveReaderState();
+    return active;
+  }
+
+  function setConversationTags(conversationId, tags) {
+    if (!conversationId) return [];
+    state.organization = OD.organization.setTags(state.organization, conversationId, tags);
+    syncOrganizeControls();
+    renderTagEditor();
+    renderList();
+    void saveReaderState();
+    return OD.organization.tagsOf(state.organization, conversationId);
+  }
+
+  function setFavoritesOnly(value) {
+    state.favoritesOnly = !!value;
+    syncOrganizeControls();
+    renderList();
+    void saveReaderState();
+  }
+
+  function setTagFilter(tag) {
+    state.tagFilter = String(tag ?? "");
+    syncOrganizeControls();
+    renderList();
+    void saveReaderState();
+  }
+
+  function renderTagEditor() {
+    const chips = $("tagChips");
+    const suggestions = $("tagSuggestions");
+    if (!chips || !suggestions) return;
+    if (!state.current) {
+      chips.innerHTML = `<span class="tag-empty">先打开一段对话。</span>`;
+      suggestions.innerHTML = "";
+      return;
+    }
+    const current = OD.organization.tagsOf(state.organization, state.current.id);
+    chips.innerHTML = current.length
+      ? current.map(tag => `<span class="tag-chip">${esc(tag)}<button type="button" data-remove-tag="${esc(tag)}" aria-label="移除标签 ${esc(tag)}">✕</button></span>`).join("")
+      : `<span class="tag-empty">还没有标签。</span>`;
+    const others = OD.organization.allTags(state.organization)
+      .filter(item => !current.includes(item.tag)).slice(0, 8);
+    suggestions.innerHTML = others.length
+      ? `<span class="tag-suggest-label">已有：</span>` + others.map(item =>
+          `<button type="button" class="tag-suggest" data-add-tag="${esc(item.tag)}">${esc(item.tag)}</button>`).join("")
+      : "";
+    [...document.querySelectorAll("#tagChips [data-remove-tag]")].forEach(button => {
+      button.addEventListener("click", event => {
+        event.stopPropagation?.();
+        setConversationTags(state.current?.id, OD.organization.tagsOf(state.organization, state.current?.id)
+          .filter(tag => tag !== button.dataset.removeTag));
+      });
+    });
+    [...document.querySelectorAll("#tagSuggestions [data-add-tag]")].forEach(button => {
+      button.addEventListener("click", event => {
+        event.stopPropagation?.();
+        setConversationTags(state.current?.id, [
+          ...OD.organization.tagsOf(state.organization, state.current?.id),
+          button.dataset.addTag
+        ]);
+      });
+    });
+  }
+
   function syncSearchScope() {
     $("searchScopeCurrent")?.setAttribute?.("aria-pressed", String(state.searchScope === "current"));
     $("searchScopeLibrary")?.setAttribute?.("aria-pressed", String(state.searchScope === "library"));
@@ -851,7 +1038,10 @@ window.OD = window.OD || {};
       $("search").value,
       conversationHaystack,
       state.sortMode
-    );
+    ).filter(conversation => OD.organization.matches(state.organization, conversation.id, {
+      favoritesOnly: state.favoritesOnly,
+      tag: state.tagFilter || null
+    }));
 
     const filteredIds = new Set(state.filtered.map(conversation => conversation.id));
     // While a search query is active every group is forced open so hits stay
@@ -1338,6 +1528,8 @@ window.OD = window.OD || {};
     renderList();
     renderPageNavigation();
     closeSidebarOnNarrow();
+    syncOrganizeControls();
+    if (!$("tagEditor")?.hidden) renderTagEditor();
     if (resumed && switching) setStatus("回到上次读到的地方。");
     void saveReaderState();
   }
@@ -1706,6 +1898,11 @@ window.OD = window.OD || {};
     }
     if (["current", "library"].includes(settings.searchScope)) state.searchScope = settings.searchScope;
     if (typeof settings.searchSourceId === "string" && settings.searchSourceId) state.searchSourceId = settings.searchSourceId;
+    if (settings.organization && typeof settings.organization === "object") {
+      state.organization = OD.organization.normalize(settings.organization);
+    }
+    if (typeof settings.favoritesOnly === "boolean") state.favoritesOnly = settings.favoritesOnly;
+    if (typeof settings.tagFilter === "string") state.tagFilter = settings.tagFilter;
     if (settings.toolTab === null || ["recent", "bookmarks", "annotations", "search"].includes(settings.toolTab)) {
       state.toolTab = settings.toolTab ?? null;
     }
@@ -1972,12 +2169,57 @@ window.OD = window.OD || {};
     event.stopPropagation?.();
     $("readerPrefsPanel").hidden = !$("readerPrefsPanel").hidden;
   });
+  // One document-level closer for every popover — the fake-DOM harness keeps
+  // a single listener per event type, and real browsers don't need more either.
   document.addEventListener("click", event => {
-    const panel = $("readerPrefsPanel");
-    if (!panel || panel.hidden) return;
-    if (event?.target?.closest?.("#readerPrefsPanel, #readerPrefsToggle")) return;
-    panel.hidden = true;
+    const prefs = $("readerPrefsPanel");
+    if (prefs && !prefs.hidden && !event?.target?.closest?.("#readerPrefsPanel, #readerPrefsToggle")) {
+      prefs.hidden = true;
+    }
+    const tagEditor = $("tagEditor");
+    if (tagEditor && !tagEditor.hidden && !event?.target?.closest?.("#tagEditor, #tagToggle")) {
+      tagEditor.hidden = true;
+    }
+    const exportMenu = $("exportMenu");
+    if (exportMenu && !exportMenu.hidden && !event?.target?.closest?.("#exportMenu, #exportToggle")) {
+      exportMenu.hidden = true;
+    }
   });
+  $("exportMenu").hidden = true;
+  $("exportToggle").addEventListener("click", event => {
+    event.stopPropagation?.();
+    $("exportMenu").hidden = !$("exportMenu").hidden;
+  });
+  $("exportCurrentMd").addEventListener("click", () => exportAs("current-markdown"));
+  $("exportCurrentJson").addEventListener("click", () => exportAs("current-json"));
+  $("exportListMd").addEventListener("click", () => exportAs("list-markdown"));
+  $("exportListJsonl").addEventListener("click", () => exportAs("list-jsonl"));
+  $("tagEditor").hidden = true;
+  $("favoriteToggle").addEventListener("click", () => toggleFavorite());
+  $("tagToggle").addEventListener("click", event => {
+    event.stopPropagation?.();
+    const editor = $("tagEditor");
+    editor.hidden = !editor.hidden;
+    if (!editor.hidden) {
+      renderTagEditor();
+      $("tagInput")?.focus?.();
+    }
+  });
+  $("tagInput").addEventListener("keydown", event => {
+    if (event.key !== "Enter") return;
+    event.preventDefault?.();
+    const value = String($("tagInput").value || "").trim();
+    if (!value || !state.current) return;
+    setConversationTags(state.current.id, [...OD.organization.tagsOf(state.organization, state.current.id), value]);
+    $("tagInput").value = "";
+  });
+  $("favoritesFilter").addEventListener("click", () => setFavoritesOnly(!state.favoritesOnly));
+  $("tagFilter").addEventListener("change", event => setTagFilter(event.target.value));
+  syncOrganizeControls();
+  if (window.location?.protocol?.startsWith("http") && $("demoImport")) {
+    $("demoImport").hidden = false;
+    $("demoImport").addEventListener("click", () => void loadDemoLibrary());
+  }
   $("searchQuery").addEventListener("keydown", event => {
     if (event.key === "Enter") {
       event.preventDefault?.();
@@ -2188,6 +2430,13 @@ window.OD = window.OD || {};
     performSearch,
     setSearchScope,
     jumpToSearchHit,
+    toggleFavorite,
+    setConversationTags,
+    setFavoritesOnly,
+    setTagFilter,
+    loadDemoLibrary,
+    buildExport,
+    exportAs,
     getState: () => ({
       archive: state.archive,
       current: state.current,
@@ -2203,6 +2452,9 @@ window.OD = window.OD || {};
       hasSolVoice: !!state.solVoiceSession,
       solVoiceStats: state.solVoiceSession?.stats || null,
       voiceAudioFileCount: state.solVoiceAudioFiles.length,
+      organization: OD.organization.normalize(state.organization),
+      favoritesOnly: !!state.favoritesOnly,
+      tagFilter: state.tagFilter || "",
       filteredCount: state.filtered.length,
       filteredIds: state.filtered.map(conversation => conversation.id),
       lastSavedAt: state.lastSavedAt,

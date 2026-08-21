@@ -32,6 +32,9 @@ Currently included:
 - Per-conversation reading progress: every conversation resumes at its own last position, a recency-capped 最近阅读 panel lists what you were reading with 读到 n% / 已读完 labels, and the conversation list carries the same progress marks
 - Message-level full-text search with current-conversation, whole-library, and per-source scopes: every occurrence is its own hit with context, and clicking a hit jumps exactly to its `messageId` with a flash
 - Phone layout: the sidebar becomes a backdrop drawer, the toolbar stays one row, and the welcome card steers mobile users to multi-select JSON / ZIP import
+- Favorites and tags with catalog filters, persisted with reader settings
+- Reading-surface export: conversation → Markdown / normalized JSON, filtered list → Markdown collection / JSONL, with excluded thinking/trace counts reported
+- One-click synthetic demo library (http(s) only) for trying the Reader without real data
 - Dedicated conservative Mufy title resolver with provenance and duplicate display disambiguation
 - Safe Mufy rich-block rendering for common status cards, details, rows, notes, and progress bars
 - Strict adapter capabilities and metadata-only diagnostics for unknown JSON/ZIP inputs
@@ -39,10 +42,10 @@ Currently included:
 
 Planned next:
 
-- Add Claude official-export and other exporter adapters from real samples
+- More exporter adapters from real samples (Gemini and other plugins welcome — synthetic samples only)
 - EPUB / Markdown / HTML export
-- Tags, favorites, timeline, richer full-text search
-- Vendored ZIP fallback for browsers without `DecompressionStream`
+- Favorites, tags, collections, timeline
+- Vendored ZIP fallback for browsers without `DecompressionStream` (modern Chrome/Edge/Firefox/Safari all ship it; document-only for now)
 
 ## Created by
 
@@ -81,7 +84,7 @@ This is intentionally a no-build static site.
 
 For GitHub Pages, publish the repository root.
 
-For local reading on Windows, double-click **`Start Reader.bat`**. It starts a dependency-free Node static server at `http://127.0.0.1:4173/` and opens the Reader. If that default port is busy, the launcher tries the next available port up to `4183`; an explicitly configured busy port exits with a clear error. This localhost origin is recommended because it gives IndexedDB and optional File System Access directory handles a stable origin.
+For local reading on Windows, double-click **`Start Reader.bat`**. On macOS / Linux, run **`./start-reader.sh`**. It starts a dependency-free Node static server at `http://127.0.0.1:4173/` and opens the Reader. If that default port is busy, the launcher tries the next available port up to `4183`; an explicitly configured busy port exits with a clear error. This localhost origin is recommended because it gives IndexedDB and optional File System Access directory handles a stable origin.
 
 Opening `index.html` directly remains supported because scripts are classic scripts rather than ES modules. Browser persistence and remembered directory permissions can be less reliable on `file://`, so use the launcher for the best reopen/restore experience. Node.js must be available for the launcher.
 
@@ -241,6 +244,10 @@ index.html
 styles.css
 ```
 
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md). The one rule that matters most: **never post real conversations** — request new formats with synthetic samples or key-names-only structure descriptions.
+
 ## License
 
-MIT
+AGPL-3.0 — see [LICENSE](LICENSE). Your archives are yours; the Reader's code stays open, including for anyone who hosts a modified copy as a service.
