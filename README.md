@@ -33,7 +33,7 @@ Currently included:
 - Message-level full-text search with current-conversation, whole-library, and per-source scopes: every occurrence is its own hit with context, and clicking a hit jumps exactly to its `messageId` with a flash
 - Phone layout: the sidebar becomes a backdrop drawer, the toolbar stays one row, and the welcome card steers mobile users to multi-select JSON / ZIP import
 - Favorites and tags with catalog filters, persisted with reader settings
-- Reading-surface export: conversation → Markdown / normalized JSON, filtered list → Markdown collection / JSONL / EPUB 3 e-book (one chapter per conversation, native e-reader TOC), with excluded thinking/trace counts reported
+- Reading-surface export: conversation → Markdown / normalized JSON / single-file HTML; filtered list → Markdown collection / JSONL / EPUB 3 e-book (one chapter per conversation, native e-reader TOC) / single-file HTML with an anchor TOC — excluded thinking/trace counts always reported
 - One-click synthetic demo library (http(s) only) for trying the Reader without real data
 - Dedicated conservative Mufy title resolver with provenance and duplicate display disambiguation
 - Safe Mufy rich-block rendering for common status cards, details, rows, notes, and progress bars
@@ -43,8 +43,7 @@ Currently included:
 Planned next:
 
 - More exporter adapters from real samples (Gemini and other plugins welcome — synthetic samples only)
-- Single-file HTML export (EPUB / Markdown / JSON / JSONL shipped)
-- Favorites, tags, collections, timeline
+- Collections and timeline views (favorites and tags shipped)
 - Vendored ZIP fallback for browsers without `DecompressionStream` (modern Chrome/Edge/Firefox/Safari all ship it; document-only for now)
 
 ## Created by

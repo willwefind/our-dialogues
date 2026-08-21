@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Add single-file HTML export for the current conversation and the filtered list: one self-contained readable page (inline styles, anchor TOC when there is more than one conversation, escaped text, same reading-surface boundary with excluded counts noted) that opens anywhere offline.
 - Add EPUB export: 当前列表 → a real EPUB 3 book (one chapter per conversation, native TOC via nav.xhtml, XML-escaped titles/text, the same reading-surface boundary with excluded thinking/trace counts noted per chapter), built by a new dependency-free STORE-only zip writer whose output round-trips through this project's own zip reader in tests and extracts cleanly with the system unzipper.
 - Sync the AGPL-3.0 relicense from main into the working branch and align the README's license section; refresh the stale Planned-next list.
 - Add library organization: per-conversation favorites (⭐ toolbar toggle, star in the catalog, 只看收藏 filter) and tags (🏷 editor popover with chips and suggestions from existing tags, tag chips in the catalog, a tag filter with usage counts); both persist with reader settings, compose with search/source filters, and a vanished tag resets its filter instead of stranding an empty catalog.

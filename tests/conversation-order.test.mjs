@@ -82,7 +82,7 @@ async function loadAppRuntime(savedSortMode="asc", options={}) {
     "favoriteToggle", "tagToggle", "tagEditor", "tagChips", "tagInput", "tagSuggestions",
     "favoritesFilter", "tagFilter",
     "exportToggle", "exportMenu", "exportCurrentMd", "exportCurrentJson", "exportListMd", "exportListJsonl",
-    "exportListEpub", "demoImport"
+    "exportListEpub", "exportCurrentHtml", "exportListHtml", "demoImport"
   ];
   const elements = new Map(ids.map(id => [id, fakeElement(id)]));
   const sortAscending = fakeElement("sortAscending");
@@ -1120,4 +1120,15 @@ test("exports carry the reading surface and respect the filtered list", async ()
   assert.equal(epub.mimeType, "application/epub+zip");
   assert.match(epub.filename, /\.epub$/);
   assert.ok(epub.content.length > 500, "EPUB bytes are produced");
+
+  const html = runtime.OD.app.buildExport("list-html");
+  assert.equal(html.mimeType, "text/html");
+  assert.match(html.content, /<!doctype html>/);
+  assert.match(html.content, /class="toc"/, "multi-conversation HTML gets a table of contents");
+  assert.match(html.content, /id="c2"/);
+  assert.doesNotMatch(html.content, /内部思考/, "thinking never leaks into HTML either");
+
+  const single = runtime.OD.app.buildExport("current-html");
+  assert.match(single.filename, /\.html$/);
+  assert.doesNotMatch(single.content, /class="toc"/, "a single conversation needs no TOC");
 });

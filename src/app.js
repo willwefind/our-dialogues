@@ -780,17 +780,22 @@ window.OD = window.OD || {};
      a separate browser-only step so tests can assert on the payload. */
   function buildExport(kind) {
     const sourceLabelOf = conversation => state.library.sourceForConversation(conversation)?.label || "";
-    if (kind === "current-markdown" || kind === "current-json") {
+    if (["current-markdown", "current-json", "current-html"].includes(kind)) {
       if (!state.current) {
         setStatus("先打开一段对话，再导出。", true);
         return null;
       }
       const title = displayConversationTitle(state.current);
-      return kind === "current-markdown"
-        ? { filename: OD.exporter.safeFilename(title, "md"), mimeType: "text/markdown",
-            content: OD.exporter.conversationToMarkdown(state.current, { sourceLabel: sourceLabelOf(state.current) }) }
-        : { filename: OD.exporter.safeFilename(title, "json"), mimeType: "application/json",
-            content: OD.exporter.conversationToJSON(state.current) };
+      if (kind === "current-markdown") {
+        return { filename: OD.exporter.safeFilename(title, "md"), mimeType: "text/markdown",
+          content: OD.exporter.conversationToMarkdown(state.current, { sourceLabel: sourceLabelOf(state.current) }) };
+      }
+      if (kind === "current-html") {
+        return { filename: OD.exporter.safeFilename(title, "html"), mimeType: "text/html",
+          content: OD.exporter.conversationsToHTML([state.current], { title, sourceLabelOf }) };
+      }
+      return { filename: OD.exporter.safeFilename(title, "json"), mimeType: "application/json",
+        content: OD.exporter.conversationToJSON(state.current) };
     }
     if (!state.filtered.length) {
       setStatus("当前列表是空的；调整筛选后再导出。", true);
@@ -808,6 +813,13 @@ window.OD = window.OD || {};
         content: OD.epub.buildEpub({
           title: `Our Dialogues · ${stamp}`,
           conversations: state.filtered,
+          sourceLabelOf
+        }) };
+    }
+    if (kind === "list-html") {
+      return { filename: listName("html"), mimeType: "text/html",
+        content: OD.exporter.conversationsToHTML(state.filtered, {
+          title: `Our Dialogues · ${stamp}`,
           sourceLabelOf
         }) };
     }
@@ -2204,6 +2216,8 @@ window.OD = window.OD || {};
   $("exportListMd").addEventListener("click", () => exportAs("list-markdown"));
   $("exportListJsonl").addEventListener("click", () => exportAs("list-jsonl"));
   $("exportListEpub").addEventListener("click", () => exportAs("list-epub"));
+  $("exportCurrentHtml").addEventListener("click", () => exportAs("current-html"));
+  $("exportListHtml").addEventListener("click", () => exportAs("list-html"));
   $("tagEditor").hidden = true;
   $("favoriteToggle").addEventListener("click", () => toggleFavorite());
   $("tagToggle").addEventListener("click", event => {
