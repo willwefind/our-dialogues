@@ -10,108 +10,133 @@
 <body>
   <aside id="sidebar">
     <button id="sidebarClose" class="sidebar-close" type="button" aria-label="收起侧栏" title="收起侧栏">✕</button>
-    <header class="side-head">
-      <div class="eyebrow">LOCAL-FIRST ARCHIVE READER</div>
-      <h1>Our Dialogues</h1>
-      <p>把曾经说过的话，重新翻出来。</p>
-
-      <details id="importPanel" class="import-panel" open>
-        <summary>添加来源</summary>
-        <div class="import-picks">
-          <button id="directoryPicker" class="pick pick-folder directory-picker" type="button" hidden>
-            <span>添加来源文件夹</span>
-            <small>推荐 · 可在浏览器允许时记住文件夹权限</small>
-          </button>
-          <label class="pick pick-folder">
-            <input id="folderInput" type="file" webkitdirectory directory multiple hidden>
-            <span>选择来源文件夹（兼容添加）</span>
-            <small>ChatGPT 官方 Export · 多个 Mufy ZIP</small>
-          </label>
-
-          <div class="pick-divider"><span>或</span></div>
-
-          <label class="pick pick-secondary">
-            <input id="fileInput" type="file" accept=".json,.zip,application/json,application/zip" multiple hidden>
-            <span>选择 JSON / ZIP</span>
-          </label>
-        </div>
-
-        <div class="sidecar-picks" aria-label="可选的本地语音档案">
-          <div class="sidecar-title">语音档案（可选）· 本地音频与映射</div>
-          <label class="sidecar-pick" title="选整个 VoiceArchive 文件夹；里面的 SolVoice 和 CielVoice 映射会一起被发现">
-            <input id="voiceArchiveInput" type="file" webkitdirectory directory multiple hidden>
-            <span>选择 VoiceArchive 文件夹</span>
-          </label>
-          <label class="sidecar-pick" title="也可以单独选一份映射 JSON（chatgpt-solvoice / claude-cielvoice）">
-            <input id="voiceMappingInput" type="file" accept=".json,application/json" hidden>
-            <span>单选映射 JSON</span>
-          </label>
-          <button id="clearSolVoice" class="sidecar-clear" type="button">清除语音连接</button>
-        </div>
-      </details>
-
-      <div id="status" class="status" role="status" aria-live="polite">文件只在本机浏览器中解析。</div>
-      <output id="acceptanceAudit" hidden aria-hidden="true"></output>
-      <button id="runAcceptanceAudit" type="button" hidden aria-hidden="true" tabindex="-1">Run acceptance audit</button>
-      <div class="local-library" aria-live="polite">
-        <div id="localLibraryStatus">本地书库：正在准备…</div>
-        <button id="clearLocalLibrary" type="button" disabled>清除本地书库</button>
-      </div>
+    <header class="od-logo">
+      <div class="od-wordmark">Our Dialogues</div>
+      <div class="od-wordmark-sub">PRIVATE READING ROOM</div>
     </header>
 
-    <div class="search-wrap">
-      <input id="search" type="search" placeholder="筛选目录（标题或正文）…" aria-label="筛选目录" title="边输入边收窄左侧目录；想精确找到某句话并跳过去，用下方的「🔍 全文搜索」">
+    <nav class="od-primary-nav" aria-label="侧栏模式">
+      <button id="navLibrary" type="button" aria-pressed="true"><span class="od-nav-icon od-icon-directory" aria-hidden="true"></span>书库</button>
+      <button id="navTraces" type="button" aria-pressed="false"><span class="od-nav-icon od-icon-bookmark" aria-hidden="true"></span>阅读痕迹</button>
+      <button id="toolTabSearch" type="button" aria-pressed="false" title="全文搜索"><span class="od-nav-icon od-icon-search" aria-hidden="true"></span>搜索<span id="searchHitCount" class="bookmarks-count"></span></button>
+    </nav>
+
+    <div id="libraryPane" class="od-mode-pane">
+      <div class="search-wrap">
+        <input id="search" type="search" placeholder="筛选书名、角色或正文" aria-label="筛选目录" title="边输入边收窄目录；想精确找到某句话并跳过去，用左侧一级导航的「搜索」">
+        <button id="filterMenuToggle" type="button" title="收藏、标签、排序与来源筛选" aria-haspopup="true">筛选</button>
+      </div>
+      <div id="filterMenu" class="od-menu" hidden>
+        <div class="organize-tools">
+          <button id="favoritesFilter" type="button" aria-pressed="false" title="只看收藏的对话">⭐ 只看收藏</button>
+          <select id="tagFilter" aria-label="按标签筛选">
+            <option value="">全部标签</option>
+          </select>
+        </div>
+        <div class="source-tools">
+          <select id="sourceFilter" aria-label="按来源筛选">
+            <option value="all">全部来源</option>
+          </select>
+        </div>
+        <div class="archive-tools">
+          <div id="archiveMeta" class="archive-meta"></div>
+          <div class="sort-control" role="group" aria-label="按对话创建时间排序">
+            <button id="sortAscending" type="button" data-sort-mode="asc" title="正序：最早到最新" aria-label="正序：最早到最新">正序</button>
+            <button id="sortDescending" type="button" data-sort-mode="desc" title="倒序：最新到最早" aria-label="倒序：最新到最早">倒序</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="od-source-row">
+        <span class="od-source-row-label">来源</span>
+        <button id="sourceAddToggle" type="button" aria-label="添加来源或管理来源" aria-haspopup="true" title="导入 ChatGPT 文件夹、JSON / ZIP，连接语音档案，管理已连接来源">＋</button>
+      </div>
+
+      <div id="sourceAddMenu" class="od-menu" hidden>
+        <details id="importPanel" class="import-panel" open>
+          <summary>添加来源</summary>
+          <div class="import-picks">
+            <button id="directoryPicker" class="pick pick-folder directory-picker" type="button" hidden>
+              <span>添加来源文件夹</span>
+              <small>推荐 · 可在浏览器允许时记住文件夹权限</small>
+            </button>
+            <label class="pick pick-folder">
+              <input id="folderInput" type="file" webkitdirectory directory multiple hidden>
+              <span>选择来源文件夹（兼容添加）</span>
+              <small>ChatGPT 官方 Export · 多个 Mufy ZIP</small>
+            </label>
+
+            <div class="pick-divider"><span>或</span></div>
+
+            <label class="pick pick-secondary">
+              <input id="fileInput" type="file" accept=".json,.zip,application/json,application/zip" multiple hidden>
+              <span>选择 JSON / ZIP</span>
+            </label>
+          </div>
+
+          <div class="sidecar-picks" aria-label="可选的本地语音档案">
+            <div class="sidecar-title">语音档案（可选）· 本地音频与映射</div>
+            <label class="sidecar-pick" title="选整个 VoiceArchive 文件夹；里面的 SolVoice 和 CielVoice 映射会一起被发现">
+              <input id="voiceArchiveInput" type="file" webkitdirectory directory multiple hidden>
+              <span>选择 VoiceArchive 文件夹</span>
+            </label>
+            <label class="sidecar-pick" title="也可以单独选一份映射 JSON（chatgpt-solvoice / claude-cielvoice）">
+              <input id="voiceMappingInput" type="file" accept=".json,application/json" hidden>
+              <span>单选映射 JSON</span>
+            </label>
+            <button id="clearSolVoice" class="sidecar-clear" type="button">清除语音连接</button>
+          </div>
+        </details>
+        <button id="sourceManageToggle" class="od-menu-secondary" type="button">管理已连接来源…</button>
+      </div>
+
+      <div id="sourceManagePanel" class="od-menu" hidden>
+        <div class="od-menu-title">已连接来源<button id="sourceManageClose" type="button" aria-label="关闭来源管理">✕</button></div>
+        <div id="sourceManageList"></div>
+        <div class="local-library" aria-live="polite">
+          <div id="localLibraryStatus">本地书库：正在准备…</div>
+          <button id="clearLocalLibrary" type="button" disabled>清除本地书库</button>
+        </div>
+        <button id="clearSources" type="button" disabled class="od-danger-quiet">清空全部来源</button>
+      </div>
+
+      <nav id="conversationList" class="conversation-list"></nav>
     </div>
 
-    <div class="source-tools">
-      <select id="sourceFilter" aria-label="按来源筛选">
+    <div id="tracesPane" class="od-mode-pane" hidden>
+      <div class="od-segmented" role="group" aria-label="阅读痕迹">
+        <button id="toolTabRecent" type="button" title="最近阅读">最近<span id="recentCount" class="bookmarks-count"></span></button>
+        <button id="toolTabBookmarks" type="button" title="书签">书签<span id="bookmarksCount" class="bookmarks-count"></span></button>
+        <button id="toolTabAnnotations" type="button" title="划线与小注">划线<span id="annotationsCount" class="bookmarks-count"></span></button>
+      </div>
+      <div id="toolPanels" class="tool-panels">
+        <div id="recentPane">
+          <div id="recentList" class="bookmarks-list"></div>
+        </div>
+        <div id="bookmarksPane" hidden>
+          <div id="bookmarksList" class="bookmarks-list"></div>
+        </div>
+        <div id="annotationsPane" hidden>
+          <div id="annotationsList" class="bookmarks-list"></div>
+        </div>
+      </div>
+    </div>
+
+    <div id="searchPane" class="od-mode-pane" hidden>
+      <div class="search-scope" role="group" aria-label="搜索范围">
+        <button id="searchScopeCurrent" type="button">当前对话</button>
+        <button id="searchScopeLibrary" type="button">书库</button>
+      </div>
+      <select id="searchSource" aria-label="搜索哪个来源" title="书库范围内搜哪个来源；和书库模式里的目录来源过滤互不影响">
         <option value="all">全部来源</option>
       </select>
-      <button id="clearSources" type="button" disabled>清空全部</button>
+      <input id="searchQuery" type="search" placeholder="搜关键词，回车" aria-label="全文搜索关键词">
+      <div id="searchResults" class="bookmarks-list"></div>
     </div>
 
-    <div class="organize-tools">
-      <button id="favoritesFilter" type="button" aria-pressed="false" title="只看收藏的对话">⭐ 只看收藏</button>
-      <select id="tagFilter" aria-label="按标签筛选">
-        <option value="">全部标签</option>
-      </select>
-    </div>
-    <div class="archive-tools">
-      <div id="archiveMeta" class="archive-meta"></div>
-      <div class="sort-control" role="group" aria-label="按对话创建时间排序">
-        <button id="sortAscending" type="button" data-sort-mode="asc" title="正序：最早到最新" aria-label="正序：最早到最新">正序</button>
-        <button id="sortDescending" type="button" data-sort-mode="desc" title="倒序：最新到最早" aria-label="倒序：最新到最早">倒序</button>
-      </div>
-    </div>
-    <div class="tool-tabs" role="tablist" aria-label="阅读工具">
-      <button id="toolTabRecent" type="button" title="最近阅读">📖 最近<span id="recentCount" class="bookmarks-count"></span></button>
-      <button id="toolTabBookmarks" type="button" title="书签">🔖 书签<span id="bookmarksCount" class="bookmarks-count"></span></button>
-      <button id="toolTabAnnotations" type="button" title="划线与小注">🖍 划线<span id="annotationsCount" class="bookmarks-count"></span></button>
-      <button id="toolTabSearch" type="button" title="全文搜索">🔍 搜索<span id="searchHitCount" class="bookmarks-count"></span></button>
-    </div>
-    <div id="toolPanels" class="tool-panels" hidden>
-      <div id="recentPane">
-        <div id="recentList" class="bookmarks-list"></div>
-      </div>
-      <div id="bookmarksPane" hidden>
-        <div id="bookmarksList" class="bookmarks-list"></div>
-      </div>
-      <div id="annotationsPane" hidden>
-        <div id="annotationsList" class="bookmarks-list"></div>
-      </div>
-      <div id="searchPane" hidden>
-        <div class="search-scope" role="group" aria-label="搜索范围">
-          <button id="searchScopeCurrent" type="button">当前对话</button>
-          <button id="searchScopeLibrary" type="button">书库</button>
-        </div>
-        <select id="searchSource" aria-label="搜索哪个来源" title="书库范围内搜哪个来源；和左上的目录来源过滤互不影响">
-          <option value="all">全部来源</option>
-        </select>
-        <input id="searchQuery" type="search" placeholder="搜关键词，回车" aria-label="全文搜索关键词">
-        <div id="searchResults" class="bookmarks-list"></div>
-      </div>
-    </div>
-    <nav id="conversationList" class="conversation-list"></nav>
+    <div id="status" class="status od-status" role="status" aria-live="polite">文件只在本机浏览器中解析。</div>
+    <output id="acceptanceAudit" hidden aria-hidden="true"></output>
+    <button id="runAcceptanceAudit" type="button" hidden aria-hidden="true" tabindex="-1">Run acceptance audit</button>
   </aside>
   <div id="sidebarBackdrop" class="sidebar-backdrop" hidden></div>
 

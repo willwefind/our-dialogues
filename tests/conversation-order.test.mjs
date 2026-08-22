@@ -78,6 +78,9 @@ async function loadAppRuntime(savedSortMode="asc", options={}) {
     "searchHitCount", "searchScopeCurrent", "searchScopeLibrary", "searchSource", "searchQuery", "searchResults",
     "toolTabRecent", "toolTabBookmarks", "toolTabAnnotations", "toolTabSearch",
     "toolPanels", "recentPane", "bookmarksPane", "annotationsPane", "searchPane",
+    "navLibrary", "navTraces", "libraryPane", "tracesPane",
+    "filterMenu", "filterMenuToggle", "sourceAddToggle", "sourceAddMenu",
+    "sourceManageToggle", "sourceManagePanel", "sourceManageList", "sourceManageClose",
     "readerPrefsToggle", "readerPrefsPanel", "sidebarClose", "sidebarBackdrop", "mobileHint",
     "favoriteToggle", "tagToggle", "tagEditor", "tagChips", "tagInput", "tagSuggestions",
     "favoritesFilter", "tagFilter",
@@ -861,28 +864,93 @@ test("full-text search scopes to the current conversation or the whole library a
   assert.match(elements.get("searchResults").innerHTML, /没搜到/);
 });
 
-test("sidebar tool tabs open one pane at a time, toggle closed, and persist the choice", async () => {
+test("sidebar primary modes show one pane at a time and persist the choice", async () => {
   const { runtime, elements, stored } = await loadAppRuntime("asc");
 
-  assert.equal(elements.get("toolPanels").hidden, true, "no pane is open by default");
+  // Default mode is 书库: the library pane is visible, the others are not.
+  assert.equal(elements.get("libraryPane").hidden, false, "library mode is the default");
+  assert.equal(elements.get("tracesPane").hidden, true);
+  assert.equal(elements.get("searchPane").hidden, true);
+  assert.equal(elements.get("navLibrary").getAttribute("aria-pressed"), "true");
 
+  // A trace tab switches to 阅读痕迹 with that segment active.
   elements.get("toolTabBookmarks").click();
+  assert.equal(elements.get("libraryPane").hidden, true);
+  assert.equal(elements.get("tracesPane").hidden, false);
   assert.equal(elements.get("toolPanels").hidden, false);
   assert.equal(elements.get("bookmarksPane").hidden, false);
   assert.equal(elements.get("recentPane").hidden, true);
-  assert.equal(elements.get("searchPane").hidden, true);
+  assert.equal(elements.get("navTraces").getAttribute("aria-pressed"), "true");
   assert.equal(elements.get("toolTabBookmarks").getAttribute("aria-pressed"), "true");
 
+  // 搜索 is its own primary mode.
   elements.get("toolTabSearch").click();
-  assert.equal(elements.get("bookmarksPane").hidden, true, "opening another tab closes the previous pane");
+  assert.equal(elements.get("tracesPane").hidden, true, "opening search leaves the traces mode");
   assert.equal(elements.get("searchPane").hidden, false);
 
   const mirror = JSON.parse(stored.get("our-dialogues.reader-state.v1"));
-  assert.equal(mirror.toolTab, "search", "the open tab persists with reader settings");
+  assert.equal(mirror.toolTab, "search", "the open mode persists with reader settings");
 
-  elements.get("toolTabSearch").click();
-  assert.equal(elements.get("toolPanels").hidden, true, "clicking the active tab closes everything");
-  assert.equal(runtime.OD.app.getState().current, null, "tab flips never open conversations");
+  // 书库 returns; 阅读痕迹 remembers its last segment.
+  elements.get("navLibrary").click();
+  assert.equal(elements.get("libraryPane").hidden, false);
+  assert.equal(elements.get("searchPane").hidden, true);
+  assert.equal(JSON.parse(stored.get("our-dialogues.reader-state.v1")).toolTab, null,
+    "library mode persists as the historical null value");
+  elements.get("navTraces").click();
+  assert.equal(elements.get("bookmarksPane").hidden, false, "traces reopen on the last used segment");
+  assert.equal(runtime.OD.app.getState().current, null, "mode flips never open conversations");
+});
+
+test("old persisted toolTab values restore into the right sidebar mode", async () => {
+  const stored = new Map([
+    ["our-dialogues.conversation-sort", "asc"],
+    ["our-dialogues.reader-state.v1", JSON.stringify({ toolTab: "annotations" })]
+  ]);
+  const { elements } = await loadAppRuntime("asc", { stored });
+  assert.equal(elements.get("tracesPane").hidden, false, "a pre-redesign trace tab lands in 阅读痕迹");
+  assert.equal(elements.get("annotationsPane").hidden, false);
+  assert.equal(elements.get("libraryPane").hidden, true);
+});
+
+test("year headings are display-only and appear only past the approved thresholds", async () => {
+  const { runtime, elements } = await loadAppRuntime("asc");
+  const conversation = (id, createdAt) => ({
+    id, title: `对话 ${id}`, createdAt,
+    messages: [{ id: `${id}-1`, role: "assistant", content: "正文" }]
+  });
+
+  // 12 conversations, 2 years, one undated (>=70% dated) → headings appear,
+  // and the undated one sits under 日期不详 at the bottom.
+  const eligible = {
+    conversations: [
+      ...Array.from({ length: 6 }, (_, i) => conversation(`a${i}`, `2025-0${(i % 6) + 1}-01T00:00:00.000Z`)),
+      ...Array.from({ length: 5 }, (_, i) => conversation(`b${i}`, `2026-0${(i % 5) + 1}-01T00:00:00.000Z`)),
+      conversation("undated", null)
+    ]
+  };
+  runtime.OD.app.loadArchive(eligible, "Yearly");
+  let markup = elements.get("conversationList").innerHTML;
+  assert.match(markup, /year-heading[^>]*>2025</);
+  assert.match(markup, /year-heading[^>]*>2026</);
+  assert.match(markup, /year-heading[^>]*>日期不详</);
+  assert.ok(markup.indexOf(">2025<") < markup.indexOf(">2026<"), "ascending sort keeps ascending year order");
+  assert.ok(markup.indexOf("日期不详") > markup.indexOf(">2026<"), "undated items land at the bottom");
+
+  // The visible reading order (previous/next) is untouched by grouping:
+  // the undated conversation still follows the dated ones in import order.
+  const order = runtime.OD.app.getState().filteredIds;
+  assert.equal(order.at(-1), "undated");
+
+  // Below the thresholds (one year only) no heading is rendered.
+  runtime.OD.app.clearSources();
+  const singleYear = {
+    conversations: Array.from({ length: 12 }, (_, i) =>
+      conversation(`c${i}`, `2026-01-${String(i + 1).padStart(2, "0")}T00:00:00.000Z`))
+  };
+  runtime.OD.app.loadArchive(singleYear, "OneYear");
+  markup = elements.get("conversationList").innerHTML;
+  assert.doesNotMatch(markup, /year-heading/, "a single-year source stays flat");
 });
 
 test("the Aa popover toggles and an outside click closes it", async () => {

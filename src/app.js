@@ -407,6 +407,56 @@ window.OD = window.OD || {};
     return conversation.context?.sourceMetadata?.isGreeting === true;
   }
 
+  /* Optional year headings (display-only): shown only when one character or
+     source holds >=12 conversations spanning >=2 years with >=70% valid
+     dates. Headings never change the sort result or the reading order — the
+     sorted sequence is walked as-is, and since undated items already sort
+     last in both directions, 日期不详 lands at the bottom naturally. Pinned
+     greetings render before any heading so the pin stays visibly first. */
+  function conversationYear(conversation) {
+    const time = Date.parse(conversation?.createdAt ?? "");
+    return Number.isFinite(time) ? String(new Date(time).getFullYear()) : null;
+  }
+
+  function shouldGroupByYear(conversations) {
+    if ((conversations?.length || 0) < 12) return false;
+    const years = new Set();
+    let dated = 0;
+    for (const conversation of conversations) {
+      const year = conversationYear(conversation);
+      if (year) { years.add(year); dated += 1; }
+    }
+    return years.size >= 2 && dated / conversations.length >= 0.7;
+  }
+
+  function conversationListMarkup(ordered, { skipLeading = 0 } = {}) {
+    if (!shouldGroupByYear(ordered)) return ordered.map(conversationMarkup).join("");
+    let html = "";
+    let currentYear;
+    ordered.forEach((conversation, index) => {
+      if (index < skipLeading) {
+        html += conversationMarkup(conversation);
+        return;
+      }
+      const year = conversationYear(conversation) || "日期不详";
+      if (year !== currentYear) {
+        currentYear = year;
+        html += `<div class="year-heading" aria-hidden="true">${esc(year)}</div>`;
+      }
+      html += conversationMarkup(conversation);
+    });
+    return html;
+  }
+
+  function sourceRowMenuMarkup(source, conversationCount) {
+    const canReconnect = source.assetMode === "local-reconnect" || source.directoryHandle;
+    return `<div class="source-row-menu" hidden>
+      <div class="source-row-details">${conversationCount} 段对话${source.importDetails ? ` · ${esc(source.importDetails)}` : ""}</div>
+      ${canReconnect ? `<button type="button" data-reconnect-source-row="${esc(source.id)}">重新连接</button>` : ""}
+      <button type="button" data-remove-source="${esc(source.id)}" class="od-danger-quiet">移除此来源</button>
+    </div>`;
+  }
+
   function sourceMarkup(source, conversations, searching, readingOrder) {
     let children = "";
     if (source.source?.platform === "mufy") {
@@ -429,17 +479,18 @@ window.OD = window.OD || {};
         const stored = state.groupState.characters[characterKey];
         const containsCurrent = character.conversations.some(conversation => conversation.id === state.current?.id);
         const open = searching || (stored === undefined ? containsCurrent : stored === true);
+        const pinnedCount = ordered.filter(isGreetingConversation).length;
         return `<details class="character-group" data-character-key="${esc(characterKey)}"${open ? " open" : ""}>
         <summary>
           <span class="character-summary-label">${esc(character.name)}${character.id ? `<small class="character-identity">${esc(character.id)}</small>` : ""}</span>
           <span class="character-count">${character.conversations.length}</span>
         </summary>
-        <div class="character-conversations">${ordered.map(conversationMarkup).join("")}</div>
+        <div class="character-conversations">${conversationListMarkup(ordered, { skipLeading: pinnedCount })}</div>
       </details>`;
       }).join("");
     } else {
       readingOrder?.push(...conversations);
-      children = `<div class="source-conversations">${conversations.map(conversationMarkup).join("")}</div>`;
+      children = `<div class="source-conversations">${conversationListMarkup(conversations)}</div>`;
     }
     const storedSource = state.groupState.sources[source.id];
     const sourceOpen = searching || (storedSource === undefined ? true : storedSource !== false);
@@ -447,8 +498,9 @@ window.OD = window.OD || {};
       <summary>
         <span class="source-summary-label">${esc(source.label)}</span>
         <span class="source-count">${conversations.length}</span>
-        <button class="remove-source" type="button" data-remove-source="${esc(source.id)}" title="移除这个来源" aria-label="移除 ${esc(source.label)}">×</button>
+        <button class="source-menu-button" type="button" data-source-menu="${esc(source.id)}" title="来源操作：重连 / 移除 / 详情" aria-haspopup="true" aria-label="来源操作：${esc(source.label)}">···</button>
       </summary>
+      ${sourceRowMenuMarkup(source, conversations.length)}
       ${children}
     </details>`;
   }
@@ -739,26 +791,46 @@ window.OD = window.OD || {};
     });
   }
 
+  /* The sidebar shows exactly one primary mode at a time: 书库 (toolTab null),
+     阅读痕迹 (recent/bookmarks/annotations as its inner segments), or 搜索.
+     The persisted toolTab value keeps its historical five-value domain, so
+     records written before this layout restore into the right mode. */
   const TOOL_PANES = {
     recent: ["toolTabRecent", "recentPane"],
     bookmarks: ["toolTabBookmarks", "bookmarksPane"],
-    annotations: ["toolTabAnnotations", "annotationsPane"],
-    search: ["toolTabSearch", "searchPane"]
+    annotations: ["toolTabAnnotations", "annotationsPane"]
   };
+  const TRACE_TABS = ["recent", "bookmarks", "annotations"];
+  let lastTraceTab = "recent";
+
+  function sidebarMode() {
+    if (state.toolTab === "search") return "search";
+    return TRACE_TABS.includes(state.toolTab) ? "traces" : "library";
+  }
 
   function syncToolTabs() {
+    const mode = sidebarMode();
+    if (TRACE_TABS.includes(state.toolTab)) lastTraceTab = state.toolTab;
+    const libraryPane = $("libraryPane");
+    if (libraryPane) libraryPane.hidden = mode !== "library";
+    const tracesPane = $("tracesPane");
+    if (tracesPane) tracesPane.hidden = mode !== "traces";
+    const searchPane = $("searchPane");
+    if (searchPane) searchPane.hidden = mode !== "search";
+    $("navLibrary")?.setAttribute?.("aria-pressed", String(mode === "library"));
+    $("navTraces")?.setAttribute?.("aria-pressed", String(mode === "traces"));
+    $("toolTabSearch")?.setAttribute?.("aria-pressed", String(mode === "search"));
     const panels = $("toolPanels");
-    if (!panels) return;
-    panels.hidden = !state.toolTab;
+    if (panels) panels.hidden = mode !== "traces";
     for (const [name, [tabId, paneId]] of Object.entries(TOOL_PANES)) {
       $(tabId)?.setAttribute?.("aria-pressed", String(state.toolTab === name));
       const pane = $(paneId);
-      if (pane) pane.hidden = state.toolTab !== name;
+      if (pane) pane.hidden = mode !== "traces" || state.toolTab !== name;
     }
   }
 
   function setToolTab(name) {
-    state.toolTab = state.toolTab === name ? null : name;
+    state.toolTab = name ?? null;
     syncToolTabs();
     if (state.toolTab === "search") $("searchQuery")?.focus?.();
     void saveReaderState();
@@ -1051,11 +1123,56 @@ window.OD = window.OD || {};
     control.value = state.searchSourceId;
   }
 
+  /* Shared wiring for remove/reconnect controls, scoped to one container so
+     re-rendering the catalog can never double-bind the manage panel's rows. */
+  function wireSourceActions(scope) {
+    if (typeof scope?.querySelectorAll !== "function") return;
+    [...(scope.querySelectorAll("[data-remove-source]") || [])].forEach(button => {
+      button.addEventListener("click", event => {
+        event.preventDefault?.();
+        event.stopPropagation?.();
+        removeSource(button.dataset.removeSource);
+      });
+    });
+    [...(scope.querySelectorAll("[data-reconnect-source-row]") || [])].forEach(button => {
+      button.addEventListener("click", event => {
+        event.preventDefault?.();
+        event.stopPropagation?.();
+        void reconnectSource(button.dataset.reconnectSourceRow);
+      });
+    });
+  }
+
+  function renderSourceManageList() {
+    const list = $("sourceManageList");
+    if (!list) return;
+    const sources = state.library.sources();
+    if (!sources.length) {
+      list.innerHTML = `<div class="bookmarks-empty">还没有来源；用「＋」菜单里的导入添加。</div>`;
+      return;
+    }
+    list.innerHTML = sources.map(source => {
+      const canReconnect = source.assetMode === "local-reconnect" || source.directoryHandle;
+      return `<div class="source-manage-row">
+        <div class="source-manage-copy">
+          <div class="source-manage-label">${esc(source.label)}</div>
+          <small>${source.conversations.length} 段${source.importDetails ? ` · ${esc(source.importDetails)}` : ""}</small>
+        </div>
+        <span class="source-manage-actions">
+          ${canReconnect ? `<button type="button" data-reconnect-source-row="${esc(source.id)}" title="重新连接本地文件或文件夹">重连</button>` : ""}
+          <button type="button" data-remove-source="${esc(source.id)}" title="从书库移除这个来源">移除</button>
+        </span>
+      </div>`;
+    }).join("");
+    wireSourceActions(list);
+  }
+
   function renderSourceControls() {
     const sources = state.library.sources();
     document.body.classList.toggle("has-library", sources.length > 0);
     syncImportPanel();
     renderSearchSourceControl();
+    if ($("sourceManagePanel")?.hidden === false) renderSourceManageList();
     const selected = sources.some(source => source.id === state.sourceFilter) ? state.sourceFilter : "all";
     state.sourceFilter = selected;
     $("sourceFilter").innerHTML = [
@@ -1116,11 +1233,16 @@ window.OD = window.OD || {};
         void saveReaderState();
       });
     });
-    [...document.querySelectorAll("[data-remove-source]")].forEach(button => {
+    wireSourceActions($("conversationList"));
+    [...document.querySelectorAll("#conversationList [data-source-menu]")].forEach(button => {
       button.addEventListener("click", event => {
         event.preventDefault();
         event.stopPropagation();
-        removeSource(button.dataset.removeSource);
+        // Relative lookup instead of a selector built from the id, so odd
+        // characters in a source id can never break out of the query.
+        const group = button.closest?.(".source-group");
+        const menu = group?.querySelector?.(".source-row-menu");
+        if (menu) menu.hidden = !menu.hidden;
       });
     });
 
@@ -2225,11 +2347,40 @@ window.OD = window.OD || {};
   }
   syncSidebarBackdrop();
   $("bookmarkAdd").addEventListener("click", () => addBookmark());
+  $("navLibrary")?.addEventListener?.("click", () => setToolTab(null));
+  $("navTraces")?.addEventListener?.("click", () => setToolTab(lastTraceTab));
   $("toolTabRecent").addEventListener("click", () => setToolTab("recent"));
   $("toolTabBookmarks").addEventListener("click", () => setToolTab("bookmarks"));
   $("toolTabAnnotations").addEventListener("click", () => setToolTab("annotations"));
   $("toolTabSearch").addEventListener("click", () => setToolTab("search"));
   syncToolTabs();
+
+  /* Library-pane menus: 筛选 and 来源＋ expand in place; opening one closes
+     the others so the tree never hides under two stacked panels. */
+  function syncLibraryMenus({ filter = false, add = false, manage = false } = {}) {
+    const filterMenu = $("filterMenu");
+    if (filterMenu) filterMenu.hidden = !filter;
+    const addMenu = $("sourceAddMenu");
+    if (addMenu) addMenu.hidden = !add;
+    const managePanel = $("sourceManagePanel");
+    if (managePanel) managePanel.hidden = !manage;
+    $("filterMenuToggle")?.setAttribute?.("aria-pressed", String(!!filter));
+    $("sourceAddToggle")?.setAttribute?.("aria-pressed", String(!!add));
+  }
+  $("filterMenuToggle")?.addEventListener?.("click", event => {
+    event.stopPropagation?.();
+    syncLibraryMenus({ filter: $("filterMenu")?.hidden !== false });
+  });
+  $("sourceAddToggle")?.addEventListener?.("click", event => {
+    event.stopPropagation?.();
+    syncLibraryMenus({ add: $("sourceAddMenu")?.hidden !== false });
+  });
+  $("sourceManageToggle")?.addEventListener?.("click", event => {
+    event.stopPropagation?.();
+    renderSourceManageList();
+    syncLibraryMenus({ manage: true });
+  });
+  $("sourceManageClose")?.addEventListener?.("click", () => syncLibraryMenus({}));
   $("readerPrefsPanel").hidden = true;
   $("readerPrefsToggle").addEventListener("click", event => {
     event.stopPropagation?.();
