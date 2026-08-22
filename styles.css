@@ -176,6 +176,8 @@ body.toolbar-hidden .toolbar{transform:translateY(-53px);pointer-events:none}
 /* Ink grain rides above bounded paper as its own quiet layer; its job is
    subconscious print texture, never visible grime. */
 .welcome-card::after{content:"";position:absolute;inset:0;border-radius:inherit;background:var(--od-ink-grain);opacity:var(--od-grain-opacity);mix-blend-mode:var(--od-grain-blend);pointer-events:none}
+/* The leaf ornament lives only on the welcome / empty state (approved rule). */
+.welcome-card::before{content:"";position:absolute;bottom:16px;right:20px;width:26px;height:26px;background:var(--muted);opacity:.45;-webkit-mask:url("assets/reader/ornaments/ornament-leaf.svg") center/contain no-repeat;mask:url("assets/reader/ornaments/ornament-leaf.svg") center/contain no-repeat;pointer-events:none}
 .welcome-card>*{position:relative}
 .welcome-card .mark{font-size:64px;line-height:.7;color:var(--accent)}.welcome-card h2{font-weight:500;line-height:1.5;font-size:25px}.welcome-card p{color:var(--muted);line-height:1.8}.small{font-size:12px}
 /* ── Library Home (D1): quiet archive entry ── */
