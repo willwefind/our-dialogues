@@ -5,12 +5,36 @@ A local-first reader for AI conversation archives.
 > **Your conversations stay on your device.**  
 > Files are parsed in the browser. This project does not upload your archive to a server.
 
+![The reading room — Paper theme, an interview-transcript conversation on one bounded paper sheet](docs/screenshots/reader-paper.jpg)
+
+*A quiet, private reading room: paper, ink, and typography carry the atmosphere. Conversations read like interview transcripts, anthologies, or correspondence — not a chat app. All screenshots show the bundled synthetic sample data.*
+
+### Three lighting conditions of one room
+
+| 夜墨 Night Ink | 护眼 Reading Green |
+|---|---|
+| ![Night Ink theme](docs/screenshots/reader-night.jpg) | ![Reading Green theme](docs/screenshots/reader-mist.jpg) |
+
+### The library, the pen, the voice
+
+| | |
+|---|---|
+| ![Library home with the continue-reading paper card](docs/screenshots/library-home.jpg) *私人阅览室 — the library home* | ![Aa reading settings: theme cards, print presets, typography accordions](docs/screenshots/aa-panel.jpg) *Aa — themes, print presets, typography* |
+| ![Hand-drawn highlighter strokes with margin notes](docs/screenshots/highlighter.jpg) *Five hand-drawn highlighter strokes + notes* | ![A local voice clip attached beside the exact message that spoke it](docs/screenshots/voice-player.jpg) *Voice stays beside the words — local only* |
+
+### In your pocket
+
+| | | |
+|---|---|---|
+| ![Mobile reading with gutter marker and bottom controls](docs/screenshots/mobile-reading.jpg) | ![Mobile library home](docs/screenshots/mobile-home.jpg) | ![Mobile drawer with source management](docs/screenshots/mobile-drawer.jpg) |
+
 ## Status
 
 Early v0.1 scaffold.
 
 Currently included:
 
+- The approved reading-room redesign (2026-08): three themes as one product's lighting conditions, composite CJK/Latin print presets, a 936px paper stage with seamless texture, quiet toolbar with auto-hide, sidebar with three primary modes, Library Home, production hand-drawn highlighter strokes, and full mobile chrome with bottom sheets
 - Normalized conversation schema v1
 - Ciel House Export v1 contract
 - Ciel House adapter
@@ -157,6 +181,8 @@ The character-card greeting, when the export contains one, becomes its own 开�
 `ai-chat-exporter.net` can flatten visible replies, workflow text, and UI/tool markers into one assistant `say`. The adapter retains the complete original record under `metadata.original` and the exact string under `metadata.rawSay`. A conservative marker-bounded splitter moves clear runs around `Done`, `Viewed file`, `Searching...`, reminder actions, and similar tool markers into `metadata.sourceTrace`; it never labels that material as Claude official thinking. Visible replies before, between, and after those runs remain in normalized `content`.
 
 ### Mufy rich blocks
+
+![Mufy scene heading and HUD panel rendered with Reader-owned components](docs/screenshots/mufy-rich.jpg)
 
 Mufy source HTML is never assigned to `innerHTML`. The adapter strips comments and executable/non-content elements, parses only known semantic structures, and emits normalized `source-rich-block` content. Reader-owned components cover common status cards, scene headings, HUD/dashboard panels, folder/task panels, forum threads, `details/summary`, label/value rows, notes, lists, and bounded percentage progress bars.
 
