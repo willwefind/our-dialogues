@@ -9,7 +9,36 @@ window.OD = window.OD || {};
     fontFamily: "serif",
     theme: "paper",
     readingMode: "scroll",
-    pageLength: "mid"
+    pageLength: "mid",
+    printPreset: null
+  });
+  /* Print presets are a nullable presentation alias layered above fontFamily.
+     Old records without printPreset keep their stored fontFamily untouched;
+     choosing a preset renders its composite CJK/Latin family without ever
+     rewriting the stored fontFamily value. Typescript is opt-in, never the
+     default. Suggested size/line-height apply only at the moment the user
+     picks the preset — their later manual adjustments win. */
+  const PRINT_PRESETS = Object.freeze({
+    anthology: Object.freeze({
+      label: "文集",
+      family: '"OD Anthology Serif","Huiwen Mincho","IM Fell English","Noto Serif SC","Source Han Serif SC","Songti SC",serif',
+      fontSize: 18, lineHeight: 1.9, letterSpacing: "0", headingSize: 30, headingLineHeight: 1.4
+    }),
+    "old-press": Object.freeze({
+      label: "旧刊",
+      family: '"OD Anthology Serif","Huiwen Mincho","IM Fell English","Noto Serif SC","Source Han Serif SC","Songti SC",serif',
+      fontSize: 17, lineHeight: 1.82, letterSpacing: ".01em", headingSize: 28, headingLineHeight: 1.32
+    }),
+    typescript: Object.freeze({
+      label: "打字稿",
+      family: '"OD Typescript","Zhuque Fangsong","Special Elite","FangSong","STFangsong","Noto Serif SC",serif',
+      fontSize: 18, lineHeight: 1.92, letterSpacing: "0", headingSize: 27, headingLineHeight: 1.42
+    }),
+    correspondence: Object.freeze({
+      label: "书信",
+      family: '"OD Correspondence","Zhuque Fangsong","IM Fell English","FangSong","STFangsong","Noto Serif SC",serif',
+      fontSize: 18, lineHeight: 2.02, letterSpacing: "0", headingSize: 29, headingLineHeight: 1.45
+    })
   });
   /* Bundled faces come first in their stacks so a present font wins and a
      missing file falls straight through to the system fonts behind it. */
@@ -44,7 +73,8 @@ window.OD = window.OD || {};
       fontFamily: oneOf(value.fontFamily, Object.keys(FONT_FAMILIES), DEFAULTS.fontFamily),
       theme: oneOf(value.theme, ["paper", "night", "mist"], DEFAULTS.theme),
       readingMode: oneOf(value.readingMode, ["scroll", "page"], DEFAULTS.readingMode),
-      pageLength: oneOf(value.pageLength, Object.keys(PAGE_CHARS), DEFAULTS.pageLength)
+      pageLength: oneOf(value.pageLength, Object.keys(PAGE_CHARS), DEFAULTS.pageLength),
+      printPreset: oneOf(value.printPreset, Object.keys(PRINT_PRESETS), DEFAULTS.printPreset)
     };
   }
 
@@ -100,6 +130,7 @@ window.OD = window.OD || {};
     PAGE_CHARS,
     DEFAULTS,
     FONT_FAMILIES,
+    PRINT_PRESETS,
     normalizePreferences,
     messageCharacters,
     visibleMessages,

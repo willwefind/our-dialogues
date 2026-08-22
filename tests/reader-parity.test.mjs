@@ -61,8 +61,51 @@ test("reader preferences normalize persisted values conservatively", async () =>
     fontFamily: "serif",
     theme: "paper",
     readingMode: "page",
-    pageLength: "long"
+    pageLength: "long",
+    printPreset: null
   }));
+});
+
+test("printPreset is a backward-compatible nullable presentation alias", async () => {
+  const core = await loadCore();
+  // Old records that never saw printPreset normalize cleanly and keep their
+  // stored fontFamily authoritative.
+  const legacy = core.normalizePreferences({ fontFamily: "huiwen", fontSize: 20 });
+  assert.equal(legacy.printPreset, null);
+  assert.equal(legacy.fontFamily, "huiwen");
+  assert.equal(legacy.fontSize, 20);
+  // Choosing a preset never rewrites fontFamily; clearing it falls back.
+  const chosen = core.normalizePreferences({ fontFamily: "huiwen", printPreset: "correspondence" });
+  assert.equal(chosen.printPreset, "correspondence");
+  assert.equal(chosen.fontFamily, "huiwen");
+  // Unknown preset keys collapse to null instead of breaking normalization.
+  assert.equal(core.normalizePreferences({ printPreset: "neon" }).printPreset, null);
+  // Typescript exists but is never the default.
+  assert.equal(core.DEFAULTS.printPreset, null);
+  assert.ok(Object.keys(core.PRINT_PRESETS).includes("typescript"));
+});
+
+test("print presets pair CJK and Latin faces and stay in lockstep with the menu", async () => {
+  const { readFile } = await import("node:fs/promises");
+  const path = await import("node:path");
+  const html = await readFile(path.join(repositoryRoot, "index.html"), "utf8");
+  const select = html.match(/<select id="printPreset"[\s\S]*?<\/select>/)[0];
+  const optionValues = [...select.matchAll(/<option value="([^"]*)"/g)].map(match => match[1]);
+  const core = await loadCore();
+  const knownKeys = Object.keys(core.PRINT_PRESETS);
+
+  assert.ok(optionValues.includes(""), "the menu offers a way back to plain fontFamily");
+  for (const value of optionValues.filter(Boolean)) {
+    assert.ok(knownKeys.includes(value), `option "${value}" must exist in PRINT_PRESETS`);
+  }
+  for (const key of knownKeys) {
+    assert.ok(optionValues.includes(key), `preset "${key}" must be offered in the menu`);
+    const preset = core.PRINT_PRESETS[key];
+    assert.match(preset.family, /^"OD /, `"${key}" leads with its composite family`);
+    assert.match(preset.family, /,serif\s*$/i, `"${key}" stack must end in a generic fallback`);
+    assert.ok(preset.fontSize >= 14 && preset.fontSize <= 30, `"${key}" suggested size stays in the normalized range`);
+    assert.ok(preset.lineHeight >= 1.5 && preset.lineHeight <= 2.5, `"${key}" suggested leading stays in the normalized range`);
+  }
 });
 
 test("message anchors select the containing page and page values clamp", async () => {

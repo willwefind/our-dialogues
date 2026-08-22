@@ -201,19 +201,38 @@ window.OD = window.OD || {};
   function applyReaderPreferences(value = state.readerPrefs) {
     state.readerPrefs = OD.readerParity.normalizePreferences(value);
     const root = document.documentElement;
+    /* printPreset is a presentation alias above fontFamily: rendering prefers
+       the preset's composite CJK/Latin family, but the stored fontFamily is
+       never rewritten and takes over again the moment the preset is cleared. */
+    const preset = state.readerPrefs.printPreset
+      ? OD.readerParity.PRINT_PRESETS[state.readerPrefs.printPreset]
+      : null;
     root.style?.setProperty?.("--reader-font-size", `${state.readerPrefs.fontSize}px`);
     root.style?.setProperty?.("--reader-line-height", String(state.readerPrefs.lineHeight));
     root.style?.setProperty?.("--cw", `${state.readerPrefs.contentWidth}px`);
-    root.style?.setProperty?.("--reader-font-family", OD.readerParity.FONT_FAMILIES[state.readerPrefs.fontFamily]);
+    root.style?.setProperty?.("--reader-font-family", preset ? preset.family : OD.readerParity.FONT_FAMILIES[state.readerPrefs.fontFamily]);
+    root.style?.setProperty?.("--reader-letter-spacing", preset ? preset.letterSpacing : "0");
+    root.style?.setProperty?.("--reader-heading-size", preset ? `${preset.headingSize}px` : "27px");
+    root.style?.setProperty?.("--reader-heading-line-height", preset ? String(preset.headingLineHeight) : "1.4");
     root.dataset.theme = state.readerPrefs.theme;
     $("theme").value = state.readerPrefs.theme;
     $("lineHeight").value = String(state.readerPrefs.lineHeight);
     $("contentWidth").value = String(state.readerPrefs.contentWidth);
     $("fontFamily").value = state.readerPrefs.fontFamily;
+    const presetControl = $("printPreset");
+    if (presetControl) presetControl.value = state.readerPrefs.printPreset || "";
     $("readingMode").value = state.readerPrefs.readingMode;
     $("pageLength").value = state.readerPrefs.pageLength;
     $("pageLength").disabled = state.readerPrefs.readingMode !== "page";
     document.body.classList.toggle("page-mode", state.readerPrefs.readingMode === "page");
+  }
+
+  /* Style-only preference changes (size, leading, width, family, preset) do
+     not re-render, so the layout shifts under the fixed scrollTop. Re-seat the
+     view on the same anchored message instead of letting the text drift. */
+  function restoreStyleAnchor(position) {
+    if (!state.current || !position?.messageId) return;
+    restoreReadingPosition({ messageId: position.messageId, scrollTop: position.scrollTop });
   }
 
   /* Every save also settles the per-conversation account: message anchor
@@ -2097,13 +2116,39 @@ window.OD = window.OD || {};
     state.readerPrefs = OD.readerParity.normalizePreferences({ ...state.readerPrefs, [key]: value });
     applyReaderPreferences();
     if (rerender && state.current) openConversation(state.current.id, { restorePosition: position });
+    else restoreStyleAnchor(position);
+    void saveReaderState();
+  }
+  function setPrintPreset(key) {
+    const position = readerSettings().readingPosition;
+    const preset = key ? OD.readerParity.PRINT_PRESETS[key] : null;
+    /* Picking a preset applies its suggested size/leading as that one user
+       action; clearing it only stops the presentation alias — the stored
+       fontFamily and current size/leading stay exactly as they are. */
+    state.readerPrefs = OD.readerParity.normalizePreferences({
+      ...state.readerPrefs,
+      printPreset: preset ? key : null,
+      ...(preset ? { fontSize: preset.fontSize, lineHeight: preset.lineHeight } : {})
+    });
+    applyReaderPreferences();
+    restoreStyleAnchor(position);
     void saveReaderState();
   }
   $("fontSmaller").addEventListener("click", () => updateReaderPreference("fontSize", state.readerPrefs.fontSize - 1, { rerender: false }));
   $("fontLarger").addEventListener("click", () => updateReaderPreference("fontSize", state.readerPrefs.fontSize + 1, { rerender: false }));
   $("lineHeight").addEventListener("change", event => updateReaderPreference("lineHeight", event.target.value, { rerender: false }));
   $("contentWidth").addEventListener("change", event => updateReaderPreference("contentWidth", event.target.value, { rerender: false }));
-  $("fontFamily").addEventListener("change", event => updateReaderPreference("fontFamily", event.target.value, { rerender: false }));
+  $("printPreset")?.addEventListener?.("change", event => setPrintPreset(event.target.value || null));
+  /* A manual choice under 字体 overrides and clears the print preset. */
+  $("fontFamily").addEventListener("change", event => {
+    const position = readerSettings().readingPosition;
+    state.readerPrefs = OD.readerParity.normalizePreferences({
+      ...state.readerPrefs, fontFamily: event.target.value, printPreset: null
+    });
+    applyReaderPreferences();
+    restoreStyleAnchor(position);
+    void saveReaderState();
+  });
   $("readingMode").addEventListener("change", event => updateReaderPreference("readingMode", event.target.value));
   $("pageLength").addEventListener("change", event => updateReaderPreference("pageLength", event.target.value));
   $("previousPage").addEventListener("click", goPrevious);
@@ -2458,6 +2503,7 @@ window.OD = window.OD || {};
     setConversationTags,
     setFavoritesOnly,
     setTagFilter,
+    setPrintPreset,
     loadDemoLibrary,
     buildExport,
     exportAs,

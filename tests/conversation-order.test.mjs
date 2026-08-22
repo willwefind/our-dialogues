@@ -67,7 +67,7 @@ async function loadAppRuntime(savedSortMode="asc", options={}) {
     "folderInput", "voiceMappingInput", "voiceArchiveInput", "clearSolVoice",
     "sourceFilter", "clearSources", "hideUser", "showThinking", "theme", "sidebarToggle", "sidebar",
     "directoryPicker", "localLibraryStatus", "clearLocalLibrary", "acceptanceAudit", "runAcceptanceAudit",
-    "fontSmaller", "fontLarger", "lineHeight", "contentWidth", "fontFamily",
+    "fontSmaller", "fontLarger", "lineHeight", "contentWidth", "fontFamily", "printPreset",
     "readingMode", "pageLength", "pageNavigation", "previousPage", "nextPage",
     "pageIndicator", "pageJump", "pageCount", "scrollJumpers", "toTop", "toEnd",
     "bookmarkAdd", "bookmarksList", "bookmarksCount",
