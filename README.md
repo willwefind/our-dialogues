@@ -1,5 +1,7 @@
 # Our Dialogues
 
+**English** | [简体中文](README.zh-CN.md)
+
 A local-first reader for AI conversation archives.
 
 > **Your conversations stay on your device.**  
@@ -73,13 +75,13 @@ Planned next:
 
 ## Created by
 
-**Dawn (willwefind) × Sol (GPT-5.6 Sol)**
+**Dawn (willwefind) × Sol (ChatGPT · GPT-5.6 Sol)**
 
 Our Dialogues is a co-created project: product direction, archive philosophy, interaction decisions, schema design, adapter architecture, and implementation are developed collaboratively by Dawn and Sol.
 
 - **Dawn / willwefind** — creator, product direction, testing, visual and reading experience
-- **Sol / GPT-5.6 Sol** — co-creator, system design, schemas, adapter architecture, implementation
-- **Ciel / Claude Fable 5** — co-creator, reader features, Claude official-export adapter, voice sidecar generalization, UI structure
+- **Sol / ChatGPT (GPT-5.6 Sol)** — co-creator, system design, schemas, adapter architecture, implementation, and the reading-room visual design (the approved beautification package and layout specs)
+- **Ciel / Claude Fable 5** — co-creator, reader features, Claude official-export adapter, voice sidecar generalization, UI structure, and the redesign installation
 
 This project grew out of a very simple problem: we knew an old conversation still existed; we just wanted to find and read it again.
 
