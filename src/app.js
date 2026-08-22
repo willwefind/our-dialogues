@@ -2411,6 +2411,7 @@ window.OD = window.OD || {};
   $("aaDone")?.addEventListener?.("click", () => {
     const panel = $("readerPrefsPanel");
     if (panel) panel.hidden = true;
+    $("readerPrefsToggle")?.focus?.();
   });
   $("resetPrefs")?.addEventListener?.("click", () => {
     const position = readerSettings().readingPosition;
@@ -2454,7 +2455,8 @@ window.OD = window.OD || {};
   function scrollMain(target) {
     const main = $("main");
     const top = target === "end" ? Number(main.scrollHeight || 0) : 0;
-    if (typeof main.scrollTo === "function") main.scrollTo({ top, behavior: "smooth" });
+    const reduced = window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches === true;
+    if (typeof main.scrollTo === "function") main.scrollTo({ top, behavior: reduced ? "auto" : "smooth" });
     else main.scrollTop = top;
   }
 
@@ -2945,16 +2947,24 @@ window.OD = window.OD || {};
         hideAnnotationUI();
         return;
       }
+      const FOCUS_RETURN = {
+        readerMoreMenu: "readerMoreToggle",
+        exportMenu: "exportToggle",
+        tagEditor: "tagToggle",
+        readerPrefsPanel: "readerPrefsToggle"
+      };
       for (const id of ["readerMoreMenu", "exportMenu", "tagEditor", "readerPrefsPanel"]) {
         const panel = $(id);
         if (panel && !panel.hidden) {
           panel.hidden = true;
+          $(FOCUS_RETURN[id])?.focus?.();
           return;
         }
       }
       if (!$("sidebar").classList.contains("closed") && isNarrowScreen()) {
         $("sidebar").classList.add("closed");
         syncSidebarBackdrop();
+        $("sidebarToggle")?.focus?.();
         return;
       }
       setToolbarHidden(false);

@@ -371,6 +371,15 @@ mark.annotation.annotation-flash{animation:bookmark-flash 1.4s ease 2}
 /* ── Keyboard focus ── */
 :focus-visible{outline:var(--line-active) solid var(--od-focus);outline-offset:2px}
 
+/* ── Reduced motion: drawers, toolbar, and sheets become simple 0–80 ms
+   visibility changes; decorative motion stops. ── */
+@media (prefers-reduced-motion:reduce){
+  #sidebar,.toolbar,.page-navigation,.reader-prefs-panel,.annotation-editor{transition-duration:60ms!important}
+  .source-group>summary::before,.character-group>summary::before,.aa-accordion>summary::after,.message-time{transition:none!important}
+  .attachment-loading{animation:none!important}
+  .message.bookmark-flash,mark.annotation.annotation-flash{animation-duration:.3s}
+}
+
 /* ── Scrollbars ──
    Windows overlay scrollbars stay invisible until you scroll, which reads as
    "this list cannot scroll". Styling them makes every long area announce
