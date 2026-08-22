@@ -59,6 +59,19 @@ window.OD = window.OD || {};
     return d.toLocaleString();
   }
 
+  function fmtRelative(value) {
+    const time = Date.parse(value ?? "");
+    if (!Number.isFinite(time)) return "";
+    const minutes = Math.round((Date.now() - time) / 60000);
+    if (minutes < 1) return "刚刚";
+    if (minutes < 60) return `${minutes} 分钟前`;
+    const hours = Math.round(minutes / 60);
+    if (hours < 24) return `${hours} 小时前`;
+    const days = Math.round(hours / 24);
+    if (days < 30) return `${days} 天前`;
+    return fmtDate(value);
+  }
+
   function fmtBytes(value) {
     const bytes = Number(value);
     if (!Number.isFinite(bytes) || bytes < 0) return "";
@@ -795,6 +808,90 @@ window.OD = window.OD || {};
      阅读痕迹 (recent/bookmarks/annotations as its inner segments), or 搜索.
      The persisted toolTab value keeps its historical five-value domain, so
      records written before this layout restore into the right mode. */
+  /* ── Library Home (D1): a quiet archive entry, not a dashboard ── */
+  function renderLibraryHome() {
+    const home = $("libraryHome");
+    if (!home) return;
+    const conversations = state.archive?.conversations || [];
+    const conversationById = new Map(conversations.map(conversation => [conversation.id, conversation]));
+
+    const card = $("continueCard");
+    if (card) {
+      const entry = OD.readingProgress.recent(state.readingProgress, 5)
+        .map(item => ({ ...item, conversation: conversationById.get(item.conversationId) }))
+        .find(item => item.conversation) || null;
+      if (!entry) {
+        card.innerHTML = `<div class="continue-card continue-empty">从一段对话开始，把这里变成你的阅览室。</div>`;
+      } else {
+        const conversation = entry.conversation;
+        const source = state.library.sourceForConversation(conversation);
+        const total = conversation.messages.length;
+        const index = Math.max(1, conversation.messages.findIndex(message => String(message.id) === String(entry.messageId)) + 1);
+        const excerpt = OD.schema.textOf(conversation.messages[index - 1]?.content ?? "")
+          .trim().replace(/\s+/g, " ").slice(0, 64);
+        const percent = Math.max(0, Math.min(100, Number(entry.percent) || 0));
+        card.innerHTML = `<div class="continue-card" data-home-open="${esc(conversation.id)}" role="link" tabindex="0" aria-label="继续阅读：${esc(displayConversationTitle(conversation))}">
+          <div class="continue-eyebrow">上次读到 · ${esc(fmtRelative(entry.updatedAt))}</div>
+          <div class="continue-title">${esc(displayConversationTitle(conversation))}</div>
+          <div class="continue-meta">${esc(source?.label || "")}${conversation.createdAt ? ` · ${esc(fmtDate(conversation.createdAt))}` : ""} · 第 ${index} / ${total} 段</div>
+          ${excerpt ? `<div class="continue-excerpt">“${esc(excerpt)}”</div>` : ""}
+          <div class="continue-foot">
+            <div class="continue-progress" aria-hidden="true"><span style="width:${percent}%"></span></div>
+            <span class="continue-cta">继续阅读 →</span>
+          </div>
+        </div>`;
+      }
+    }
+
+    const additions = $("recentAdditions");
+    if (additions) {
+      const newest = OD.conversationOrder.sortConversations(conversations, "desc").slice(0, 3);
+      additions.innerHTML = newest.length ? newest.map(conversation => {
+        const source = state.library.sourceForConversation(conversation);
+        return `<div class="home-addition" data-home-open="${esc(conversation.id)}" role="link" tabindex="0">
+          <div class="home-addition-title">${esc(displayConversationTitle(conversation))}</div>
+          <div class="home-addition-meta">${esc(source?.label || "")}${conversation.createdAt ? ` · ${esc(fmtDate(conversation.createdAt))}` : ""} · ${conversation.messages.length} 段</div>
+        </div>`;
+      }).join("") : `<div class="bookmarks-empty">导入来源后，这里会列出最新的对话。</div>`;
+    }
+
+    const summary = $("librarySummary");
+    if (summary) {
+      summary.innerHTML = `<div class="summary-grid">
+        <div class="summary-item"><strong>${state.library.size}</strong><span>个来源</span></div>
+        <div class="summary-item"><strong>${esc(conversations.length.toLocaleString())}</strong><span>段对话</span></div>
+        <div class="summary-item"><strong>${state.bookmarks.length}</strong><span>枚书签</span></div>
+        <div class="summary-item"><strong>${state.annotations.length}</strong><span>处划线</span></div>
+      </div>
+      <div class="summary-note">全部文字保存在本机 · 附件按需连接</div>`;
+    }
+
+    [...(home.querySelectorAll?.("[data-home-open]") || [])].forEach(element => {
+      const open = () => openConversation(element.dataset.homeOpen);
+      element.addEventListener("click", open);
+      element.addEventListener("keydown", event => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault?.();
+          open();
+        }
+      });
+    });
+  }
+
+  function libraryHomeVisible() {
+    return $("libraryHome")?.classList?.contains?.("hidden") === false;
+  }
+
+  function showLibraryHome() {
+    if (!state.archive) return false;
+    renderLibraryHome();
+    $("reader").classList.add("hidden");
+    $("welcome").classList.add("hidden");
+    $("libraryHome")?.classList?.remove?.("hidden");
+    $("currentTitle").textContent = "书库";
+    return true;
+  }
+
   const TOOL_PANES = {
     recent: ["toolTabRecent", "recentPane"],
     bookmarks: ["toolTabBookmarks", "bookmarksPane"],
@@ -1250,6 +1347,7 @@ window.OD = window.OD || {};
     renderBookmarks();
     renderAnnotations();
     renderRecent();
+    if (libraryHomeVisible()) renderLibraryHome();
     return state.filtered;
   }
 
@@ -1656,6 +1754,7 @@ window.OD = window.OD || {};
     state.assetSession = source?.assetSession || null;
     state.current = c;
     $("welcome").classList.add("hidden");
+    $("libraryHome")?.classList?.add?.("hidden");
     $("reader").classList.remove("hidden");
     const displayedTitle = displayConversationTitle(c);
     $("currentTitle").textContent = displayedTitle;
@@ -1863,6 +1962,7 @@ window.OD = window.OD || {};
     state.current = null;
     state.assetSession = null;
     $("reader").classList.add("hidden");
+    $("libraryHome")?.classList?.add?.("hidden");
     $("welcome").classList.remove("hidden");
     $("currentTitle").textContent = "尚未载入档案";
     $("readerTitle").textContent = "";
@@ -2347,7 +2447,10 @@ window.OD = window.OD || {};
   }
   syncSidebarBackdrop();
   $("bookmarkAdd").addEventListener("click", () => addBookmark());
-  $("navLibrary")?.addEventListener?.("click", () => setToolTab(null));
+  $("navLibrary")?.addEventListener?.("click", () => {
+    setToolTab(null);
+    showLibraryHome();
+  });
   $("navTraces")?.addEventListener?.("click", () => setToolTab(lastTraceTab));
   $("toolTabRecent").addEventListener("click", () => setToolTab("recent"));
   $("toolTabBookmarks").addEventListener("click", () => setToolTab("bookmarks"));

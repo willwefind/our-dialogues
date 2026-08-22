@@ -81,6 +81,7 @@ async function loadAppRuntime(savedSortMode="asc", options={}) {
     "navLibrary", "navTraces", "libraryPane", "tracesPane",
     "filterMenu", "filterMenuToggle", "sourceAddToggle", "sourceAddMenu",
     "sourceManageToggle", "sourceManagePanel", "sourceManageList", "sourceManageClose",
+    "libraryHome", "continueCard", "recentAdditions", "librarySummary",
     "readerPrefsToggle", "readerPrefsPanel", "sidebarClose", "sidebarBackdrop", "mobileHint",
     "favoriteToggle", "tagToggle", "tagEditor", "tagChips", "tagInput", "tagSuggestions",
     "favoritesFilter", "tagFilter",
@@ -911,6 +912,46 @@ test("old persisted toolTab values restore into the right sidebar mode", async (
   assert.equal(elements.get("tracesPane").hidden, false, "a pre-redesign trace tab lands in 阅读痕迹");
   assert.equal(elements.get("annotationsPane").hidden, false);
   assert.equal(elements.get("libraryPane").hidden, true);
+});
+
+test("library home renders continue-reading, recent additions, and summary without stealing the reader", async () => {
+  const { runtime, elements } = await loadAppRuntime("asc");
+  const conversation = (id, createdAt) => ({
+    id, title: `篇章 ${id}`, createdAt,
+    messages: [
+      { id: `${id}-1`, role: "user", content: `${id} 的开头` },
+      { id: `${id}-2`, role: "assistant", content: `${id} 的回应正文` }
+    ]
+  });
+  runtime.OD.app.loadArchive({ conversations: [
+    conversation("alpha", "2026-08-01T00:00:00.000Z"),
+    conversation("beta", "2026-08-10T00:00:00.000Z"),
+    conversation("gamma", "2026-08-20T00:00:00.000Z"),
+    conversation("delta", "2026-07-01T00:00:00.000Z")
+  ] }, "Home fixture");
+
+  // Importing opened a conversation, so the reader is showing, not the home.
+  assert.ok(elements.get("libraryHome").classList.contains("hidden"), "the home stays hidden while reading");
+  const currentId = runtime.OD.app.getState().current.id;
+
+  elements.get("navLibrary").click();
+  assert.equal(elements.get("libraryHome").classList.contains("hidden"), false, "书库 shows the loaded home");
+  assert.ok(elements.get("reader").classList.contains("hidden"));
+  assert.equal(elements.get("currentTitle").textContent, "书库");
+  assert.match(elements.get("continueCard").innerHTML, new RegExp(currentId),
+    "the continue card points at the last reading position");
+  const additions = elements.get("recentAdditions").innerHTML;
+  assert.match(additions, /gamma/);
+  assert.match(additions, /beta/);
+  assert.match(additions, /alpha/);
+  assert.doesNotMatch(additions, /delta/, "recent additions keep only the newest three");
+  assert.match(elements.get("librarySummary").innerHTML, /个来源/);
+  assert.equal(runtime.OD.app.getState().current.id, currentId, "showing the home never drops the open conversation");
+
+  // Opening a conversation returns to the reader view.
+  runtime.OD.app.openConversation("beta");
+  assert.ok(elements.get("libraryHome").classList.contains("hidden"));
+  assert.equal(elements.get("reader").classList.contains("hidden"), false);
 });
 
 test("year headings are display-only and appear only past the approved thresholds", async () => {
