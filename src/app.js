@@ -104,6 +104,12 @@ window.OD = window.OD || {};
   function renderStatus() {
     $("status").textContent = [state.statusText, solVoiceStatusText()].filter(Boolean).join(" · ");
     $("status").classList.toggle("error", state.statusError);
+    const voiceLine = $("voiceStatusLine");
+    if (voiceLine) {
+      const voice = solVoiceStatusText();
+      voiceLine.textContent = voice;
+      voiceLine.hidden = !voice;
+    }
     renderLocalLibraryStatus();
   }
 
@@ -1041,7 +1047,7 @@ window.OD = window.OD || {};
     const star = $("favoriteToggle");
     if (star) {
       const active = state.current ? OD.organization.isFavorite(state.organization, state.current.id) : false;
-      star.textContent = active ? "⭐" : "☆";
+      star.textContent = active ? "⭐ 已收藏" : "☆ 收藏";
       star.setAttribute?.("aria-pressed", String(active));
     }
     $("favoritesFilter")?.setAttribute?.("aria-pressed", String(!!state.favoritesOnly));
@@ -1695,7 +1701,7 @@ window.OD = window.OD || {};
       ${contentHTML}
       ${attachmentHTML ? `<div class="attachments">${attachmentHTML}</div>` : ""}
       ${solVoiceHTML ? `<div class="solvoice-clips">${solVoiceHTML}</div>` : ""}
-      ${(thinking || recaps.length) ? `<div class="thinking"><strong>Thinking / reasoning exported by source</strong>${recaps.length ? `\n${esc(recaps.join(" · "))}` : ""}${thinking ? `\n\n${esc(thinking)}` : ""}</div>` : ""}
+      ${(thinking || recaps.length) ? `<div class="thinking"><strong>编者附记 · Thinking / Trace（来源导出）</strong>${recaps.length ? `\n${esc(recaps.join(" · "))}` : ""}${thinking ? `\n\n${esc(thinking)}` : ""}</div>` : ""}
       ${sourceTraceHTML}
       ${message.createdAt ? `<div class="message-time">${esc(fmtDate(message.createdAt))}</div>` : ""}
     </section>`;
@@ -1761,11 +1767,11 @@ window.OD = window.OD || {};
     $("readerTitle").textContent = displayedTitle;
 
     const bits = [];
-    if (source?.label) bits.push(`Source: ${source.label}`);
-    if (c.context?.room?.name) bits.push(`Room: ${c.context.room.name}`);
+    if (source?.label) bits.push(source.label);
+    if (c.context?.room?.name) bits.push(c.context.room.name);
     if (c.createdAt) bits.push(fmtDate(c.createdAt));
-    bits.push(`${c.messages.length} 条消息`);
-    $("readerMeta").innerHTML = bits.map(x => `<span class="badge">${esc(x)}</span>`).join("");
+    bits.push(`${c.messages.length} 段`);
+    $("readerMeta").innerHTML = bits.map(x => `<span>${esc(x)}</span>`).join('<span class="meta-dot" aria-hidden="true"> · </span>');
 
     state.pages = OD.readerParity.paginateMessages(c.messages, {
       mode: state.readerPrefs.readingMode,
@@ -2394,9 +2400,93 @@ window.OD = window.OD || {};
     if (typeof main.scrollTo === "function") main.scrollTo({ top, behavior: "smooth" });
     else main.scrollTop = top;
   }
-  $("toTop").addEventListener("click", () => scrollMain("top"));
-  $("toEnd").addEventListener("click", () => scrollMain("end"));
+
+  /* ── Toolbar auto-hide ──
+     Hide on >=32px of accumulated downward scroll; reveal on >=12px upward,
+     near the top, on toolbar focus, or when any toolbar-owned popover opens.
+     Frozen while text is selected, a note is being edited, audio plays, or a
+     popover is open — reading chrome must never fight those states. */
+  const toolbarHide = { downAccum: 0, upAccum: 0, lastTop: 0, hidden: false, audioPlaying: 0 };
+  function anyToolbarPopoverOpen() {
+    return ["readerPrefsPanel", "exportMenu", "tagEditor", "readerMoreMenu"].some(id => {
+      const panel = $(id);
+      return panel && !panel.hidden;
+    });
+  }
+  function toolbarAutoHideFrozen() {
+    if (typeof getSelection === "function" && getSelection()?.isCollapsed === false) return true;
+    const editor = $("annotationEditor");
+    if (editor && !editor.hidden) return true;
+    if (toolbarHide.audioPlaying > 0) return true;
+    if (anyToolbarPopoverOpen()) return true;
+    return false;
+  }
+  function setToolbarHidden(hidden) {
+    if (toolbarHide.hidden === hidden) return;
+    toolbarHide.hidden = hidden;
+    document.body.classList.toggle("toolbar-hidden", hidden);
+  }
+  function trackToolbarOnScroll() {
+    const top = Number($("main").scrollTop || 0);
+    const delta = top - toolbarHide.lastTop;
+    toolbarHide.lastTop = top;
+    if (toolbarAutoHideFrozen()) {
+      setToolbarHidden(false);
+      return;
+    }
+    if (top <= 16) {
+      toolbarHide.downAccum = 0;
+      toolbarHide.upAccum = 0;
+      setToolbarHidden(false);
+      return;
+    }
+    if (delta > 0) {
+      toolbarHide.downAccum += delta;
+      toolbarHide.upAccum = 0;
+      if (toolbarHide.downAccum >= 32) setToolbarHidden(true);
+    } else if (delta < 0) {
+      toolbarHide.upAccum -= delta;
+      toolbarHide.downAccum = 0;
+      if (toolbarHide.upAccum >= 12) setToolbarHidden(false);
+    }
+  }
+  // Media events don't bubble, so listen in the capture phase; ended fires
+  // pause as well, keeping the counter balanced.
+  document.addEventListener?.("play", () => {
+    toolbarHide.audioPlaying += 1;
+    setToolbarHidden(false);
+  }, true);
+  document.addEventListener?.("pause", () => {
+    toolbarHide.audioPlaying = Math.max(0, toolbarHide.audioPlaying - 1);
+  }, true);
+  $("readerToolbar")?.addEventListener?.("focusin", () => setToolbarHidden(false));
+
+  function closeMoreMenu() {
+    const menu = $("readerMoreMenu");
+    if (menu) menu.hidden = true;
+  }
+  $("readerMoreToggle")?.addEventListener?.("click", event => {
+    event.stopPropagation?.();
+    const menu = $("readerMoreMenu");
+    if (menu) menu.hidden = !menu.hidden;
+    setToolbarHidden(false);
+  });
+  $("toTop").addEventListener("click", () => {
+    scrollMain("top");
+    closeMoreMenu();
+  });
+  $("toEnd").addEventListener("click", () => {
+    scrollMain("end");
+    closeMoreMenu();
+  });
+  /* Sidebar behavior tiers: <=1359 the sidebar overlays the text as a drawer
+     (the 936px paper plus its stage margins no longer fit beside 312px);
+     >=1360 it sits in the flow. Phones (<=760) additionally get the compact
+     reading chrome. */
   function isNarrowScreen() {
+    return window.matchMedia?.("(max-width: 1359px)")?.matches === true;
+  }
+  function isPhoneScreen() {
     return window.matchMedia?.("(max-width: 760px)")?.matches === true;
   }
 
@@ -2435,13 +2525,15 @@ window.OD = window.OD || {};
     wasNarrowScreen = narrow;
     syncSidebarBackdrop();
   };
-  window.matchMedia?.("(max-width: 760px)")?.addEventListener?.("change", onViewportChange);
+  window.matchMedia?.("(max-width: 1359px)")?.addEventListener?.("change", onViewportChange);
   addEventListener("resize", onViewportChange);
-  // A phone starts with the drawer closed and reads full-width; the file
-  // pickers stay one tap away behind ☰. The hint steers around the mobile
-  // folder-picker trap the standalone Mufy reader already ran into.
+  // Below 1360 the reading stage needs the full width, so the drawer starts
+  // closed; phones additionally surface the folder-picker hint the standalone
+  // Mufy reader's mobile trap taught us.
   if (isNarrowScreen()) {
     $("sidebar").classList.add("closed");
+  }
+  if (isPhoneScreen()) {
     const hint = $("mobileHint");
     if (hint) hint.hidden = false;
   }
@@ -2504,10 +2596,15 @@ window.OD = window.OD || {};
     if (exportMenu && !exportMenu.hidden && !event?.target?.closest?.("#exportMenu, #exportToggle")) {
       exportMenu.hidden = true;
     }
+    const moreMenu = $("readerMoreMenu");
+    if (moreMenu && !moreMenu.hidden && !event?.target?.closest?.("#readerMoreMenu, #readerMoreToggle")) {
+      moreMenu.hidden = true;
+    }
   });
   $("exportMenu").hidden = true;
   $("exportToggle").addEventListener("click", event => {
     event.stopPropagation?.();
+    closeMoreMenu();
     $("exportMenu").hidden = !$("exportMenu").hidden;
   });
   $("exportCurrentMd").addEventListener("click", () => exportAs("current-markdown"));
@@ -2521,6 +2618,7 @@ window.OD = window.OD || {};
   $("favoriteToggle").addEventListener("click", () => toggleFavorite());
   $("tagToggle").addEventListener("click", event => {
     event.stopPropagation?.();
+    closeMoreMenu();
     const editor = $("tagEditor");
     editor.hidden = !editor.hidden;
     if (!editor.hidden) {
@@ -2711,8 +2809,37 @@ window.OD = window.OD || {};
       syncAnnotationSwatches(annotationEditorState.color);
     });
   });
-  $("main").addEventListener("scroll", () => void saveReaderState());
+  $("main").addEventListener("scroll", () => {
+    trackToolbarOnScroll();
+    void saveReaderState();
+  });
   document.addEventListener?.("keydown", event => {
+    if (event.key === "Escape") {
+      // Close the topmost transient layer first; never silently discard an
+      // unsaved note — an edited annotation ignores Esc until saved/cancelled.
+      const editor = $("annotationEditor");
+      if (editor && !editor.hidden) {
+        const note = String($("annotationNote")?.value ?? "");
+        const baseline = String(annotationEditorState?.note ?? "");
+        if (note.trim() && note !== baseline) return;
+        hideAnnotationUI();
+        return;
+      }
+      for (const id of ["readerMoreMenu", "exportMenu", "tagEditor", "readerPrefsPanel"]) {
+        const panel = $(id);
+        if (panel && !panel.hidden) {
+          panel.hidden = true;
+          return;
+        }
+      }
+      if (!$("sidebar").classList.contains("closed") && isNarrowScreen()) {
+        $("sidebar").classList.add("closed");
+        syncSidebarBackdrop();
+        return;
+      }
+      setToolbarHidden(false);
+      return;
+    }
     const target = event.target;
     const tag = String(target?.tagName || "").toLowerCase();
     if (["input", "textarea", "select"].includes(tag) || target?.isContentEditable) return;

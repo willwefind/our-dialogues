@@ -141,14 +141,22 @@
   <div id="sidebarBackdrop" class="sidebar-backdrop" hidden></div>
 
   <main id="main">
-    <div class="toolbar">
-      <button id="sidebarToggle" class="ghost" title="显示/隐藏侧栏">☰</button>
+    <div id="readerToolbar" class="toolbar">
+      <button id="sidebarToggle" class="ghost icon-button" title="显示/隐藏侧栏">☰</button>
       <div id="currentTitle" class="current-title">尚未载入档案</div>
-      <button id="readerPrefsToggle" class="ghost" type="button" title="阅读设置：字号、行距、宽度、字体、翻页方式、主题、显示开关" aria-haspopup="true">Aa</button>
-      <button id="bookmarkAdd" class="ghost" type="button" title="把当前读到的位置存为书签；同一位置再存会刷新它">🔖 存书签</button>
-      <button id="favoriteToggle" class="ghost" type="button" title="收藏 / 取消收藏当前对话" aria-pressed="false">☆</button>
-      <button id="tagToggle" class="ghost" type="button" title="给当前对话加标签" aria-haspopup="true">🏷</button>
-      <button id="exportToggle" class="ghost" type="button" title="导出当前对话或当前列表" aria-haspopup="true">⬇</button>
+      <button id="bookmarkAdd" class="ghost icon-button" type="button" title="把当前读到的位置存为书签；同一位置再存会刷新它" aria-label="存书签">🔖</button>
+      <button id="readerPrefsToggle" class="ghost icon-button" type="button" title="阅读设置：主题、印刷风格、排版、字体、显示开关" aria-haspopup="true">Aa</button>
+      <button id="readerMoreToggle" class="ghost icon-button" type="button" title="更多：收藏、标签、导出、跳转、语音状态" aria-haspopup="true" aria-label="更多操作">···</button>
+    </div>
+
+    <div id="readerMoreMenu" class="reader-prefs-panel reader-more-menu" hidden>
+      <button id="favoriteToggle" type="button" title="收藏 / 取消收藏当前对话" aria-pressed="false">☆ 收藏</button>
+      <button id="tagToggle" type="button" title="给当前对话加标签" aria-haspopup="true">🏷 标签</button>
+      <button id="exportToggle" type="button" title="导出当前对话或当前列表" aria-haspopup="true">⬇ 导出</button>
+      <div class="more-menu-divider" aria-hidden="true"></div>
+      <button id="toTop" type="button" title="回到顶部（Home）">↑ 回到顶部</button>
+      <button id="toEnd" type="button" title="到最底部（End）">↓ 到最底部</button>
+      <div id="voiceStatusLine" class="more-voice-status" hidden></div>
     </div>
 
     <div id="exportMenu" class="reader-prefs-panel export-menu" hidden>
@@ -282,10 +290,6 @@
         <button id="nextPage" type="button">下一段 →</button>
       </nav>
     </article>
-    <div id="scrollJumpers" class="scroll-jumpers" aria-label="页内跳转">
-      <button id="toTop" type="button" title="回到顶部（Home）">↑</button>
-      <button id="toEnd" type="button" title="到最底部（End）">↓</button>
-    </div>
   </main>
 
   <button id="highlightButton" class="highlight-button" type="button" hidden>🖍 标记这段</button>

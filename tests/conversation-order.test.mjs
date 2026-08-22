@@ -69,7 +69,8 @@ async function loadAppRuntime(savedSortMode="asc", options={}) {
     "directoryPicker", "localLibraryStatus", "clearLocalLibrary", "acceptanceAudit", "runAcceptanceAudit",
     "fontSmaller", "fontLarger", "lineHeight", "contentWidth", "fontFamily", "printPreset",
     "readingMode", "pageLength", "pageNavigation", "previousPage", "nextPage",
-    "pageIndicator", "pageJump", "pageCount", "scrollJumpers", "toTop", "toEnd",
+    "pageIndicator", "pageJump", "pageCount", "toTop", "toEnd",
+    "readerToolbar", "readerMoreToggle", "readerMoreMenu", "voiceStatusLine",
     "bookmarkAdd", "bookmarksList", "bookmarksCount",
     "annotationsList", "annotationsCount", "highlightButton",
     "annotationEditor", "annotationColors", "annotationNote",
@@ -1118,7 +1119,7 @@ test("favorites and tags mark conversations, filter the catalog, and persist", a
 
   runtime.OD.app.openConversation("fav-a");
   assert.equal(runtime.OD.app.toggleFavorite(), true);
-  assert.equal(elements.get("favoriteToggle").textContent, "⭐");
+  assert.equal(elements.get("favoriteToggle").textContent, "⭐ 已收藏");
   assert.match(elements.get("conversationList").innerHTML, /conv-star/);
 
   runtime.OD.app.setConversationTags("fav-a", ["日常", " 旅行 "]);
@@ -1141,7 +1142,7 @@ test("favorites and tags mark conversations, filter the catalog, and persist", a
   assert.deepEqual([...mirror.organization.tags["fav-a"]], ["日常", "旅行"]);
 
   assert.equal(runtime.OD.app.toggleFavorite(), false, "toggling again unstars");
-  assert.equal(elements.get("favoriteToggle").textContent, "☆");
+  assert.equal(elements.get("favoriteToggle").textContent, "☆ 收藏");
 });
 
 test("removing the last use of a tag resets a stale tag filter instead of stranding it", async () => {
