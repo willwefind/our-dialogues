@@ -70,7 +70,7 @@ async function loadAppRuntime(savedSortMode="asc", options={}) {
     "fontSmaller", "fontLarger", "lineHeight", "contentWidth", "fontFamily", "printPreset",
     "readingMode", "pageLength", "pageNavigation", "previousPage", "nextPage",
     "pageIndicator", "pageJump", "pageCount", "toTop", "toEnd",
-    "readerToolbar", "readerMoreToggle", "readerMoreMenu", "voiceStatusLine",
+    "readerToolbar", "readerMoreToggle", "readerMoreMenu", "voiceStatusLine", "readingProgressLabel",
     "bookmarkAdd", "bookmarksList", "bookmarksCount",
     "annotationsList", "annotationsCount", "highlightButton",
     "annotationEditor", "annotationColors", "annotationNote",

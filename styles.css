@@ -241,6 +241,7 @@ body:not(.show-thinking) .message.reasoning-only{display:none}
 .page-navigation button:disabled{opacity:.4;cursor:default}
 .page-navigation label{white-space:nowrap}
 .page-navigation input{width:4em;padding:3px;border:1px solid var(--line);border-radius:6px;background:transparent;color:var(--ink);text-align:center}
+.reading-progress-label{display:none}
 /* ── Responsive tiers ──
    <=1359: the sidebar overlays the reading stage as a 312px drawer — beside
    it, the 936px paper plus its 96px stage margins no longer fit.
@@ -265,17 +266,25 @@ body:not(.show-thinking) .message.reasoning-only{display:none}
   .current-title{min-width:0;font-size:13px}
   .ghost{padding:7px 9px}
   .icon-button{width:44px;height:44px}
-  .reader-prefs-panel{width:min(92vw,270px);right:10px;top:54px;max-height:calc(100vh - 70px);overflow-y:auto}
-  .reader{width:100%;margin:0;border:0;border-radius:0;box-shadow:none;padding:32px 22px 128px}
+  .reader{width:100%;margin:0;border:0;border-radius:0;box-shadow:none;padding:32px 22px calc(128px + env(safe-area-inset-bottom))}
   .message[data-role="user"]::before{left:-13px}
   .welcome{padding:18px}.welcome-card{padding:26px 20px}.welcome-card h2{font-size:20px}
   .conv{padding:8px 10px 8px 40px}
   .bookmark,.search-hit{padding:10px 9px}
-  .page-navigation button{padding:12px 8px}
   .attachment-card{grid-template-columns:auto minmax(0,1fr)}
   .attachment-action{grid-column:2}
   .attachment-caption{align-items:flex-start;flex-direction:column;gap:2px}
   .attachment-caption small{text-align:left;white-space:normal}
+
+  /* Bottom controls: previous 26% | progress 48% | next 26%, 48px + safe area */
+  .page-navigation{position:fixed;left:0;right:0;bottom:0;z-index:15;margin:0;padding:0 0 env(safe-area-inset-bottom);background:var(--panel);border-top:1px solid var(--line);gap:0;transition:transform var(--motion-toolbar) var(--motion-ease)}
+  .page-navigation::before{display:none}
+  .page-navigation button{flex:0 0 26%;min-height:48px;border:0;border-radius:0;background:transparent;padding:0;font-size:12px}
+  .page-navigation label{flex:1;display:flex;align-items:center;justify-content:center;min-height:48px;margin:0;font-size:12px}
+  .reading-progress-label{flex:1;display:flex;align-items:center;justify-content:center;min-height:48px;font-size:12px;color:var(--muted)}
+  .reading-progress-label[hidden]{display:none}
+  body.bottombar-hidden .page-navigation{transform:translateY(110%);pointer-events:none}
+
 }
 
 /* ── Bookmarks ── */
@@ -430,6 +439,15 @@ mark.annotation.annotation-flash{animation:bookmark-flash 1.4s ease 2}
    file falls back to the system stack without breaking anything — the same
    contract the standalone Mufy reader proved. kinghwa-oldsong ships as a
    documented local-only font (too heavy for the repo); see fonts/README.md. */
+/* ── Phone bottom sheets ──
+   Declared after the base panel styles so the sheet placement wins the
+   cascade: secondary tools (Aa, tags, export, more) and the annotation
+   editor become bottom sheets capped at 76dvh with a 16px top radius. */
+@media (max-width:760px){
+  .reader-prefs-panel{position:fixed;left:0;right:0;bottom:0;top:auto;width:100%;max-width:none;box-sizing:border-box;max-height:76dvh;overflow-y:auto;border-radius:16px 16px 0 0;border-bottom:0;box-shadow:var(--shadow-sheet);padding:20px 22px calc(20px + env(safe-area-inset-bottom))}
+  .annotation-editor{position:fixed;left:0;right:0;bottom:0;top:auto;width:100%;box-sizing:border-box;max-height:76dvh;overflow-y:auto;border-radius:16px 16px 0 0;box-shadow:var(--shadow-sheet);padding-bottom:calc(14px + env(safe-area-inset-bottom))}
+}
+
 /* ── Composite print-preset families ──
    Each preset family is two unicode-ranged faces sharing one name: a Latin
    face for U+0000-024F and a CJK face covering Han, full-width punctuation,

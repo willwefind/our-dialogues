@@ -1718,6 +1718,8 @@ window.OD = window.OD || {};
     $("previousPage").textContent = state.pageIndex > 0 ? "← 上一页" : "← 上一段";
     $("nextPage").textContent = state.pageIndex < state.pages.length - 1 ? "下一页 →" : "下一段 →";
     $("pageIndicator").hidden = !pageMode;
+    const progressLabel = $("readingProgressLabel");
+    if (progressLabel) progressLabel.hidden = pageMode;
     $("pageJump").value = String(state.pageIndex + 1);
     $("pageJump").max = String(state.pages.length);
     $("pageCount").textContent = String(state.pages.length);
@@ -2426,28 +2428,50 @@ window.OD = window.OD || {};
     toolbarHide.hidden = hidden;
     document.body.classList.toggle("toolbar-hidden", hidden);
   }
+  function setBottomBarHidden(hidden) {
+    document.body.classList.toggle("bottombar-hidden", !!hidden);
+  }
+  function updateReadingProgressLabel(main, top) {
+    const label = $("readingProgressLabel");
+    if (!label || label.hidden || !state.current) return;
+    const room = Math.max(1, Number(main.scrollHeight || 0) - Number(main.clientHeight || 0));
+    label.textContent = `${Math.max(0, Math.min(100, Math.round((top / room) * 100)))}%`;
+  }
   function trackToolbarOnScroll() {
-    const top = Number($("main").scrollTop || 0);
+    const main = $("main");
+    const top = Number(main.scrollTop || 0);
     const delta = top - toolbarHide.lastTop;
     toolbarHide.lastTop = top;
+    updateReadingProgressLabel(main, top);
+    // Phone thresholds per D3 (24 down / 16 up); PC keeps 32 / 12. Downward
+    // scrolling hides both bars on phones; upward restores only the top bar —
+    // the bottom controls come back on a deliberate tap or near the top.
+    const phone = isPhoneScreen();
+    const hideThreshold = phone ? 24 : 32;
+    const revealThreshold = phone ? 16 : 12;
     if (toolbarAutoHideFrozen()) {
       setToolbarHidden(false);
+      setBottomBarHidden(false);
       return;
     }
     if (top <= 16) {
       toolbarHide.downAccum = 0;
       toolbarHide.upAccum = 0;
       setToolbarHidden(false);
+      setBottomBarHidden(false);
       return;
     }
     if (delta > 0) {
       toolbarHide.downAccum += delta;
       toolbarHide.upAccum = 0;
-      if (toolbarHide.downAccum >= 32) setToolbarHidden(true);
+      if (toolbarHide.downAccum >= hideThreshold) {
+        setToolbarHidden(true);
+        if (phone) setBottomBarHidden(true);
+      }
     } else if (delta < 0) {
       toolbarHide.upAccum -= delta;
       toolbarHide.downAccum = 0;
-      if (toolbarHide.upAccum >= 12) setToolbarHidden(false);
+      if (toolbarHide.upAccum >= revealThreshold) setToolbarHidden(false);
     }
   }
   // Media events don't bubble, so listen in the capture phase; ended fires
@@ -2460,6 +2484,40 @@ window.OD = window.OD || {};
     toolbarHide.audioPlaying = Math.max(0, toolbarHide.audioPlaying - 1);
   }, true);
   $("readerToolbar")?.addEventListener?.("focusin", () => setToolbarHidden(false));
+  /* Phone: a deliberate tap on blank reading surface toggles both bars —
+     but never a tap on links, media, marks, editors, or while text is
+     selected. Those interactions keep their own meaning. */
+  $("main").addEventListener("click", event => {
+    if (!isPhoneScreen()) return;
+    if (event?.target?.closest?.("a, button, audio, video, input, textarea, select, mark, .attachment, .solvoice-player, .toolbar, .page-navigation, .annotation-editor")) return;
+    if (typeof getSelection === "function" && getSelection()?.isCollapsed === false) return;
+    const show = toolbarHide.hidden;
+    setToolbarHidden(!show);
+    setBottomBarHidden(!show);
+  });
+  /* Drawer swipe-to-close: a mostly-horizontal swipe of >=80px inside the
+     open drawer closes it (narrow tiers only). */
+  const drawerSwipe = { x: 0, y: 0, active: false };
+  $("sidebar").addEventListener("touchstart", event => {
+    const touch = event.touches?.[0];
+    if (!touch) return;
+    drawerSwipe.x = touch.clientX;
+    drawerSwipe.y = touch.clientY;
+    drawerSwipe.active = true;
+  }, { passive: true });
+  $("sidebar").addEventListener("touchend", event => {
+    if (!drawerSwipe.active) return;
+    drawerSwipe.active = false;
+    if (!isNarrowScreen()) return;
+    const touch = event.changedTouches?.[0];
+    if (!touch) return;
+    const dx = touch.clientX - drawerSwipe.x;
+    const dy = touch.clientY - drawerSwipe.y;
+    if (Math.abs(dx) >= 80 && Math.abs(dx) > Math.abs(dy)) {
+      $("sidebar").classList.add("closed");
+      syncSidebarBackdrop();
+    }
+  }, { passive: true });
 
   function closeMoreMenu() {
     const menu = $("readerMoreMenu");
@@ -2734,7 +2792,14 @@ window.OD = window.OD || {};
     $("annotationDelete").hidden = editorState.mode !== "edit";
     syncAnnotationSwatches(editorState.color);
     editor.hidden = false;
-    if (position) placeFloating(editor, position.x, position.y);
+    if (isPhoneScreen()) {
+      // On phones the editor is a bottom sheet; clear any floating inline
+      // position so the CSS placement wins.
+      editor.style?.removeProperty?.("left");
+      editor.style?.removeProperty?.("top");
+    } else if (position) {
+      placeFloating(editor, position.x, position.y);
+    }
     $("annotationNote").focus?.();
   }
 
