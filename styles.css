@@ -392,8 +392,52 @@ mark.annotation.annotation-flash{animation:bookmark-flash 1.4s ease 2}
 .tool-panels>div{display:flex;flex-direction:column;flex:1;min-height:0}
 .tool-panels .bookmarks-list{flex:1;max-height:none}
 
-/* ── Aa reading-preferences popover ── */
-.reader-prefs-panel{position:fixed;top:60px;right:18px;z-index:30;width:238px;padding:12px;border:1px solid var(--line);border-radius:12px;background:var(--panel);box-shadow:0 10px 38px rgba(0,0,0,.18);font:12px/1.4 ui-sans-serif,system-ui,sans-serif}
+/* ── Aa reading-preferences panel (D4) ── */
+.reader-prefs-panel{position:fixed;top:60px;right:18px;z-index:30;width:238px;padding:12px;border:1px solid var(--line);border-radius:12px;background:var(--panel);box-shadow:var(--shadow-popover);font:12px/1.4 var(--font-ui)}
+.aa-panel{top:68px;right:24px;width:376px;max-height:calc(100vh - 92px);overflow-y:auto;box-sizing:border-box;padding:20px;border-radius:var(--radius-lg)}
+.aa-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+.aa-title{font:600 15px/1.3 var(--font-ui);color:var(--ink)}
+#aaDone{border:0;background:transparent;color:var(--accent);font:12px/1 var(--font-ui);cursor:pointer;padding:6px 8px}
+#aaDone:hover{text-decoration:underline}
+.aa-section-label{display:flex;align-items:baseline;justify-content:space-between;font:600 11px/1.4 var(--font-ui);letter-spacing:.05em;color:var(--muted);margin:14px 0 8px}
+.aa-section-label small{font-weight:400;font-size:9px;letter-spacing:0}
+/* Theme cards keep their v1 weight: three equal previews, selection carries
+   a 2px accent ring + check, never color alone. Preview palettes quote the
+   approved token table so each card shows its own lighting condition. */
+.theme-cards{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.theme-card{position:relative;display:flex;flex-direction:column;align-items:center;gap:4px;min-height:96px;box-sizing:border-box;padding:12px 6px 10px;border:1px solid var(--line);border-radius:var(--radius-sm);background:var(--tc-bg);color:var(--tc-ink);cursor:pointer;font-family:var(--font-ui)}
+.theme-card-paper{--tc-bg:#F4EEDF;--tc-ink:#302B25}
+.theme-card-mist{--tc-bg:#E8EBDD;--tc-ink:#2D352D}
+.theme-card-night{--tc-bg:#1C1916;--tc-ink:#E7DED0}
+.theme-card .od-nav-icon{width:16px;height:16px}
+.theme-card-name{font:600 12px/1.2 var(--font-ui)}
+.theme-card-sample{font:12px/1.2 var(--reader-font-family);opacity:.8}
+.theme-card[aria-pressed="true"]{border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent)}
+.theme-card[aria-pressed="true"]::after{content:"✓";position:absolute;top:4px;right:6px;font-size:10px;color:var(--accent)}
+.od-icon-theme-paper{--od-nav-mask:url("assets/reader/icons/theme-paper.svg")}
+.od-icon-theme-eye{--od-nav-mask:url("assets/reader/icons/theme-eye-care.svg")}
+.od-icon-theme-night{--od-nav-mask:url("assets/reader/icons/theme-night.svg")}
+/* Print-preset cards recede behind their type samples: panel fill, hairline
+   lighter than the standard line, 4px radius, no heavy card treatment. */
+.preset-cards{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.preset-card{position:relative;display:flex;flex-direction:column;align-items:flex-start;gap:6px;min-height:72px;box-sizing:border-box;padding:10px 12px;border:1px solid var(--line);border-color:color-mix(in srgb, var(--line) 55%, transparent);border-radius:var(--radius-xs);background:var(--panel);color:var(--ink);cursor:pointer;text-align:left}
+.preset-card:hover{border-color:var(--line)}
+.preset-card[aria-pressed="true"]{border-color:var(--accent)}
+.preset-card[aria-pressed="true"]::after{content:"✓";position:absolute;top:4px;right:7px;font-size:10px;color:var(--accent)}
+.preset-card-name{font:500 10px/1.2 var(--font-ui);color:var(--muted)}
+.preset-card-sample{font-size:17px;line-height:1.3}
+.preset-sample-anthology{font-family:"OD Anthology Serif","Huiwen Mincho","Noto Serif SC",serif}
+.preset-sample-oldpress{font-family:"OD Anthology Serif","Huiwen Mincho","Noto Serif SC",serif;letter-spacing:.01em}
+.preset-sample-typescript{font-family:"OD Typescript","Special Elite","Zhuque Fangsong",serif}
+.preset-sample-correspondence{font-family:"OD Correspondence","Zhuque Fangsong","IM Fell English",serif}
+.aa-accordion{margin-top:10px;border-top:1px solid var(--line)}
+.aa-accordion>summary{display:flex;align-items:center;min-height:48px;cursor:pointer;list-style:none;font:500 13px/1.3 var(--font-ui);color:var(--ink)}
+.aa-accordion>summary::-webkit-details-marker{display:none}
+.aa-accordion>summary::after{content:"›";margin-left:auto;color:var(--muted);transform:rotate(90deg);transition:transform .15s}
+.aa-accordion[open]>summary::after{transform:rotate(-90deg)}
+.aa-accordion>.pref-row{margin-bottom:10px}
+.aa-reset{display:block;margin:16px 0 2px;border:1px solid var(--line);border-radius:var(--radius-sm);background:transparent;color:var(--muted);padding:9px 14px;cursor:pointer;font:12px/1 var(--font-ui)}
+.aa-reset:hover{border-color:var(--accent);color:var(--ink)}
 .pref-row{display:flex;align-items:center;gap:7px;margin-bottom:9px}
 .pref-row:last-child{margin-bottom:0}
 .pref-label{flex:none;width:58px;color:var(--muted);font-size:11px}

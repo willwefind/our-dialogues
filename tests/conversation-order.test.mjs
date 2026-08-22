@@ -83,6 +83,7 @@ async function loadAppRuntime(savedSortMode="asc", options={}) {
     "filterMenu", "filterMenuToggle", "sourceAddToggle", "sourceAddMenu",
     "sourceManageToggle", "sourceManagePanel", "sourceManageList", "sourceManageClose",
     "libraryHome", "continueCard", "recentAdditions", "librarySummary",
+    "aaDone", "themeCards", "presetCards", "resetPrefs",
     "readerPrefsToggle", "readerPrefsPanel", "sidebarClose", "sidebarBackdrop", "mobileHint",
     "favoriteToggle", "tagToggle", "tagEditor", "tagChips", "tagInput", "tagSuggestions",
     "favoritesFilter", "tagFilter",

@@ -244,6 +244,7 @@ window.OD = window.OD || {};
     $("pageLength").value = state.readerPrefs.pageLength;
     $("pageLength").disabled = state.readerPrefs.readingMode !== "page";
     document.body.classList.toggle("page-mode", state.readerPrefs.readingMode === "page");
+    renderAaCards();
   }
 
   /* Style-only preference changes (size, leading, width, family, preset) do
@@ -252,6 +253,17 @@ window.OD = window.OD || {};
   function restoreStyleAnchor(position) {
     if (!state.current || !position?.messageId) return;
     restoreReadingPosition({ messageId: position.messageId, scrollTop: position.scrollTop });
+  }
+
+  /* Aa panel cards mirror the normalized preferences; selection never relies
+     on color alone (aria-pressed carries the state). */
+  function renderAaCards() {
+    for (const card of document.querySelectorAll?.("[data-theme-card]") || []) {
+      card.setAttribute?.("aria-pressed", String(card.dataset?.themeCard === state.readerPrefs.theme));
+    }
+    for (const card of document.querySelectorAll?.("[data-preset-card]") || []) {
+      card.setAttribute?.("aria-pressed", String(card.dataset?.presetCard === (state.readerPrefs.printPreset || "")));
+    }
   }
 
   /* Every save also settles the per-conversation account: message anchor
@@ -2369,6 +2381,37 @@ window.OD = window.OD || {};
   $("lineHeight").addEventListener("change", event => updateReaderPreference("lineHeight", event.target.value, { rerender: false }));
   $("contentWidth").addEventListener("change", event => updateReaderPreference("contentWidth", event.target.value, { rerender: false }));
   $("printPreset")?.addEventListener?.("change", event => setPrintPreset(event.target.value || null));
+  /* Aa cards (real-browser layer over the hidden selects) */
+  [...(document.querySelectorAll?.("[data-theme-card]") || [])].forEach(card => {
+    card.addEventListener("click", () => {
+      state.readerPrefs = OD.readerParity.normalizePreferences({ ...state.readerPrefs, theme: card.dataset.themeCard });
+      applyReaderPreferences();
+      localStorage.setItem("our-dialogues.theme", state.readerPrefs.theme);
+      void saveReaderState();
+    });
+  });
+  [...(document.querySelectorAll?.("[data-preset-card]") || [])].forEach(card => {
+    card.addEventListener("click", () => {
+      const key = card.dataset.presetCard;
+      setPrintPreset(state.readerPrefs.printPreset === key ? null : key);
+    });
+  });
+  $("aaDone")?.addEventListener?.("click", () => {
+    const panel = $("readerPrefsPanel");
+    if (panel) panel.hidden = true;
+  });
+  $("resetPrefs")?.addEventListener?.("click", () => {
+    const position = readerSettings().readingPosition;
+    state.readerPrefs = OD.readerParity.normalizePreferences({});
+    $("hideUser").checked = false;
+    $("showThinking").checked = false;
+    document.body.classList.toggle("hide-user", false);
+    document.body.classList.toggle("show-thinking", false);
+    applyReaderPreferences();
+    localStorage.setItem("our-dialogues.theme", state.readerPrefs.theme);
+    if (state.current) openConversation(state.current.id, { restorePosition: position });
+    void saveReaderState();
+  });
   /* A manual choice under 字体 overrides and clears the print preset. */
   $("fontFamily").addEventListener("change", event => {
     const position = readerSettings().readingPosition;

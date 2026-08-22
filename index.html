@@ -178,73 +178,126 @@
       <div id="tagSuggestions" class="tag-suggestions"></div>
     </div>
 
-    <div id="readerPrefsPanel" class="reader-prefs-panel" hidden>
-      <div class="pref-row"><span class="pref-label">字号</span>
-        <button id="fontSmaller" class="ghost" type="button" title="减小字号">A−</button>
-        <button id="fontLarger" class="ghost" type="button" title="增大字号">A+</button>
+    <div id="readerPrefsPanel" class="reader-prefs-panel aa-panel" hidden>
+      <div class="aa-head">
+        <span class="aa-title">阅读设置</span>
+        <button id="aaDone" type="button" title="关闭；设置在选择时已即时生效">完成</button>
       </div>
-      <div class="pref-row"><span class="pref-label">行距</span>
-        <select id="lineHeight" aria-label="行距">
-          <option value="1.7">紧</option>
-          <option value="1.95" selected>中</option>
-          <option value="2.2">松</option>
-        </select>
+
+      <div class="aa-section-label">主题</div>
+      <div id="themeCards" class="theme-cards" role="group" aria-label="主题">
+        <button type="button" class="theme-card theme-card-paper" data-theme-card="paper" aria-pressed="false">
+          <span class="od-nav-icon od-icon-theme-paper" aria-hidden="true"></span>
+          <span class="theme-card-name">纸页</span>
+          <span class="theme-card-sample">纸上重逢</span>
+        </button>
+        <button type="button" class="theme-card theme-card-mist" data-theme-card="mist" aria-pressed="false">
+          <span class="od-nav-icon od-icon-theme-eye" aria-hidden="true"></span>
+          <span class="theme-card-name">护眼</span>
+          <span class="theme-card-sample">纸上重逢</span>
+        </button>
+        <button type="button" class="theme-card theme-card-night" data-theme-card="night" aria-pressed="false">
+          <span class="od-nav-icon od-icon-theme-night" aria-hidden="true"></span>
+          <span class="theme-card-name">夜墨</span>
+          <span class="theme-card-sample">纸上重逢</span>
+        </button>
       </div>
-      <div class="pref-row"><span class="pref-label">正文宽度</span>
-        <select id="contentWidth" aria-label="正文宽度">
-          <option value="640">窄</option>
-          <option value="800" selected>中</option>
-          <option value="960">宽</option>
-        </select>
+
+      <div class="aa-section-label">印刷风格<small>再点一次可退出预设</small></div>
+      <div id="presetCards" class="preset-cards" role="group" aria-label="印刷风格">
+        <button type="button" class="preset-card" data-preset-card="anthology" aria-pressed="false">
+          <span class="preset-card-name">文集</span>
+          <span class="preset-card-sample preset-sample-anthology">一页旧文</span>
+        </button>
+        <button type="button" class="preset-card" data-preset-card="old-press" aria-pressed="false">
+          <span class="preset-card-name">旧刊</span>
+          <span class="preset-card-sample preset-sample-oldpress">第七卷</span>
+        </button>
+        <button type="button" class="preset-card" data-preset-card="typescript" aria-pressed="false">
+          <span class="preset-card-name">打字稿</span>
+          <span class="preset-card-sample preset-sample-typescript">RECORD 18</span>
+        </button>
+        <button type="button" class="preset-card" data-preset-card="correspondence" aria-pressed="false">
+          <span class="preset-card-name">书信</span>
+          <span class="preset-card-sample preset-sample-correspondence">亲爱的你</span>
+        </button>
       </div>
-      <div class="pref-row"><span class="pref-label">印刷风格</span>
-        <select id="printPreset" aria-label="印刷风格" title="一键套用中西文配对的印刷预设；在下方「字体」里手动选字体会退出预设">
-          <option value="" selected>不使用</option>
-          <option value="anthology">文集</option>
-          <option value="old-press">旧刊</option>
-          <option value="typescript">打字稿</option>
-          <option value="correspondence">书信</option>
-        </select>
-      </div>
-      <div class="pref-row"><span class="pref-label">字体</span>
-        <select id="fontFamily" aria-label="正文字体" title="内置字体选中后才开始加载；字体文件缺失时自动退回系统字体">
-          <optgroup label="内置字体">
-            <option value="huiwen">汇文明朝体</option>
-            <option value="zhuque">朱雀仿宋</option>
-            <option value="typewriter">打字机 · 明朝</option>
-            <option value="fell">古籍英文 · 明朝</option>
-            <option value="kinghwa">京華老宋（需本地字体文件）</option>
-          </optgroup>
-          <optgroup label="系统字体">
-            <option value="serif" selected>默认衬线</option>
-            <option value="song">宋体</option>
-            <option value="kai">楷体</option>
-            <option value="fangsong">仿宋</option>
-            <option value="sans">黑体</option>
-            <option value="dengxian">等线</option>
-          </optgroup>
-        </select>
-      </div>
-      <div class="pref-row"><span class="pref-label">翻页方式</span>
-        <select id="readingMode" aria-label="阅读模式">
-          <option value="scroll" selected>滚动</option>
-          <option value="page">分页</option>
-        </select>
-        <select id="pageLength" aria-label="分页长度">
-          <option value="short">页短</option>
-          <option value="mid" selected>页中</option>
-          <option value="long">页长</option>
-        </select>
-      </div>
-      <div class="pref-row"><span class="pref-label">主题</span>
-        <select id="theme">
-          <option value="paper">纸</option>
-          <option value="night">夜</option>
-          <option value="mist">雾</option>
-        </select>
-      </div>
-      <div class="pref-row pref-row-toggle"><label><input id="hideUser" type="checkbox"> 隐藏我的发言</label></div>
-      <div class="pref-row pref-row-toggle"><label><input id="showThinking" type="checkbox"> 展开 Thinking / Trace</label></div>
+      <select id="printPreset" aria-label="印刷风格" hidden>
+        <option value="" selected>不使用</option>
+        <option value="anthology">文集</option>
+        <option value="old-press">旧刊</option>
+        <option value="typescript">打字稿</option>
+        <option value="correspondence">书信</option>
+      </select>
+      <select id="theme" hidden aria-label="主题">
+        <option value="paper">纸页</option>
+        <option value="mist">护眼</option>
+        <option value="night">夜墨</option>
+      </select>
+
+      <details class="aa-accordion">
+        <summary>排版</summary>
+        <div class="pref-row"><span class="pref-label">字号</span>
+          <button id="fontSmaller" class="ghost" type="button" title="减小字号">A−</button>
+          <button id="fontLarger" class="ghost" type="button" title="增大字号">A+</button>
+        </div>
+        <div class="pref-row"><span class="pref-label">行距</span>
+          <select id="lineHeight" aria-label="行距">
+            <option value="1.7">紧</option>
+            <option value="1.95" selected>中</option>
+            <option value="2.2">松</option>
+          </select>
+        </div>
+        <div class="pref-row"><span class="pref-label">正文宽度</span>
+          <select id="contentWidth" aria-label="正文宽度">
+            <option value="640">窄</option>
+            <option value="800" selected>中</option>
+            <option value="960">宽</option>
+          </select>
+        </div>
+        <div class="pref-row"><span class="pref-label">翻页方式</span>
+          <select id="readingMode" aria-label="阅读模式">
+            <option value="scroll" selected>滚动</option>
+            <option value="page">分页</option>
+          </select>
+          <select id="pageLength" aria-label="分页长度">
+            <option value="short">页短</option>
+            <option value="mid" selected>页中</option>
+            <option value="long">页长</option>
+          </select>
+        </div>
+      </details>
+
+      <details class="aa-accordion">
+        <summary>更多字体</summary>
+        <div class="pref-row"><span class="pref-label">字体</span>
+          <select id="fontFamily" aria-label="正文字体" title="精细覆盖；手动选字体会退出上方的印刷预设，字体文件缺失时自动退回系统字体">
+            <optgroup label="内置字体">
+              <option value="huiwen">汇文明朝体</option>
+              <option value="zhuque">朱雀仿宋</option>
+              <option value="typewriter">打字机 · 明朝</option>
+              <option value="fell">古籍英文 · 明朝</option>
+              <option value="kinghwa">京華老宋（需本地字体文件）</option>
+            </optgroup>
+            <optgroup label="系统字体">
+              <option value="serif" selected>默认衬线</option>
+              <option value="song">宋体</option>
+              <option value="kai">楷体</option>
+              <option value="fangsong">仿宋</option>
+              <option value="sans">黑体</option>
+              <option value="dengxian">等线</option>
+            </optgroup>
+          </select>
+        </div>
+      </details>
+
+      <details class="aa-accordion">
+        <summary>显示</summary>
+        <div class="pref-row pref-row-toggle"><label><input id="hideUser" type="checkbox"> 隐藏我的发言</label></div>
+        <div class="pref-row pref-row-toggle"><label><input id="showThinking" type="checkbox"> 展开 Thinking / Trace</label></div>
+      </details>
+
+      <button id="resetPrefs" type="button" class="aa-reset">恢复默认</button>
     </div>
 
     <section id="libraryHome" class="library-home hidden">
