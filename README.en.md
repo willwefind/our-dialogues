@@ -39,7 +39,7 @@ A local-first reader for AI conversation archives.
 
 ## Status
 
-Early v0.1 scaffold.
+The core Reader and the reading-room redesign are complete and fully usable. Ongoing work now focuses on visual polish, small features, and additional source adapters rather than major architectural rewrites.
 
 Currently included:
 
