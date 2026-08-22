@@ -108,3 +108,29 @@ test("forMessage filters by conversation and message identity", async () => {
   assert.deepEqual([...annotations.forMessage(list, "c1", "m1").map(item => item.selectedText)], ["甲"]);
   assert.deepEqual([...annotations.forMessage(list, "c2", "m1").map(item => item.selectedText)], ["丙"]);
 });
+
+test("production highlighter CSS maps stored colors to the approved assets without stretching mother strokes", async () => {
+  const css = await readFile(path.join(repositoryRoot, "styles.css"), "utf8");
+  // Display aliases preserve stored values: salmon→pink, sage→green, lilac→purple.
+  const expected = {
+    "hl-yellow": "highlighter-yellow",
+    "hl-pink": "highlighter-salmon",
+    "hl-green": "highlighter-sage",
+    "hl-blue": "highlighter-blue",
+    "hl-purple": "highlighter-lilac"
+  };
+  for (const [storedClass, asset] of Object.entries(expected)) {
+    const rule = css.match(new RegExp(`mark\.annotation\.${storedClass}\{([^}]*)\}`))?.[1] || "";
+    assert.match(rule, new RegExp(`${asset}-left\.png`), `${storedClass} uses the ${asset} left cap`);
+    assert.match(rule, new RegExp(`${asset}-middle\.png`), `${storedClass} uses the ${asset} repeat middle`);
+    assert.match(rule, new RegExp(`${asset}-right\.png`), `${storedClass} uses the ${asset} right cap`);
+    assert.match(rule, new RegExp(`${asset}\.png`), `${storedClass} keeps the mother stroke for short marks`);
+  }
+  const base = css.match(/mark\.annotation\{([^}]*)\}/)?.[1] || "";
+  assert.match(base, /box-decoration-break:\s*clone/, "wrapped fragments get independent caps");
+  assert.match(base, /repeat-x/, "only the middle part repeats");
+  assert.doesNotMatch(base, /background-size:[^;]*100% 100%/, "the mother stroke is never stretched to 100% 100%");
+  const short = css.match(/mark\.annotation\.od-hl-short\{([^}]*)\}/)?.[1] || "";
+  assert.match(short, /var\(--hl-full\)/, "short marks compress the single full stroke");
+  assert.match(short, /no-repeat/, "the full stroke never repeats");
+});

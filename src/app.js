@@ -660,6 +660,16 @@ window.OD = window.OD || {};
     });
   }
 
+  /* 3–5 character marks compress the full mother stroke (the one approved
+     full-stroke scaling); everything longer composes the three-part assets.
+     A DOM pass after render keeps annotations.js' anchoring untouched. */
+  function markShortHighlights() {
+    for (const mark of $("messages").querySelectorAll?.("mark.annotation") || []) {
+      const characters = Array.from(String(mark.textContent || "").trim()).length;
+      mark.classList?.toggle?.("od-hl-short", characters > 0 && characters <= 5);
+    }
+  }
+
   /* Re-render the current page in place — saving or removing a highlight must
      not scroll the reader back to the top the way a full reopen would. */
   function refreshCurrentMessages() {
@@ -672,6 +682,7 @@ window.OD = window.OD || {};
       .join("");
     prepareLazyAttachments(renderedAttachments);
     prepareLazySolVoice(renderedSolVoice);
+    markShortHighlights();
     $("main").scrollTop = scrollTop;
   }
 
@@ -1806,6 +1817,7 @@ window.OD = window.OD || {};
     restoreReadingPosition(restorePosition);
     prepareLazyAttachments(renderedAttachments);
     prepareLazySolVoice(renderedSolVoice);
+    markShortHighlights();
     renderList();
     renderPageNavigation();
     closeSidebarOnNarrow();

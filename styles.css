@@ -324,8 +324,32 @@ body:not(.show-thinking) .message.reasoning-only{display:none}
 }
 .hl-yellow{--hl:var(--hl-yellow)}.hl-green{--hl:var(--hl-green)}.hl-pink{--hl:var(--hl-pink)}
 .hl-blue{--hl:var(--hl-blue)}.hl-purple{--hl:var(--hl-purple)}
-mark.annotation{background:var(--hl);color:inherit;border-bottom:1px dashed var(--accent);border-radius:2px;padding:0 1px;cursor:pointer}
-mark.annotation.noted{border-bottom-style:solid}
+/* ── Production highlighter (approved contract §12) ──
+   Stored color values stay untouched; the display maps salmon→pink,
+   sage→green, lilac→purple. Normal and long selections compose
+   96×90 left cap + 192×90 repeat-x middle + 96×90 right cap; every wrapped
+   line fragment gets independent natural caps via box-decoration-break.
+   The full 800×90 mother stroke is never stretched or repeated here. */
+mark.annotation{
+  background-color:transparent;color:inherit;cursor:pointer;
+  padding-inline:.20em;
+  background-image:var(--hl-cap-left),var(--hl-cap-right),var(--hl-mid);
+  background-repeat:no-repeat,no-repeat,repeat-x;
+  background-position:left 54%,right 54%,left 54%;
+  background-size:auto 1.48em,auto 1.48em,auto 1.48em;
+  box-decoration-break:clone;
+  -webkit-box-decoration-break:clone;
+}
+mark.annotation.hl-yellow{--hl-cap-left:url("assets/reader/highlighters/highlighter-yellow-left.png");--hl-mid:url("assets/reader/highlighters/highlighter-yellow-middle.png");--hl-cap-right:url("assets/reader/highlighters/highlighter-yellow-right.png");--hl-full:url("assets/reader/highlighters/highlighter-yellow.png")}
+mark.annotation.hl-pink{--hl-cap-left:url("assets/reader/highlighters/highlighter-salmon-left.png");--hl-mid:url("assets/reader/highlighters/highlighter-salmon-middle.png");--hl-cap-right:url("assets/reader/highlighters/highlighter-salmon-right.png");--hl-full:url("assets/reader/highlighters/highlighter-salmon.png")}
+mark.annotation.hl-green{--hl-cap-left:url("assets/reader/highlighters/highlighter-sage-left.png");--hl-mid:url("assets/reader/highlighters/highlighter-sage-middle.png");--hl-cap-right:url("assets/reader/highlighters/highlighter-sage-right.png");--hl-full:url("assets/reader/highlighters/highlighter-sage.png")}
+mark.annotation.hl-blue{--hl-cap-left:url("assets/reader/highlighters/highlighter-blue-left.png");--hl-mid:url("assets/reader/highlighters/highlighter-blue-middle.png");--hl-cap-right:url("assets/reader/highlighters/highlighter-blue-right.png");--hl-full:url("assets/reader/highlighters/highlighter-blue.png")}
+mark.annotation.hl-purple{--hl-cap-left:url("assets/reader/highlighters/highlighter-lilac-left.png");--hl-mid:url("assets/reader/highlighters/highlighter-lilac-middle.png");--hl-cap-right:url("assets/reader/highlighters/highlighter-lilac-right.png");--hl-full:url("assets/reader/highlighters/highlighter-lilac.png")}
+/* 3–5 character marks: the single approved compression of one full mother
+   stroke to the selection width. */
+mark.annotation.od-hl-short{background-image:var(--hl-full);background-repeat:no-repeat;background-position:center 54%;background-size:100% 1.48em}
+/* A saved note announces itself with a thin accent underline over the stroke. */
+mark.annotation.noted{border-bottom:1px solid var(--accent)}
 mark.annotation.annotation-flash{animation:bookmark-flash 1.4s ease 2}
 .annotation-dot{flex:none;width:10px;height:10px;border-radius:50%;background:var(--hl);border:1px solid var(--line);align-self:center}
 .annotation-item{padding:8px 9px;border-radius:8px;cursor:pointer;border:1px solid transparent;margin-bottom:3px}
