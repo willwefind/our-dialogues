@@ -1,10 +1,72 @@
+/* ── Semantic theme tokens (approved design: quiet private reading room) ──
+   Persisted theme keys stay exactly "paper" / "mist" / "night"; Reading Green
+   is only the visible name and palette for existing `mist` data. Components
+   should reach for the --od-* semantics; the short aliases below keep every
+   pre-redesign selector rendering. */
 :root{
-  --bg:#e9e7e2; --panel:#f4f2ed; --paper:#f9f8f4; --ink:#171717;
-  --muted:#716f69; --line:#d3d0c8; --accent:#9c5b18; --user:#ece9e2; --thinking:#eee5d8; --cw:800px;
+  --od-outer-bg:#D8D0C2; --od-panel-bg:#E8E0D1; --od-paper-bg:#F4EEDF;
+  --od-ink:#302B25; --od-muted:#6F665B; --od-line:#C9BDAA;
+  --od-accent:#83563E; --od-user-marker:#A2503F; --od-thinking:#E8DECC;
+  --od-focus:#6E402D;
+  --od-shadow-paper:0 18px 48px rgba(52,42,31,.14), 0 2px 8px rgba(52,42,31,.08);
+  --od-shadow-float:0 12px 36px rgba(52,42,31,.20);
+  --od-paper-tile:url("assets/reader/textures/paper-day-texture-tile.webp");
+  --od-paper-large:url("assets/reader/textures/paper-day-texture.webp");
+  --od-ink-grain:url("assets/reader/textures/ink-grain-overlay.png");
+  --od-grain-opacity:.022; --od-grain-blend:multiply;
+
+  /* Compatibility aliases: old selectors keep working on the new palette. */
+  --bg:var(--od-outer-bg); --panel:var(--od-panel-bg); --paper:var(--od-paper-bg);
+  --ink:var(--od-ink); --muted:var(--od-muted); --line:var(--od-line);
+  --accent:var(--od-accent); --user:var(--od-thinking); --thinking:var(--od-thinking);
+  --cw:800px;
   --reader-font-size:18px; --reader-line-height:1.95; --reader-font-family:ui-serif,"Noto Serif SC","Source Han Serif SC","Songti SC",serif;
+
+  /* UI / code faces are a separate system from editorial reading text. */
+  --font-ui:Inter, ui-sans-serif, system-ui, "PingFang SC", "Microsoft YaHei", sans-serif;
+  --font-code:ui-monospace, "Cascadia Mono", Consolas, monospace;
+
+  /* Spacing (8 px structural baseline; 4 px is micro-spacing only). */
+  --space-0:0; --space-0-5:4px; --space-1:8px; --space-1-5:12px; --space-2:16px;
+  --space-2-5:20px; --space-3:24px; --space-4:32px; --space-5:40px; --space-6:48px;
+  --space-8:64px; --space-9:72px; --space-10:80px; --space-12:96px;
+
+  /* Radius: the reading paper stays 2 px; rows and paragraphs are not cards. */
+  --radius-none:0; --radius-xs:4px; --radius-sm:8px; --radius-md:12px;
+  --radius-lg:16px; --radius-paper:2px; --radius-pill:999px;
+
+  --line-hairline:1px; --line-active:2px;
+  --shadow-paper:var(--od-shadow-paper);
+  --shadow-popover:var(--od-shadow-float);
+  --shadow-drawer:16px 0 48px rgba(0,0,0,.24);
+  --shadow-sheet:0 -16px 44px rgba(0,0,0,.22);
+
+  /* Motion: hover 120 ms · toolbar 160 ms · drawer/sheet 220 ms. */
+  --motion-hover:120ms; --motion-toolbar:160ms; --motion-drawer:220ms;
+  --motion-ease:cubic-bezier(.2,.8,.2,1);
 }
-:root[data-theme="night"]{--bg:#11100f;--panel:#181614;--paper:#1d1a17;--ink:#eee8df;--muted:#a99f92;--line:#37322c;--accent:#d89a52;--user:#25211d;--thinking:#2a2118}
-:root[data-theme="mist"]{--bg:#dfe5e8;--panel:#e8edef;--paper:#f0f3f4;--ink:#293139;--muted:#66727b;--line:#c4cdd2;--accent:#3d6885;--user:#e4e9eb;--thinking:#dde7ec}
+:root[data-theme="night"]{
+  --od-outer-bg:#100E0C; --od-panel-bg:#171411; --od-paper-bg:#1C1916;
+  --od-ink:#E7DED0; --od-muted:#A79B8B; --od-line:#3D352D;
+  --od-accent:#C69258; --od-user-marker:#D18A72; --od-thinking:#28231D;
+  --od-focus:#E0A86B;
+  --od-shadow-paper:0 22px 56px rgba(0,0,0,.48), 0 2px 10px rgba(0,0,0,.30);
+  --od-shadow-float:0 16px 44px rgba(0,0,0,.58);
+  --od-paper-tile:url("assets/reader/textures/paper-night-texture-tile.webp");
+  --od-paper-large:url("assets/reader/textures/paper-night-texture.webp");
+  --od-grain-opacity:.024; --od-grain-blend:soft-light;
+}
+:root[data-theme="mist"]{
+  --od-outer-bg:#CAD1C3; --od-panel-bg:#DCE1D4; --od-paper-bg:#E8EBDD;
+  --od-ink:#2D352D; --od-muted:#5E685C; --od-line:#B8C1B1;
+  --od-accent:#596742; --od-user-marker:#92584B; --od-thinking:#D8DFCF;
+  --od-focus:#465534;
+  --od-shadow-paper:0 18px 48px rgba(35,49,36,.14), 0 2px 8px rgba(35,49,36,.07);
+  --od-shadow-float:0 12px 36px rgba(35,49,36,.20);
+  --od-paper-tile:url("assets/reader/textures/paper-eye-texture-tile.webp");
+  --od-paper-large:url("assets/reader/textures/paper-eye-texture.webp");
+  --od-grain-opacity:.018; --od-grain-blend:multiply;
+}
 *{box-sizing:border-box} html,body{margin:0;height:100%}
 body{display:flex;overflow:hidden;background:var(--bg);color:var(--ink);font-family:var(--reader-font-family)}
 button,input,select{font:inherit}
@@ -24,7 +86,11 @@ button,input,select{font:inherit}
 .conv-title{font-size:14px;line-height:1.35}.conv-meta{font-size:10.5px;color:var(--muted);margin-top:4px}
 #main{height:100%;flex:1;overflow:auto;position:relative}.toolbar{position:sticky;top:0;z-index:10;min-height:52px;display:flex;gap:13px;align-items:center;padding:9px 16px;border-bottom:1px solid var(--line);background:var(--panel);font:12px/1.3 ui-sans-serif,system-ui,sans-serif;color:var(--muted)}
 .current-title{flex:1;min-width:150px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--ink)}.ghost{border:1px solid var(--line);border-radius:7px;background:transparent;color:var(--ink);padding:5px 8px;cursor:pointer}.toolbar select{background:var(--paper);color:var(--ink);border:1px solid var(--line);border-radius:7px;padding:4px 6px}.reader-preferences{display:flex;align-items:center;gap:5px}.reader-preferences .ghost{padding:4px 6px}.toolbar{flex-wrap:wrap}
-.welcome{min-height:calc(100% - 52px);display:grid;place-items:center;padding:36px}.welcome-card{max-width:660px;padding:44px;background:var(--paper);border:1px solid var(--line);box-shadow:0 10px 40px rgba(0,0,0,.04)}
+.welcome{min-height:calc(100% - 52px);display:grid;place-items:center;padding:36px}.welcome-card{position:relative;max-width:660px;padding:44px;background:var(--paper) var(--od-paper-large) center/cover;border:1px solid var(--line);border-radius:var(--radius-paper);box-shadow:var(--shadow-paper)}
+/* Ink grain rides above bounded paper as its own quiet layer; its job is
+   subconscious print texture, never visible grime. */
+.welcome-card::after{content:"";position:absolute;inset:0;border-radius:inherit;background:var(--od-ink-grain);opacity:var(--od-grain-opacity);mix-blend-mode:var(--od-grain-blend);pointer-events:none}
+.welcome-card>*{position:relative}
 .welcome-card .mark{font-size:64px;line-height:.7;color:var(--accent)}.welcome-card h2{font-weight:500;line-height:1.5;font-size:25px}.welcome-card p{color:var(--muted);line-height:1.8}.small{font-size:12px}
 .reader{max-width:var(--cw);margin:0 auto;padding:58px 34px 140px}.hidden{display:none!important}.conversation-head{padding-bottom:22px;border-bottom:1px solid var(--line);margin-bottom:42px}.conversation-head h2{font-size:27px;margin:0 0 8px;font-weight:600}.reader-meta{font:12px/1.6 ui-sans-serif,system-ui,sans-serif;color:var(--muted)}
 .message{margin-bottom:34px}.message[data-role="user"] .message-body{background:var(--user);border-left:3px solid var(--line);padding:13px 17px}.message-who{font:600 10px/1.4 ui-sans-serif,system-ui,sans-serif;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);margin-bottom:8px}.message-body{font-size:var(--reader-font-size);line-height:var(--reader-line-height);white-space:pre-wrap;word-break:break-word}.message-time{font:10px/1.4 ui-sans-serif,system-ui,sans-serif;color:var(--muted);margin-top:7px}
@@ -122,6 +188,9 @@ mark.annotation.annotation-flash{animation:bookmark-flash 1.4s ease 2}
 .annotation-editor-actions button{flex:1;padding:6px;border-radius:8px;cursor:pointer;border:1px solid var(--line);background:var(--paper);color:var(--ink);font-size:12px}
 .annotation-editor-actions button:hover{border-color:var(--accent)}
 .annotation-editor-actions #annotationDelete{color:#b33224;flex:0 0 auto;padding:6px 12px}
+
+/* ── Keyboard focus ── */
+:focus-visible{outline:var(--line-active) solid var(--od-focus);outline-offset:2px}
 
 /* ── Scrollbars ──
    Windows overlay scrollbars stay invisible until you scroll, which reads as

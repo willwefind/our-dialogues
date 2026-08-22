@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none" role="img" aria-labelledby="title desc">
+  <title id="title">Section ornament</title>
+  <desc id="desc">Small open typographic fleuron for rare natural section breaks.</desc>
+  <g stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M32 31.5c-4.7-2.1-7.1-5.5-6.6-9.6 3.8.6 6.2 3.8 6.6 9.6Z"/>
+    <path d="M32 31.5c2.1-4.7 5.5-7.1 9.6-6.6-.6 3.8-3.8 6.2-9.6 6.6Z"/>
+    <path d="M32 32.5c4.7 2.1 7.1 5.5 6.6 9.6-3.8-.6-6.2-3.8-6.6-9.6Z"/>
+    <path d="M32 32.5c-2.1 4.7-5.5 7.1-9.6 6.6.6-3.8 3.8-6.2 9.6-6.6Z"/>
+    <path d="M15 32h9M40 32h9"/>
+  </g>
+  <circle cx="32" cy="32" r="1.45" fill="currentColor"/>
+</svg>

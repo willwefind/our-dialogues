@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 32" role="img" aria-labelledby="title desc">
+  <title id="title">Ornamental rule</title>
+  <desc id="desc">Fine rule with a small central diamond.</desc>
+  <g fill="currentColor">
+    <rect x="16" y="15.25" width="91" height="1.5" rx=".75"/>
+    <rect x="133" y="15.25" width="91" height="1.5" rx=".75"/>
+    <path d="m120 9 7 7-7 7-7-7 7-7Z"/>
+    <circle cx="120" cy="16" r="2.1" fill="none" stroke="currentColor" stroke-width="1.2"/>
+    <circle cx="108.5" cy="16" r="1.15"/><circle cx="131.5" cy="16" r="1.15"/>
+  </g>
+</svg>

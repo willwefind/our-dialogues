@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="title desc">
+  <title id="title">Leaf ornament</title>
+  <desc id="desc">A quiet paired leaf for welcome and empty states.</desc>
+  <g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M31.2 50.5c.7-10.4 1.1-21.5.2-32.6" stroke-width="1.8"/>
+    <path d="M31.5 38.8C24 38.4 18.3 34.6 17 27.3c6.9-.5 12.2 2.8 14.5 8.8Z" stroke-width="1.5"/>
+    <path d="M31.4 31.7c5.7-.5 10.8-3.8 12-9.8-5.6-.2-10.3 2.3-12.5 7.2Z" stroke-width="1.5"/>
+    <path d="M31.5 45.4c6.3-.3 11.2-3.1 13.2-8.6-6.2-.5-10.7 1.8-13.3 6.1Z" stroke-width="1.5"/>
+  </g>
+</svg>

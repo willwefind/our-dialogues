@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" role="img" aria-labelledby="title desc">
+  <title id="title">Eye care theme</title>
+  <desc id="desc">A clean botanical eye-care mark.</desc>
+  <g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M4 12c2-3.4 4.7-5.1 8-5.1s6 1.7 8 5.1c-2 3.4-4.7 5.1-8 5.1S6 15.4 4 12Z" stroke-width="1.35"/>
+    <path d="M12 9.1c-1.7 0-2.9 1.2-2.9 2.9s1.2 2.9 2.9 2.9 2.9-1.2 2.9-2.9-1.2-2.9-2.9-2.9Z" stroke-width="1.2"/>
+    <path d="M12 4.1c.1 1.1-.2 2-.9 2.8M12 4.1c.9.5 1.5 1.2 1.8 2.2" stroke-width="1.05"/>
+  </g>
+</svg>

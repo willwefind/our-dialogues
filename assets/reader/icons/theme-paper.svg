@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" role="img" aria-labelledby="title desc">
+  <title id="title">Paper theme</title>
+  <desc id="desc">A small sun mark in an old print-sign style.</desc>
+  <g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="12" cy="12" r="3.5" stroke-width="1.45"/>
+    <path d="M12 3.3v2.1M12 18.6v2.1M3.3 12h2.1M18.6 12h2.1M5.85 5.85l1.48 1.48M16.67 16.67l1.48 1.48M18.15 5.85l-1.48 1.48M7.33 16.67l-1.48 1.48" stroke-width="1.25"/>
+  </g>
+</svg>
