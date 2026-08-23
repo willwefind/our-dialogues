@@ -68,7 +68,7 @@ async function loadAppRuntime(savedSortMode="asc", options={}) {
     "sourceFilter", "clearSources", "hideUser", "showThinking", "theme", "sidebarToggle", "sidebar",
     "directoryPicker", "localLibraryStatus", "clearLocalLibrary", "acceptanceAudit", "runAcceptanceAudit",
     "fontSmaller", "fontLarger", "lineHeight", "contentWidth", "fontFamily", "printPreset",
-    "readingMode", "pageLength", "pageNavigation", "previousPage", "nextPage",
+    "readingMode", "pageLength", "uiLocale", "pageNavigation", "previousPage", "nextPage",
     "pageIndicator", "pageJump", "pageCount", "toTop", "toEnd",
     "readerToolbar", "readerMoreToggle", "readerMoreMenu", "voiceStatusLine", "readingProgressLabel",
     "bookmarkAdd", "bookmarksList", "bookmarksCount",
@@ -921,6 +921,46 @@ test("old persisted toolTab values restore into the right sidebar mode", async (
   assert.equal(elements.get("tracesPane").hidden, false, "a pre-redesign trace tab lands in 阅读痕迹");
   assert.equal(elements.get("annotationsPane").hidden, false);
   assert.equal(elements.get("libraryPane").hidden, true);
+});
+
+test("switching the interface language re-renders chrome, keeps the reading position, and persists", async () => {
+  const { runtime, elements, stored } = await loadAppRuntime("asc");
+  await runtime.OD.app.ready;
+  runtime.OD.app.loadArchive({
+    conversations: [
+      {
+        id: "conv-1", title: "第一篇", createdAt: "2026-01-01T08:00:00Z",
+        messages: [
+          { id: "m1", role: "user", content: "开场的问题" },
+          { id: "m2", role: "assistant", content: "认真的回答" }
+        ]
+      },
+      {
+        id: "conv-2", title: "第二篇", createdAt: "2026-02-01T08:00:00Z",
+        messages: [{ id: "m3", role: "user", content: "第二段开场" }]
+      }
+    ]
+  }, "测试来源");
+  const before = runtime.OD.app.getState();
+  assert.ok(before.current, "loadArchive opens a conversation");
+  assert.match(elements.get("archiveMeta").textContent, /段对话/);
+
+  elements.get("uiLocale").value = "en";
+  elements.get("uiLocale").dispatch("change");
+
+  const after = runtime.OD.app.getState();
+  assert.equal(after.current.id, before.current.id, "the open conversation survives the switch");
+  assert.equal(after.page, before.page, "the page survives the switch");
+  assert.equal(runtime.document.documentElement.lang, "en");
+  assert.match(elements.get("archiveMeta").textContent, /conversations/, "sidebar meta re-renders in English");
+  assert.match(elements.get("status").textContent, /Added:/, "the replayed archive status re-renders in English");
+  assert.equal(JSON.parse(stored.get("our-dialogues.reader-state.v1")).locale, "en", "the choice persists");
+
+  elements.get("uiLocale").value = "auto";
+  elements.get("uiLocale").dispatch("change");
+  assert.equal(runtime.document.documentElement.lang, "zh-CN", "auto resolves back through the zh browser");
+  assert.match(elements.get("archiveMeta").textContent, /段对话/);
+  assert.equal(JSON.parse(stored.get("our-dialogues.reader-state.v1")).locale, "auto");
 });
 
 test("a stored en locale boots the Reader with English runtime strings", async () => {

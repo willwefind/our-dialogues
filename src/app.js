@@ -46,6 +46,7 @@ window.OD = window.OD || {};
     searchScope: "current",
     searchSourceId: "all",
     toolTab: null,
+    locale: "auto",
     booted: false
   };
 
@@ -194,6 +195,7 @@ window.OD = window.OD || {};
       conversationSort: state.sortMode,
       hideUser: !!$("hideUser").checked,
       showThinking: !!$("showThinking").checked,
+      locale: state.locale,
       ...state.readerPrefs,
       theme: $("theme").value || state.readerPrefs.theme,
       recentConversationId: state.current?.id || null,
@@ -704,6 +706,39 @@ window.OD = window.OD || {};
       const characters = Array.from(String(mark.textContent || "").trim()).length;
       mark.classList?.toggle?.("od-hl-short", characters > 0 && characters <= 5);
     }
+  }
+
+  /* Re-render every t()-derived surface after the resolved locale changes,
+     preserving the reading anchor. Archive data (titles, speakers, message
+     text) is never touched — only chrome re-renders. */
+  function applyLocaleToChrome() {
+    const position = state.current ? readerSettings().readingPosition : null;
+    OD.i18n?.applyStatic?.(document);
+    renderAnnotationSwatches();
+    renderSourceControls();
+    if (state.current) {
+      openConversation(state.current.id, { restorePosition: position });
+    } else {
+      renderList();
+      if (libraryHomeVisible()) showLibraryHome();
+      else $("currentTitle").textContent = t("reader.noArchive");
+    }
+    syncOrganizeControls();
+    if ($("tagEditor")?.hidden === false) renderTagEditor();
+    performSearch();
+    state.statusText = archiveStatusText();
+    renderStatus();
+  }
+
+  function setUiLocale(value) {
+    if (!OD.i18n) return;
+    const normalized = OD.i18n.normalizeSetting(value);
+    state.locale = normalized;
+    const control = $("uiLocale");
+    if (control) control.value = normalized;
+    const before = OD.i18n.currentLocale();
+    if (OD.i18n.setLocale(normalized) !== before) applyLocaleToChrome();
+    void saveReaderState();
   }
 
   /* Re-render the current page in place — saving or removing a highlight must
@@ -2207,6 +2242,14 @@ window.OD = window.OD || {};
 
   function applyReaderSettings(settings) {
     if (!settings || typeof settings !== "object") return;
+    if (OD.i18n) {
+      const nextLocale = OD.i18n.normalizeSetting(settings.locale);
+      state.locale = nextLocale;
+      const control = $("uiLocale");
+      if (control) control.value = nextLocale;
+      const before = OD.i18n.currentLocale();
+      if (OD.i18n.setLocale(nextLocale) !== before) applyLocaleToChrome();
+    }
     state.sortMode = ["asc", "desc"].includes(settings.conversationSort) ? settings.conversationSort : state.sortMode;
     $("hideUser").checked = !!settings.hideUser;
     $("showThinking").checked = !!settings.showThinking;
@@ -2404,6 +2447,7 @@ window.OD = window.OD || {};
     localStorage.setItem("our-dialogues.theme", event.target.value);
     void saveReaderState();
   });
+  $("uiLocale")?.addEventListener?.("change", event => setUiLocale(event.target.value));
   function updateReaderPreference(key, value, { rerender = true } = {}) {
     const position = readerSettings().readingPosition;
     state.readerPrefs = OD.readerParity.normalizePreferences({ ...state.readerPrefs, [key]: value });
@@ -3111,9 +3155,12 @@ window.OD = window.OD || {};
      "auto"), and applying the static dictionary is visually a no-op for
      zh-CN because the markup's inline text already is the zh-CN copy. */
   if (OD.i18n) {
-    OD.i18n.setLocale(OD.i18n.normalizeSetting(readSettingsMirror()?.locale));
+    state.locale = OD.i18n.normalizeSetting(readSettingsMirror()?.locale);
+    OD.i18n.setLocale(state.locale);
     OD.i18n.applyStatic(document);
     $("currentTitle").textContent = OD.i18n.t("reader.noArchive");
+    const localeControl = $("uiLocale");
+    if (localeControl) localeControl.value = state.locale;
   }
 
   const savedTheme = localStorage.getItem("our-dialogues.theme");
