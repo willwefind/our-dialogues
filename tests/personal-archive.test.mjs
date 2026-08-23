@@ -19,6 +19,7 @@ async function loadRuntime() {
   for (const relativePath of [
     "src/core/schema.js",
     "src/core/export.js",
+    "src/core/message-search.js",
     "src/adapters/contract.js",
     "src/adapters/normalized.js",
     "src/adapters/personal-archive.js",
@@ -345,4 +346,47 @@ test("the source root carries the archive label and counts-only import stats", a
   });
   const flattened = JSON.stringify(archive.source.personalImport);
   assert.ok(!flattened.includes("纸上"), "diagnostics stay counts-only, no names or body text");
+});
+
+/* ── Large-archive smoke (synthetic only; timings logged for the report) ── */
+
+function syntheticScaleArchive(entryCount) {
+  const collections = [
+    { id: "scale-diary", name: "规模日记", type: "diary", entries: [] },
+    { id: "scale-weibo", name: "规模碎念", type: "microblog", entries: [] },
+    { id: "scale-frag", name: "规模碎片", type: "fragment", entries: [] }
+  ];
+  for (let i = 0; i < entryCount; i += 1) {
+    const collection = collections[i % collections.length];
+    const year = 2015 + (i % 10);
+    const month = String(1 + (i % 12)).padStart(2, "0");
+    const day = String(1 + (i % 28)).padStart(2, "0");
+    const dated = i % 7 !== 0;
+    collection.entries.push({
+      id: `${collection.id}-${String(i).padStart(5, "0")}`,
+      title: null,
+      createdAt: dated ? `${year}-${month}-${day}T08:00:00+08:00` : null,
+      text: `第 ${i} 篇合成正文。窗外有云，桌上有茶。${i === Math.floor(entryCount / 2) ? "唯一的针叶樟在这里。" : ""}`
+    });
+  }
+  return {
+    schema: "our-dialogues.personal-archive.v1",
+    archive: { id: "scale-archive", name: "规模档案", author: { id: "synth", name: "合成者" } },
+    collections
+  };
+}
+
+test("synthetic scale smoke: 1k and 5k entries convert, keep counts, and stay searchable", async () => {
+  const OD = await loadRuntime();
+  for (const size of [1000, 5000]) {
+    const started = process.hrtime.bigint();
+    const { archive } = await OD.registry.parseJSON(syntheticScaleArchive(size));
+    const convertedAt = process.hrtime.bigint();
+    assert.equal(archive.conversations.length, size);
+    assert.equal(plain(archive.source.personalImport).entries, size);
+    const outcome = OD.messageSearch.searchLibrary(archive.conversations, "针叶樟");
+    const searchedAt = process.hrtime.bigint();
+    assert.equal(outcome.hits.length, 1, "full-text search finds the one needle at scale");
+    console.log(`personal-archive scale ${size}: convert ${Math.round(Number(convertedAt - started) / 1e6)}ms, search ${Math.round(Number(searchedAt - convertedAt) / 1e6)}ms`);
+  }
 });

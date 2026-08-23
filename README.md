@@ -142,12 +142,15 @@ node --test --test-isolation=none tests/*.test.mjs
 | Claude 官方导出 | JSON 与 ZIP 导入按 2026 年真实导出验证；沿当前分支遍历并记录备选分支数、官方存储的 thinking、限长的工具痕迹、仅元数据的附件 |
 | 其他 Claude 插件 | 等待真实样例 |
 | 已规范化的 Our Dialogues 档案 | 已实现 |
+| 私人文字档案（日记、梦境、微博、随笔、信件、碎片） | 已实现：`our-dialogues.personal-archive.v1`；按集合 / 年份分组，整页文档展示，无聊天气泡 |
 
 能力契约、保真说明、诊断隐私边界与 Claude 样例状态见 [`docs/source-compatibility.md`](docs/source-compatibility.md)。
 
 > 💡 **表里没有你的格式？** 任何来源都能进来——见
 > [带着你家的机来搬家](docs/bring-your-own-archive.zh-CN.md)：
 > 一段现成的提示词交给你自己的 AI，转成规范化 JSON 一键导入。
+> 你自己写下的旧文字（日记、梦、微博、随笔）另有专门一篇：
+> [带着你的旧文字来](docs/bring-your-personal-archive.zh-CN.md)。
 
 ZIP 导入优先使用浏览器原生解压。JSON 永远可以直接导入。原有的 JSON 与单 ZIP 流程与文件夹导入并存。
 
