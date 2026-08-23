@@ -68,7 +68,7 @@ async function loadAppRuntime(savedSortMode="asc", options={}) {
     "sourceFilter", "clearSources", "hideUser", "showThinking", "theme", "sidebarToggle", "sidebar",
     "directoryPicker", "localLibraryStatus", "clearLocalLibrary", "acceptanceAudit", "runAcceptanceAudit",
     "fontSmaller", "fontLarger", "lineHeight", "contentWidth", "fontFamily", "printPreset",
-    "readingMode", "pageLength", "pageNavigation", "previousPage", "nextPage",
+    "readingMode", "pageLength", "uiLocale", "pageNavigation", "previousPage", "nextPage",
     "pageIndicator", "pageJump", "pageCount", "toTop", "toEnd",
     "readerToolbar", "readerMoreToggle", "readerMoreMenu", "voiceStatusLine", "readingProgressLabel",
     "bookmarkAdd", "bookmarksList", "bookmarksCount",
@@ -110,6 +110,10 @@ async function loadAppRuntime(savedSortMode="asc", options={}) {
     TextDecoder,
     setTimeout,
     clearTimeout,
+    // The harness mirrors Dawn's real environment: a zh-CN browser, so the
+    // "auto" locale resolves to zh-CN and existing Chinese-text assertions
+    // keep describing the default UI.
+    navigator: { language: "zh-CN", languages: ["zh-CN"] },
     localStorage: {
       getItem(key) { return stored.get(key) ?? null; },
       setItem(key, value) { stored.set(key, value); }
@@ -149,7 +153,10 @@ async function loadAppRuntime(savedSortMode="asc", options={}) {
     "src/core/organization.js",
     "src/core/export.js",
     "src/core/zip-writer.js",
-    "src/core/epub.js"
+    "src/core/epub.js",
+    "src/locales/zh-CN.js",
+    "src/locales/en.js",
+    "src/i18n.js"
   ];
   if (options.driver) runtimeFiles.push("src/core/persistent-library.js");
   for (const relativePath of runtimeFiles) {
@@ -916,6 +923,72 @@ test("old persisted toolTab values restore into the right sidebar mode", async (
   assert.equal(elements.get("libraryPane").hidden, true);
 });
 
+test("switching the interface language re-renders chrome, keeps the reading position, and persists", async () => {
+  const { runtime, elements, stored } = await loadAppRuntime("asc");
+  await runtime.OD.app.ready;
+  runtime.OD.app.loadArchive({
+    conversations: [
+      {
+        id: "conv-1", title: "第一篇", createdAt: "2026-01-01T08:00:00Z",
+        messages: [
+          { id: "m1", role: "user", content: "开场的问题" },
+          { id: "m2", role: "assistant", content: "认真的回答" }
+        ]
+      },
+      {
+        id: "conv-2", title: "第二篇", createdAt: "2026-02-01T08:00:00Z",
+        messages: [{ id: "m3", role: "user", content: "第二段开场" }]
+      }
+    ]
+  }, "测试来源");
+  const before = runtime.OD.app.getState();
+  assert.ok(before.current, "loadArchive opens a conversation");
+  assert.match(elements.get("archiveMeta").textContent, /段对话/);
+
+  elements.get("uiLocale").value = "en";
+  elements.get("uiLocale").dispatch("change");
+
+  const after = runtime.OD.app.getState();
+  assert.equal(after.current.id, before.current.id, "the open conversation survives the switch");
+  assert.equal(after.page, before.page, "the page survives the switch");
+  assert.equal(runtime.document.documentElement.lang, "en");
+  assert.match(elements.get("archiveMeta").textContent, /conversations/, "sidebar meta re-renders in English");
+  assert.match(elements.get("status").textContent, /Added:/, "the replayed archive status re-renders in English");
+  assert.equal(JSON.parse(stored.get("our-dialogues.reader-state.v1")).locale, "en", "the choice persists");
+
+  elements.get("uiLocale").value = "auto";
+  elements.get("uiLocale").dispatch("change");
+  assert.equal(runtime.document.documentElement.lang, "zh-CN", "auto resolves back through the zh browser");
+  assert.match(elements.get("archiveMeta").textContent, /段对话/);
+  assert.equal(JSON.parse(stored.get("our-dialogues.reader-state.v1")).locale, "auto");
+});
+
+test("a stored en locale boots the Reader with English runtime strings", async () => {
+  const stored = new Map([
+    ["our-dialogues.conversation-sort", "asc"],
+    ["our-dialogues.reader-state.v1", JSON.stringify({ locale: "en" })]
+  ]);
+  const { runtime, elements } = await loadAppRuntime("asc", { stored });
+  await runtime.OD.app.ready;
+  assert.equal(runtime.OD.i18n.currentLocale(), "en", "the persisted locale wins over the zh browser");
+  assert.equal(runtime.document.documentElement.lang, "en", "<html lang> follows the resolved locale");
+  assert.equal(elements.get("status").textContent, "Files are parsed in your browser only and never uploaded.");
+  assert.equal(elements.get("currentTitle").textContent, "No archive loaded yet");
+});
+
+test("legacy settings without a locale normalize to auto and keep the zh browser default", async () => {
+  const stored = new Map([
+    ["our-dialogues.conversation-sort", "asc"],
+    ["our-dialogues.reader-state.v1", JSON.stringify({ toolTab: null })]
+  ]);
+  const { runtime, elements } = await loadAppRuntime("asc", { stored });
+  await runtime.OD.app.ready;
+  assert.equal(runtime.OD.i18n.currentSetting(), "auto", "missing locale normalizes to auto");
+  assert.equal(runtime.OD.i18n.currentLocale(), "zh-CN", "auto resolves through the zh-CN fake navigator");
+  assert.equal(runtime.document.documentElement.lang, "zh-CN");
+  assert.equal(elements.get("status").textContent, "文件只在本机浏览器中解析，不会上传。");
+});
+
 test("library home renders continue-reading, recent additions, and summary without stealing the reader", async () => {
   const { runtime, elements } = await loadAppRuntime("asc");
   const conversation = (id, createdAt) => ({
@@ -1160,6 +1233,158 @@ test("removing the last use of a tag resets a stale tag filter instead of strand
   runtime.OD.app.setConversationTags("only", []);
   assert.equal(runtime.OD.app.getState().tagFilter, "", "the vanished tag no longer filters");
   assert.equal(runtime.OD.app.getState().filteredIds.length, 1, "the catalog is not silently empty");
+});
+
+test("personal documents enter document mode, chats keep their transcript chrome", async () => {
+  const { runtime, elements } = await loadAppRuntime("asc");
+  await runtime.OD.app.ready;
+  const personalArchive = {
+    schema: "our-dialogues.normalized.v1",
+    source: {
+      platform: "personal-archive",
+      exporter: "our-dialogues-personal-archive",
+      formatVersion: 1,
+      sourceLabel: "半夏的字纸箱",
+      personalImport: { collections: 2, entries: 2, datedEntries: 1, undatedEntries: 1, skippedCollections: 0, skippedEntries: 0, types: { diary: 1, fragment: 1 } }
+    },
+    conversations: [
+      {
+        id: "personal:col-diary:diary-2016-03-17",
+        title: "2016-03-17",
+        createdAt: "2016-03-17T12:00:00.000Z",
+        context: { room: null, sourceMetadata: { contentKind: "personal-document", collectionId: "col-diary", collectionName: "纸上日子", documentType: "diary", authorName: "半夏", titleSource: "date" } },
+        participants: [{ id: "banxia", name: "半夏", role: "other" }],
+        messages: [{ id: "personal:col-diary:diary-2016-03-17:body", role: "other", speaker: "半夏", createdAt: "2016-03-17T12:00:00.000Z", content: [{ type: "text", text: "青苔巷的猫有名字了。" }], metadata: { personalDocument: true } }]
+      },
+      {
+        id: "personal:col-fragment:fragment-0001",
+        title: "夹在旧课本里的一句话",
+        createdAt: null,
+        context: { room: null, sourceMetadata: { contentKind: "personal-document", collectionId: "col-fragment", collectionName: "字纸篓", documentType: "fragment", authorName: "半夏", titleSource: "first-line" } },
+        participants: [{ id: "banxia", name: "半夏", role: "other" }],
+        messages: [{ id: "personal:col-fragment:fragment-0001:body", role: "other", speaker: "半夏", createdAt: null, content: [{ type: "text", text: "夹在旧课本里的一句话，没头没尾。" }], metadata: { personalDocument: true } }]
+      }
+    ]
+  };
+
+  runtime.OD.app.loadArchive(personalArchive, personalArchive.source.sourceLabel);
+
+  // The archive announces itself as a personal archive, by its own name.
+  assert.equal(elements.get("status").textContent,
+    "已导入私人文字档案：半夏的字纸箱 · 2 个集合，2 篇 · 共 1 个来源");
+  assert.deepEqual([...runtime.OD.app.getState().sources.map(source => source.label)], ["半夏的字纸箱"]);
+
+  // The dated diary opens first (asc sort): document mode, localized date title.
+  assert.equal(runtime.OD.app.getState().current.id, "personal:col-diary:diary-2016-03-17");
+  assert.equal(runtime.document.body.classList.contains("document-mode"), true);
+  assert.equal(elements.get("currentTitle").textContent, "2016年3月17日");
+  const personalMeta = String(elements.get("readerMeta").innerHTML);
+  assert.ok(personalMeta.includes("纸上日子") && personalMeta.includes("半夏"), "meta reads collection · author");
+  assert.ok(!personalMeta.includes(" 段"), "no transcript segment count for a document");
+
+  // Bookmarks keep working on personal documents.
+  assert.ok(runtime.OD.app.addBookmark(), "a bookmark anchors inside a personal document");
+
+  // An undated fragment keeps its conservative title and no invented date.
+  runtime.OD.app.openConversation("personal:col-fragment:fragment-0001");
+  assert.equal(elements.get("currentTitle").textContent, "夹在旧课本里的一句话");
+  assert.equal(runtime.document.body.classList.contains("document-mode"), true);
+
+  // A chat conversation switches the chrome straight back.
+  runtime.OD.app.loadArchive({
+    conversations: [{
+      id: "chat-1", title: "普通对话", createdAt: "2026-01-01T00:00:00.000Z",
+      messages: [
+        { id: "c1", role: "user", content: "问题" },
+        { id: "c2", role: "assistant", content: "回答" }
+      ]
+    }]
+  }, "聊天来源");
+  assert.equal(runtime.OD.app.getState().current.id, "chat-1");
+  assert.equal(runtime.document.body.classList.contains("document-mode"), false, "chats never enter document mode");
+  assert.ok(String(elements.get("readerMeta").innerHTML).includes("2 段"), "chat meta keeps its segment count");
+
+  // Reopening the personal document restores document mode.
+  runtime.OD.app.openConversation("personal:col-diary:diary-2016-03-17");
+  assert.equal(runtime.document.body.classList.contains("document-mode"), true);
+});
+
+test("personal collections group by declaration order with year and unknown-date headings", async () => {
+  const { runtime, elements } = await loadAppRuntime("asc");
+  await runtime.OD.app.ready;
+  const doc = (collectionId, collectionName, documentType, id, createdAt, text) => ({
+    id: `personal:${collectionId}:${id}`,
+    title: createdAt ? String(createdAt).slice(0, 10) : text.slice(0, 8),
+    createdAt,
+    context: { room: null, sourceMetadata: {
+      contentKind: "personal-document", collectionId, collectionName, documentType,
+      authorName: "半夏", titleSource: createdAt ? "date" : "first-line"
+    } },
+    participants: [{ id: "banxia", name: "半夏", role: "other" }],
+    messages: [{ id: `personal:${collectionId}:${id}:body`, role: "other", speaker: "半夏", createdAt, content: [{ type: "text", text }], metadata: { personalDocument: true } }]
+  });
+  runtime.OD.app.loadArchive({
+    schema: "our-dialogues.normalized.v1",
+    source: { platform: "personal-archive", exporter: "our-dialogues-personal-archive", formatVersion: 1, sourceLabel: "半夏的字纸箱" },
+    conversations: [
+      doc("col-diary", "纸上日子", "diary", "d-2015-05-01", "2015-05-01T12:00:00.000Z", "旧年的一页。"),
+      doc("col-diary", "纸上日子", "diary", "d-2016-03-17", "2016-03-17T12:00:00.000Z", "青苔巷的猫。"),
+      doc("col-diary", "纸上日子", "diary", "d-undated", null, "没有日期的一页。"),
+      doc("col-frag", "字纸篓", "fragment", "f-0001", null, "一句没头没尾的话。")
+    ]
+  }, "半夏的字纸箱");
+
+  const list = String(elements.get("conversationList").innerHTML);
+  assert.ok(list.includes("::collection:col-diary"), "collections persist under the collection-prefixed group key");
+  assert.match(list, /title="日记">纸上日子</, "the collection summary names the collection with its localized type");
+  assert.match(list, /title="碎片">字纸篓</);
+  assert.match(list, /year-heading[^>]*>2015</);
+  assert.match(list, /year-heading[^>]*>2016</);
+  assert.match(list, /year-heading[^>]*>日期未知</, "undated entries trail under the localized unknown-date heading");
+  assert.equal(list.split("year-heading").length - 1, 3, "the single-year fragment collection stays flat");
+  assert.ok(list.indexOf("纸上日子") < list.indexOf("字纸篓"), "collection order follows the archive declaration order");
+
+  // The sidebar's visible order doubles as the reading order, across collections.
+  assert.equal(runtime.OD.app.getState().current.id, "personal:col-diary:d-2015-05-01");
+  elements.get("nextPage").click();
+  assert.equal(runtime.OD.app.getState().current.id, "personal:col-diary:d-2016-03-17");
+  elements.get("nextPage").click();
+  assert.equal(runtime.OD.app.getState().current.id, "personal:col-diary:d-undated");
+  elements.get("nextPage").click();
+  assert.equal(runtime.OD.app.getState().current.id, "personal:col-frag:f-0001",
+    "next crosses into the following collection exactly as the eye sees it");
+  assert.equal(elements.get("nextPage").disabled, true, "the last visible entry is the end of the reading order");
+});
+
+test("search results and home cards show collection provenance for personal documents", async () => {
+  const { runtime, elements } = await loadAppRuntime("asc");
+  await runtime.OD.app.ready;
+  runtime.OD.app.loadArchive({
+    schema: "our-dialogues.normalized.v1",
+    source: { platform: "personal-archive", exporter: "our-dialogues-personal-archive", formatVersion: 1, sourceLabel: "半夏的字纸箱" },
+    conversations: [{
+      id: "personal:col-diary:diary-2016-03-17",
+      title: "2016-03-17",
+      createdAt: "2016-03-17T12:00:00.000Z",
+      context: { room: null, sourceMetadata: { contentKind: "personal-document", collectionId: "col-diary", collectionName: "纸上日子", documentType: "diary", authorName: "半夏", titleSource: "date" } },
+      participants: [{ id: "banxia", name: "半夏", role: "other" }],
+      messages: [{ id: "personal:col-diary:diary-2016-03-17:body", role: "other", speaker: "半夏", createdAt: "2016-03-17T12:00:00.000Z", content: "猫在落雨前蹲上配电箱。", metadata: { personalDocument: true } }]
+    }]
+  }, "半夏的字纸箱");
+
+  runtime.OD.app.setSearchScope("library");
+  elements.get("searchQuery").value = "配电箱";
+  const hits = runtime.OD.app.performSearch();
+  assert.equal(hits.length, 1);
+  const resultsHTML = String(elements.get("searchResults").innerHTML);
+  assert.ok(resultsHTML.includes("纸上日子 · 2016年3月17日"), "provenance reads collection · entry");
+  assert.ok(!resultsHTML.includes("· 半夏"), "no speaker prefix on a personal document hit");
+
+  elements.get("navLibrary").click();
+  const continueHTML = String(elements.get("continueCard").innerHTML);
+  assert.ok(continueHTML.includes("2016年3月17日"), "the continue card title is the localized date");
+  assert.ok(continueHTML.includes("纸上日子"), "the continue card names the collection");
+  assert.ok(!continueHTML.includes("第 1 / 1 段"), "no segment position for a one-page document");
 });
 
 test("the demo library loads synthetic sources once and skips duplicates on a second click", async () => {

@@ -140,8 +140,9 @@ node --test --test-isolation=none tests/*.test.mjs
 | Claude official export | JSON and ZIP import validated against a real 2026 export; active-branch traversal with recorded alternates, official stored thinking, capped tool traces, metadata-only attachments |
 | Other Claude plugins | pending real samples |
 | Already-normalized Our Dialogues archive | implemented |
+| Personal archive (diaries, dreams, microblogs, essays, letters, fragments) | implemented: `our-dialogues.personal-archive.v1`; grouped by collection and year, read as full-page documents with no chat bubbles |
 
-See [`docs/source-compatibility.md`](docs/source-compatibility.md) for the capability contract, fidelity notes, diagnostics privacy boundary, and Claude sample status.
+See [`docs/source-compatibility.md`](docs/source-compatibility.md) for the capability contract, fidelity notes, diagnostics privacy boundary, and Claude sample status. Old writing of your own — diaries, dreams, microblog backups — comes in through [Bring your personal archive](docs/bring-your-personal-archive.md).
 
 ZIP import uses browser-native decompression where available. JSON can always be imported directly. Existing JSON and single-ZIP workflows remain available beside source-folder import.
 

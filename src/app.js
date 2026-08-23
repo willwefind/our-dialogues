@@ -2,6 +2,7 @@ window.OD = window.OD || {};
 
 (function(OD){
   const $ = id => document.getElementById(id);
+  const t = (key, params) => OD.i18n ? OD.i18n.t(key, params) : String(key);
   const SETTINGS_MIRROR_KEY = "our-dialogues.reader-state.v1";
   const state = {
     library: OD.sourceLibrary.create(),
@@ -18,7 +19,7 @@ window.OD = window.OD || {};
     mediaObserver: null,
     solVoiceObserver: null,
     statusText: "",
-    archiveStatusText: "",
+    archiveStatus: null,
     statusError: false,
     renderToken: 0,
     lastSavedAt: null,
@@ -45,6 +46,7 @@ window.OD = window.OD || {};
     searchScope: "current",
     searchSourceId: "all",
     toolTab: null,
+    locale: "auto",
     booted: false
   };
 
@@ -52,23 +54,61 @@ window.OD = window.OD || {};
     return String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
   }
 
+  /* Dates and relative times follow the resolved UI locale via Intl, per
+     the i18n handoff. Formatter instances are cached per locale; the option
+     set is chosen to match the old toLocaleString() output for zh-CN. */
+  const dateFormatters = {};
+  const dateOnlyFormatters = {};
+  const relativeFormatters = {};
+  function uiLocaleTag() {
+    return OD.i18n?.currentLocale?.() || "zh-CN";
+  }
+
+  function fmtDateOnly(value) {
+    if (!value) return "";
+    const d = new Date(value);
+    if (Number.isNaN(d.getTime())) return String(value);
+    const locale = uiLocaleTag();
+    try {
+      const formatter = dateOnlyFormatters[locale] ||
+        (dateOnlyFormatters[locale] = new Intl.DateTimeFormat(locale, { dateStyle: "long" }));
+      return formatter.format(d);
+    } catch (_) {
+      return String(value).slice(0, 10);
+    }
+  }
+
   function fmtDate(value) {
     if (!value) return "";
     const d = new Date(value);
     if (Number.isNaN(d.getTime())) return String(value);
-    return d.toLocaleString();
+    const locale = uiLocaleTag();
+    try {
+      const formatter = dateFormatters[locale] ||
+        (dateFormatters[locale] = new Intl.DateTimeFormat(locale, { dateStyle: "short", timeStyle: "medium" }));
+      return formatter.format(d);
+    } catch (_) {
+      return d.toLocaleString();
+    }
   }
 
   function fmtRelative(value) {
     const time = Date.parse(value ?? "");
     if (!Number.isFinite(time)) return "";
     const minutes = Math.round((Date.now() - time) / 60000);
-    if (minutes < 1) return "刚刚";
-    if (minutes < 60) return `${minutes} 分钟前`;
+    if (minutes < 1) return t("time.justNow");
+    const locale = uiLocaleTag();
+    let formatter = relativeFormatters[locale];
+    if (formatter === undefined) {
+      try { formatter = new Intl.RelativeTimeFormat(locale, { numeric: "always" }); }
+      catch (_) { formatter = null; }
+      relativeFormatters[locale] = formatter;
+    }
+    if (minutes < 60) return formatter ? formatter.format(-minutes, "minute") : `${minutes} min`;
     const hours = Math.round(minutes / 60);
-    if (hours < 24) return `${hours} 小时前`;
+    if (hours < 24) return formatter ? formatter.format(-hours, "hour") : `${hours} h`;
     const days = Math.round(hours / 24);
-    if (days < 30) return `${days} 天前`;
+    if (days < 30) return formatter ? formatter.format(-days, "day") : `${days} d`;
     return fmtDate(value);
   }
 
@@ -90,14 +130,14 @@ window.OD = window.OD || {};
     const stats = state.solVoiceSession?.stats;
     if (stats) {
       const gaps = [
-        stats.missingMessageCount ? `缺消息 ${stats.missingMessageCount}` : "",
-        stats.missingAudioCount ? `缺音频 ${stats.missingAudioCount}` : ""
+        stats.missingMessageCount ? t("voice.missingMessages", { count: stats.missingMessageCount }) : "",
+        stats.missingAudioCount ? t("voice.missingAudio", { count: stats.missingAudioCount }) : ""
       ].filter(Boolean).join(" · ");
-      return `语音已连接 ${stats.attachedPlayerCount} 段（strong ${stats.strongMappingsTotal}）${gaps ? ` · ${gaps}` : ""}`;
+      return `${t("voice.connected", { count: stats.attachedPlayerCount, strong: stats.strongMappingsTotal })}${gaps ? ` · ${gaps}` : ""}`;
     }
-    if (state.solVoiceMapping && !state.archive) return "语音映射就绪 · 请先导入对应的聊天导出";
-    if (state.solVoiceMapping) return "语音映射就绪 · 请选择 VoiceArchive 或音频文件夹";
-    if (state.solVoiceAudioFiles.length) return `音频文件夹就绪（${state.solVoiceAudioFiles.length} 个文件）· 请选择映射`;
+    if (state.solVoiceMapping && !state.archive) return t("voice.mappingReadyNeedChat");
+    if (state.solVoiceMapping) return t("voice.mappingReadyNeedAudio");
+    if (state.solVoiceAudioFiles.length) return t("voice.audioReadyNeedMapping", { count: state.solVoiceAudioFiles.length });
     return "";
   }
 
@@ -117,13 +157,13 @@ window.OD = window.OD || {};
     const element = $("localLibraryStatus");
     if (!element) return;
     if (!state.persistence?.supported) {
-      element.textContent = "本地书库：当前浏览器不支持 IndexedDB；本次仍只保存在页面内。";
+      element.textContent = t("status.noIndexedDB");
     } else if (state.persistenceError) {
-      element.textContent = `本地书库：${state.persistenceError}`;
+      element.textContent = t("status.libraryError", { error: state.persistenceError });
     } else if (state.lastSavedAt) {
-      element.textContent = `本地书库：已保存 · 最后更新 ${fmtDate(state.lastSavedAt)}`;
+      element.textContent = t("status.librarySaved", { time: fmtDate(state.lastSavedAt) });
     } else {
-      element.textContent = "本地书库：准备就绪；成功导入后会自动保存文字内容。";
+      element.textContent = t("status.libraryReady");
     }
     const clear = $("clearLocalLibrary");
     if (clear) clear.disabled = state.library.size === 0 && !state.persistenceError;
@@ -135,6 +175,18 @@ window.OD = window.OD || {};
     renderStatus();
   }
 
+  /* The archive line ("已加入：… · 共 N 个来源") is replayed after voice
+     operations and on locale change, so it is stored as {key, params} and
+     rendered through t() each time instead of caching a finished string. */
+  function archiveStatusText() {
+    return state.archiveStatus ? t(state.archiveStatus.key, state.archiveStatus.params) : "";
+  }
+
+  function setArchiveStatus(key, params, error=false) {
+    state.archiveStatus = key ? { key, params } : null;
+    setStatus(archiveStatusText(), error);
+  }
+
   function readSettingsMirror() {
     try {
       const value = JSON.parse(localStorage.getItem(SETTINGS_MIRROR_KEY) || "null");
@@ -144,12 +196,15 @@ window.OD = window.OD || {};
     }
   }
 
-  function messageAnchor() {
+  function messageAnchorElement() {
     const messages = [...$("messages").querySelectorAll("[data-message-id]")];
     if (!messages.length) return null;
     const scrollTop = Number($("main").scrollTop || 0);
-    const anchor = messages.find(element => Number(element.offsetTop || 0) >= scrollTop) || messages.at(-1);
-    return anchor?.dataset?.messageId || null;
+    return messages.find(element => Number(element.offsetTop || 0) >= scrollTop) || messages.at(-1);
+  }
+
+  function messageAnchor() {
+    return messageAnchorElement()?.dataset?.messageId || null;
   }
 
   function readerSettings() {
@@ -158,6 +213,7 @@ window.OD = window.OD || {};
       conversationSort: state.sortMode,
       hideUser: !!$("hideUser").checked,
       showThinking: !!$("showThinking").checked,
+      locale: state.locale,
       ...state.readerPrefs,
       theme: $("theme").value || state.readerPrefs.theme,
       recentConversationId: state.current?.id || null,
@@ -272,13 +328,26 @@ window.OD = window.OD || {};
   function recordReadingProgress() {
     if (!state.current) return;
     const source = state.library.sourceForConversation(state.current);
-    const messageId = messageAnchor();
+    const anchor = messageAnchorElement();
+    const messageId = anchor?.dataset?.messageId || null;
+    const main = $("main");
+    /* How far the viewport bottom has travelled through the anchored
+       message: neutral (clamps to 1) for chat messages shorter than the
+       viewport, meaningful for one long personal document. Layouts that
+       cannot be measured (fake DOM, zero heights) leave it undefined and
+       keep the historical anchored-message-counts-as-read behaviour. */
+    const anchorTop = Number(anchor?.offsetTop);
+    const anchorHeight = Number(anchor?.offsetHeight);
+    const viewportBottom = Number(main.scrollTop || 0) + Number(main.clientHeight);
+    const fraction = anchorHeight > 0 && Number.isFinite(anchorTop) && Number.isFinite(viewportBottom)
+      ? (viewportBottom - anchorTop) / anchorHeight
+      : undefined;
     state.readingProgress = OD.readingProgress.record(state.readingProgress, state.current.id, {
       sourceId: source?.id ?? null,
       messageId,
       page: state.pageIndex,
-      scrollTop: Number($("main").scrollTop || 0),
-      percent: OD.readingProgress.percent(state.current.messages, messageId)
+      scrollTop: Number(main.scrollTop || 0),
+      percent: OD.readingProgress.percent(state.current.messages, messageId, fraction)
     });
   }
 
@@ -294,7 +363,7 @@ window.OD = window.OD || {};
       try {
         await state.persistence.saveSettings(settings);
       } catch (error) {
-        state.persistenceError = error?.message || "保存设置失败";
+        state.persistenceError = error?.message || t("error.saveSettings");
         renderLocalLibraryStatus();
       }
     };
@@ -316,7 +385,7 @@ window.OD = window.OD || {};
       await saveReaderState({ immediate: true });
     } catch (error) {
       console.warn("Could not save the local text library", error);
-      state.persistenceError = error?.message || "保存失败；当前页面内容仍可继续阅读";
+      state.persistenceError = error?.message || t("error.saveSource");
     }
     renderLocalLibraryStatus();
   }
@@ -398,26 +467,48 @@ window.OD = window.OD || {};
     state.solVoiceSession = null;
   }
 
+  /* Personal documents enter document mode only through this explicit
+     marker — never inferred from shape (one participant, one message, or
+     role "other" alone must not trigger it). */
+  function isDocumentConversation(conversation) {
+    return conversation?.context?.sourceMetadata?.contentKind === "personal-document";
+  }
+
   function displayConversationTitle(conversation) {
+    const sourceMetadata = conversation?.context?.sourceMetadata;
+    if (sourceMetadata?.contentKind === "personal-document" &&
+        sourceMetadata.titleSource === "date" && conversation.createdAt) {
+      const formatted = fmtDateOnly(conversation.createdAt);
+      if (formatted) return formatted;
+    }
     return state.titleLabels.get(String(conversation?.id)) || String(conversation?.title || "");
   }
 
   function progressLabel(entry) {
     if (!entry) return "";
-    if (OD.readingProgress.isFinished(entry)) return "已读完";
-    return entry.percent > 0 ? `读到 ${entry.percent}%` : "";
+    if (OD.readingProgress.isFinished(entry)) return t("progress.finished");
+    return entry.percent > 0 ? t("progress.readTo", { percent: entry.percent }) : "";
   }
 
   function conversationMarkup(c) {
     const active = state.current?.id === c.id ? " on" : "";
-    const room = c.context?.room?.name ? ` · ${esc(c.context.room.name)}` : "";
+    const documentRow = isDocumentConversation(c);
     const progress = progressLabel(state.readingProgress[c.id]);
-    const favorite = OD.organization.isFavorite(state.organization, c.id) ? `<span class="conv-star" title="已收藏">⭐</span> ` : "";
+    const favorite = OD.organization.isFavorite(state.organization, c.id) ? `<span class="conv-star" title="${esc(t("organize.favoritedTitle"))}">⭐</span> ` : "";
     const tagChips = OD.organization.tagsOf(state.organization, c.id).slice(0, 3)
       .map(tag => `<span class="conv-tag">${esc(tag)}</span>`).join("");
+    /* Document rows skip the transcript message count, and a date-titled
+       entry does not repeat its date in the meta line. */
+    const metaBits = [];
+    if (!documentRow) metaBits.push(esc(t("conv.messageCount", { count: c.messages.length })));
+    if (c.context?.room?.name) metaBits.push(esc(c.context.room.name));
+    if (c.createdAt && !(documentRow && c.context?.sourceMetadata?.titleSource === "date")) {
+      metaBits.push(esc(documentRow ? fmtDateOnly(c.createdAt) : fmtDate(c.createdAt)));
+    }
+    if (progress) metaBits.push(`<span class="conv-progress">${esc(progress)}</span>`);
     return `<div class="conv${active}" data-id="${esc(c.id)}">
       <div class="conv-title">${favorite}${esc(displayConversationTitle(c))}</div>
-      <div class="conv-meta">${c.messages.length} 条${room}${c.createdAt ? ` · ${esc(fmtDate(c.createdAt))}` : ""}${progress ? ` · <span class="conv-progress">${esc(progress)}</span>` : ""}${tagChips ? ` ${tagChips}` : ""}</div>
+      <div class="conv-meta">${metaBits.join(" · ")}${tagChips ? ` ${tagChips}` : ""}</div>
     </div>`;
   }
 
@@ -430,7 +521,7 @@ window.OD = window.OD || {};
     return {
       key: characterId ? `id:${characterId}` : `missing:${conversation.id}`,
       id: characterId,
-      name: String(metadata.characterName || participant?.name || "未命名角色")
+      name: String(metadata.characterName || participant?.name || t("conv.unnamedCharacter"))
     };
   }
 
@@ -469,7 +560,7 @@ window.OD = window.OD || {};
         html += conversationMarkup(conversation);
         return;
       }
-      const year = conversationYear(conversation) || "日期不详";
+      const year = conversationYear(conversation) || t("conv.unknownYear");
       if (year !== currentYear) {
         currentYear = year;
         html += `<div class="year-heading" aria-hidden="true">${esc(year)}</div>`;
@@ -479,12 +570,70 @@ window.OD = window.OD || {};
     return html;
   }
 
+  /* ── Personal Archive directory: Source → Collection → Year → Entry ──
+     Collections are collapsible groups reusing the character-group
+     machinery (same class, same groupState.characters storage under a
+     "collection:"-prefixed key, same toggle listener). Year headings are
+     display-only and appear once a collection's dated entries span more
+     than one year; undated entries trail under 日期未知. Sort order inside
+     a collection follows the Reader sort mode untouched — the rendered
+     order is pushed into readingOrder exactly as the eye sees it. */
+  function personalYearListMarkup(ordered) {
+    const years = new Set(ordered.map(conversationYear).filter(Boolean));
+    if (years.size < 2) return ordered.map(conversationMarkup).join("");
+    let html = "";
+    let currentHeading;
+    for (const conversation of ordered) {
+      const heading = conversationYear(conversation) || t("personal.unknownDate");
+      if (heading !== currentHeading) {
+        currentHeading = heading;
+        html += `<div class="year-heading" aria-hidden="true">${esc(heading)}</div>`;
+      }
+      html += conversationMarkup(conversation);
+    }
+    return html;
+  }
+
+  function personalCollectionsMarkup(source, conversations, searching, readingOrder) {
+    const groups = new Map();
+    const groupFor = conversation => {
+      const collectionId = String(conversation.context?.sourceMetadata?.collectionId ?? "");
+      if (!groups.has(collectionId)) {
+        groups.set(collectionId, {
+          id: collectionId,
+          name: conversation.context?.sourceMetadata?.collectionName || collectionId || source.label,
+          type: conversation.context?.sourceMetadata?.documentType || "other",
+          conversations: []
+        });
+      }
+      return groups.get(collectionId);
+    };
+    // The archive's own declaration order decides collection order…
+    for (const conversation of source.conversations) groupFor(conversation);
+    // …and the caller's sorted, filtered list fills the visible entries.
+    for (const conversation of conversations) groupFor(conversation).conversations.push(conversation);
+    return [...groups.values()].filter(group => group.conversations.length).map(group => {
+      readingOrder?.push(...group.conversations);
+      const collectionKey = `${source.id}::collection:${group.id}`;
+      const stored = state.groupState.characters[collectionKey];
+      const containsCurrent = group.conversations.some(conversation => conversation.id === state.current?.id);
+      const open = searching || (stored === undefined ? containsCurrent : stored === true);
+      return `<details class="character-group" data-character-key="${esc(collectionKey)}"${open ? " open" : ""}>
+        <summary>
+          <span class="character-summary-label" title="${esc(t(`personal.type.${group.type}`))}">${esc(group.name)}</span>
+          <span class="character-count">${group.conversations.length}</span>
+        </summary>
+        <div class="character-conversations">${personalYearListMarkup(group.conversations)}</div>
+      </details>`;
+    }).join("");
+  }
+
   function sourceRowMenuMarkup(source, conversationCount) {
     const canReconnect = source.assetMode === "local-reconnect" || source.directoryHandle;
     return `<div class="source-row-menu" hidden>
-      <div class="source-row-details">${conversationCount} 段对话${source.importDetails ? ` · ${esc(source.importDetails)}` : ""}</div>
-      ${canReconnect ? `<button type="button" data-reconnect-source-row="${esc(source.id)}">重新连接</button>` : ""}
-      <button type="button" data-remove-source="${esc(source.id)}" class="od-danger-quiet">移除此来源</button>
+      <div class="source-row-details">${esc(t("source.conversationCount", { count: conversationCount }))}${source.importDetails ? ` · ${esc(source.importDetails)}` : ""}</div>
+      ${canReconnect ? `<button type="button" data-reconnect-source-row="${esc(source.id)}">${esc(t("source.reconnect"))}</button>` : ""}
+      <button type="button" data-remove-source="${esc(source.id)}" class="od-danger-quiet">${esc(t("source.removeThis"))}</button>
     </div>`;
   }
 
@@ -519,6 +668,8 @@ window.OD = window.OD || {};
         <div class="character-conversations">${conversationListMarkup(ordered, { skipLeading: pinnedCount })}</div>
       </details>`;
       }).join("");
+    } else if (source.source?.platform === "personal-archive") {
+      children = personalCollectionsMarkup(source, conversations, searching, readingOrder);
     } else {
       readingOrder?.push(...conversations);
       children = `<div class="source-conversations">${conversationListMarkup(conversations)}</div>`;
@@ -529,7 +680,7 @@ window.OD = window.OD || {};
       <summary>
         <span class="source-summary-label">${esc(source.label)}</span>
         <span class="source-count">${conversations.length}</span>
-        <button class="source-menu-button" type="button" data-source-menu="${esc(source.id)}" title="来源操作：重连 / 移除 / 详情" aria-haspopup="true" aria-label="来源操作：${esc(source.label)}">···</button>
+        <button class="source-menu-button" type="button" data-source-menu="${esc(source.id)}" title="${esc(t("source.menuTitle"))}" aria-haspopup="true" aria-label="${esc(t("source.menuAria", { label: source.label }))}">···</button>
       </summary>
       ${sourceRowMenuMarkup(source, conversations.length)}
       ${children}
@@ -543,7 +694,7 @@ window.OD = window.OD || {};
 
   function addBookmark() {
     if (!state.current) {
-      setStatus("先打开一段对话，再存书签。", true);
+      setStatus(t("bookmark.needConversation"), true);
       return null;
     }
     const source = state.library.sourceForConversation(state.current);
@@ -559,7 +710,7 @@ window.OD = window.OD || {};
     state.bookmarks = OD.bookmarks.add(state.bookmarks, bookmark);
     renderBookmarks();
     void saveReaderState();
-    setStatus(`🔖 已存书签：${OD.bookmarks.displayTitle(bookmark)}`);
+    setStatus(t("bookmark.saved", { title: OD.bookmarks.displayTitle(bookmark) }));
     return bookmark;
   }
 
@@ -582,7 +733,7 @@ window.OD = window.OD || {};
     if (!bookmark) return false;
     const exists = (state.archive?.conversations || []).some(item => item.id === bookmark.conversationId);
     if (!exists) {
-      setStatus("这个书签指向的来源不在当前书库里；重新导入该来源后就能跳转。", true);
+      setStatus(t("bookmark.missingSource"), true);
       return false;
     }
     openConversation(bookmark.conversationId, { restorePosition: { messageId: bookmark.messageId } });
@@ -600,7 +751,7 @@ window.OD = window.OD || {};
     if (!list || !count) return;
     count.textContent = state.bookmarks.length ? String(state.bookmarks.length) : "";
     if (!state.bookmarks.length) {
-      list.innerHTML = `<div class="bookmarks-empty">读到想回来的地方，点上方「🔖 存书签」。</div>`;
+      list.innerHTML = `<div class="bookmarks-empty">${esc(t("bookmark.empty"))}</div>`;
       return;
     }
     const available = new Set((state.archive?.conversations || []).map(conversation => conversation.id));
@@ -608,18 +759,18 @@ window.OD = window.OD || {};
       const missing = !available.has(bookmark.conversationId);
       const editing = state.editingBookmarkId === bookmark.id;
       const title = editing
-        ? `<input class="bookmark-rename" data-bookmark-rename="${esc(bookmark.id)}" value="${esc(bookmark.label)}" placeholder="${esc(bookmark.conversationTitle)}" aria-label="书签名称">`
+        ? `<input class="bookmark-rename" data-bookmark-rename="${esc(bookmark.id)}" value="${esc(bookmark.label)}" placeholder="${esc(bookmark.conversationTitle)}" aria-label="${esc(t("bookmark.renameAria"))}">`
         : `<div class="bookmark-title">${esc(OD.bookmarks.displayTitle(bookmark))}</div>`;
       return `<div class="bookmark${missing ? " missing" : ""}" data-bookmark-id="${esc(bookmark.id)}">
         <div class="bookmark-head">
           ${title}
           <span class="bookmark-actions">
-            <button type="button" data-bookmark-edit="${esc(bookmark.id)}" title="改名" aria-label="改名">✎</button>
-            <button type="button" data-bookmark-remove="${esc(bookmark.id)}" title="删除书签" aria-label="删除书签">✕</button>
+            <button type="button" data-bookmark-edit="${esc(bookmark.id)}" title="${esc(t("bookmark.rename"))}" aria-label="${esc(t("bookmark.rename"))}">✎</button>
+            <button type="button" data-bookmark-remove="${esc(bookmark.id)}" title="${esc(t("bookmark.remove"))}" aria-label="${esc(t("bookmark.remove"))}">✕</button>
           </span>
         </div>
         ${bookmark.snippet ? `<div class="bookmark-snippet">${esc(bookmark.snippet)}</div>` : ""}
-        <div class="bookmark-meta">${esc(bookmark.sourceLabel || "")}${missing ? " ·（来源不在书库中）" : ""}${bookmark.createdAt ? ` · ${esc(fmtDate(bookmark.createdAt))}` : ""}</div>
+        <div class="bookmark-meta">${esc(bookmark.sourceLabel || "")}${missing ? esc(t("common.sourceMissingSuffix")) : ""}${bookmark.createdAt ? ` · ${esc(fmtDate(bookmark.createdAt))}` : ""}</div>
       </div>`;
     }).join("");
     [...document.querySelectorAll("#bookmarksList .bookmark")].forEach(element => {
@@ -670,6 +821,39 @@ window.OD = window.OD || {};
     }
   }
 
+  /* Re-render every t()-derived surface after the resolved locale changes,
+     preserving the reading anchor. Archive data (titles, speakers, message
+     text) is never touched — only chrome re-renders. */
+  function applyLocaleToChrome() {
+    const position = state.current ? readerSettings().readingPosition : null;
+    OD.i18n?.applyStatic?.(document);
+    renderAnnotationSwatches();
+    renderSourceControls();
+    if (state.current) {
+      openConversation(state.current.id, { restorePosition: position });
+    } else {
+      renderList();
+      if (libraryHomeVisible()) showLibraryHome();
+      else $("currentTitle").textContent = t("reader.noArchive");
+    }
+    syncOrganizeControls();
+    if ($("tagEditor")?.hidden === false) renderTagEditor();
+    performSearch();
+    state.statusText = archiveStatusText();
+    renderStatus();
+  }
+
+  function setUiLocale(value) {
+    if (!OD.i18n) return;
+    const normalized = OD.i18n.normalizeSetting(value);
+    state.locale = normalized;
+    const control = $("uiLocale");
+    if (control) control.value = normalized;
+    const before = OD.i18n.currentLocale();
+    if (OD.i18n.setLocale(normalized) !== before) applyLocaleToChrome();
+    void saveReaderState();
+  }
+
   /* Re-render the current page in place — saving or removing a highlight must
      not scroll the reader back to the top the way a full reopen would. */
   function refreshCurrentMessages() {
@@ -688,7 +872,7 @@ window.OD = window.OD || {};
 
   function addAnnotation(fields) {
     if (!state.current) {
-      setStatus("先打开一段对话，再划线。", true);
+      setStatus(t("annotate.needConversation"), true);
       return null;
     }
     const source = state.library.sourceForConversation(state.current);
@@ -701,7 +885,7 @@ window.OD = window.OD || {};
       conversationTitle: displayConversationTitle(state.current)
     });
     if (!annotation) {
-      setStatus("没有可以标记的文字。", true);
+      setStatus(t("annotate.noText"), true);
       return null;
     }
     state.annotationColor = annotation.color;
@@ -709,7 +893,7 @@ window.OD = window.OD || {};
     refreshCurrentMessages();
     renderAnnotations();
     void saveReaderState();
-    setStatus(`🖍 已划线${annotation.note ? "，小注也存了" : ""}。`);
+    setStatus(annotation.note ? t("annotate.savedWithNote") : t("annotate.saved"));
     return annotation;
   }
 
@@ -733,7 +917,7 @@ window.OD = window.OD || {};
     if (!annotation) return false;
     const exists = (state.archive?.conversations || []).some(item => item.id === annotation.conversationId);
     if (!exists) {
-      setStatus("这条划线指向的来源不在当前书库里；重新导入该来源后就能跳转。", true);
+      setStatus(t("annotate.missingSource"), true);
       return false;
     }
     openConversation(annotation.conversationId, { restorePosition: { messageId: annotation.messageId } });
@@ -748,7 +932,7 @@ window.OD = window.OD || {};
     if (!list || !count) return;
     count.textContent = state.annotations.length ? String(state.annotations.length) : "";
     if (!state.annotations.length) {
-      list.innerHTML = `<div class="bookmarks-empty">在正文里划选一段文字，点冒出来的「🖍 标记这段」，可以挑颜色、写小注。</div>`;
+      list.innerHTML = `<div class="bookmarks-empty">${esc(t("annotate.empty"))}</div>`;
       return;
     }
     const available = new Set((state.archive?.conversations || []).map(conversation => conversation.id));
@@ -762,11 +946,11 @@ window.OD = window.OD || {};
           <span class="annotation-dot hl-${esc(annotation.color)}" aria-hidden="true"></span>
           <div class="bookmark-title">${esc(excerpt)}</div>
           <span class="bookmark-actions">
-            <button type="button" data-annotation-remove="${esc(annotation.id)}" title="删除划线" aria-label="删除划线">✕</button>
+            <button type="button" data-annotation-remove="${esc(annotation.id)}" title="${esc(t("annotate.remove"))}" aria-label="${esc(t("annotate.remove"))}">✕</button>
           </span>
         </div>
         ${annotation.note ? `<div class="bookmark-snippet">📝 ${esc(annotation.note)}</div>` : ""}
-        <div class="bookmark-meta">${esc(annotation.conversationTitle || "")}${missing ? " ·（来源不在书库中）" : ""}${annotation.createdAt ? ` · ${esc(fmtDate(annotation.createdAt))}` : ""}</div>
+        <div class="bookmark-meta">${esc(annotation.conversationTitle || "")}${missing ? esc(t("common.sourceMissingSuffix")) : ""}${annotation.createdAt ? ` · ${esc(fmtDate(annotation.createdAt))}` : ""}</div>
       </div>`;
     }).join("");
     [...document.querySelectorAll("#annotationsList .annotation-item")].forEach(element => {
@@ -803,7 +987,7 @@ window.OD = window.OD || {};
     const entries = OD.readingProgress.recent(state.readingProgress, 10);
     count.textContent = entries.length ? String(entries.length) : "";
     if (!entries.length) {
-      list.innerHTML = `<div class="bookmarks-empty">打开任意一段对话，这里会记住你读到哪。</div>`;
+      list.innerHTML = `<div class="bookmarks-empty">${esc(t("recent.empty"))}</div>`;
       return;
     }
     const conversations = new Map((state.archive?.conversations || []).map(conversation => [conversation.id, conversation]));
@@ -812,13 +996,13 @@ window.OD = window.OD || {};
       const missing = !conversation;
       const title = conversation ? displayConversationTitle(conversation) : entry.conversationId;
       const finished = OD.readingProgress.isFinished(entry);
-      const label = finished ? "已读完" : (entry.percent > 0 ? `读到 ${entry.percent}%` : "刚开始");
+      const label = finished ? t("progress.finished") : (entry.percent > 0 ? t("progress.readTo", { percent: entry.percent }) : t("progress.justStarted"));
       return `<div class="recent-item${missing ? " missing" : ""}" data-recent-id="${esc(entry.conversationId)}">
         <div class="bookmark-head">
           <div class="bookmark-title">${esc(title)}</div>
           <span class="recent-progress${finished ? " finished" : ""}">${esc(label)}</span>
         </div>
-        <div class="bookmark-meta">${missing ? "（来源不在书库中）" : esc(fmtDate(entry.updatedAt))}</div>
+        <div class="bookmark-meta">${missing ? esc(t("common.sourceMissing")) : esc(fmtDate(entry.updatedAt))}</div>
       </div>`;
     }).join("");
     [...document.querySelectorAll("#recentList .recent-item")].forEach(element => {
@@ -827,7 +1011,7 @@ window.OD = window.OD || {};
         if ((state.archive?.conversations || []).some(conversation => conversation.id === id)) {
           openConversation(id);
         } else {
-          setStatus("这段对话的来源不在当前书库里；重新导入该来源后就能继续读。", true);
+          setStatus(t("recent.missingSource"), true);
         }
       });
     });
@@ -850,7 +1034,7 @@ window.OD = window.OD || {};
         .map(item => ({ ...item, conversation: conversationById.get(item.conversationId) }))
         .find(item => item.conversation) || null;
       if (!entry) {
-        card.innerHTML = `<div class="continue-card continue-empty">从一段对话开始，把这里变成你的阅览室。</div>`;
+        card.innerHTML = `<div class="continue-card continue-empty">${esc(t("home.continueEmpty"))}</div>`;
       } else {
         const conversation = entry.conversation;
         const source = state.library.sourceForConversation(conversation);
@@ -859,14 +1043,23 @@ window.OD = window.OD || {};
         const excerpt = OD.schema.textOf(conversation.messages[index - 1]?.content ?? "")
           .trim().replace(/\s+/g, " ").slice(0, 64);
         const percent = Math.max(0, Math.min(100, Number(entry.percent) || 0));
-        card.innerHTML = `<div class="continue-card" data-home-open="${esc(conversation.id)}" role="link" tabindex="0" aria-label="继续阅读：${esc(displayConversationTitle(conversation))}">
-          <div class="continue-eyebrow">上次读到 · ${esc(fmtRelative(entry.updatedAt))}</div>
+        const documentCard = isDocumentConversation(conversation);
+        const continueMeta = documentCard
+          ? [
+              conversation.context?.sourceMetadata?.collectionName || source?.label || "",
+              conversation.createdAt && conversation.context?.sourceMetadata?.titleSource !== "date"
+                ? fmtDateOnly(conversation.createdAt)
+                : ""
+            ].filter(Boolean).map(esc).join(" · ")
+          : `${esc(source?.label || "")}${conversation.createdAt ? ` · ${esc(fmtDate(conversation.createdAt))}` : ""} · ${esc(t("home.segmentPosition", { index, total }))}`;
+        card.innerHTML = `<div class="continue-card" data-home-open="${esc(conversation.id)}" role="link" tabindex="0" aria-label="${esc(t("home.continueAria", { title: displayConversationTitle(conversation) }))}">
+          <div class="continue-eyebrow">${esc(t("home.lastRead", { time: fmtRelative(entry.updatedAt) }))}</div>
           <div class="continue-title">${esc(displayConversationTitle(conversation))}</div>
-          <div class="continue-meta">${esc(source?.label || "")}${conversation.createdAt ? ` · ${esc(fmtDate(conversation.createdAt))}` : ""} · 第 ${index} / ${total} 段</div>
+          <div class="continue-meta">${continueMeta}</div>
           ${excerpt ? `<div class="continue-excerpt">“${esc(excerpt)}”</div>` : ""}
           <div class="continue-foot">
             <div class="continue-progress" aria-hidden="true"><span style="width:${percent}%"></span></div>
-            <span class="continue-cta">继续阅读 →</span>
+            <span class="continue-cta">${esc(t("home.continueCta"))}</span>
           </div>
         </div>`;
       }
@@ -877,22 +1070,31 @@ window.OD = window.OD || {};
       const newest = OD.conversationOrder.sortConversations(conversations, "desc").slice(0, 3);
       additions.innerHTML = newest.length ? newest.map(conversation => {
         const source = state.library.sourceForConversation(conversation);
+        const documentCard = isDocumentConversation(conversation);
+        const additionMeta = documentCard
+          ? [
+              conversation.context?.sourceMetadata?.collectionName || source?.label || "",
+              conversation.createdAt && conversation.context?.sourceMetadata?.titleSource !== "date"
+                ? fmtDateOnly(conversation.createdAt)
+                : ""
+            ].filter(Boolean).map(esc).join(" · ")
+          : `${esc(source?.label || "")}${conversation.createdAt ? ` · ${esc(fmtDate(conversation.createdAt))}` : ""} · ${esc(t("conv.segmentCount", { count: conversation.messages.length }))}`;
         return `<div class="home-addition" data-home-open="${esc(conversation.id)}" role="link" tabindex="0">
           <div class="home-addition-title">${esc(displayConversationTitle(conversation))}</div>
-          <div class="home-addition-meta">${esc(source?.label || "")}${conversation.createdAt ? ` · ${esc(fmtDate(conversation.createdAt))}` : ""} · ${conversation.messages.length} 段</div>
+          <div class="home-addition-meta">${additionMeta}</div>
         </div>`;
-      }).join("") : `<div class="bookmarks-empty">导入来源后，这里会列出最新的对话。</div>`;
+      }).join("") : `<div class="bookmarks-empty">${esc(t("home.additionsEmpty"))}</div>`;
     }
 
     const summary = $("librarySummary");
     if (summary) {
       summary.innerHTML = `<div class="summary-grid">
-        <div class="summary-item"><strong>${state.library.size}</strong><span>个来源</span></div>
-        <div class="summary-item"><strong>${esc(conversations.length.toLocaleString())}</strong><span>段对话</span></div>
-        <div class="summary-item"><strong>${state.bookmarks.length}</strong><span>枚书签</span></div>
-        <div class="summary-item"><strong>${state.annotations.length}</strong><span>处划线</span></div>
+        <div class="summary-item"><strong>${state.library.size}</strong><span>${esc(t("home.sourcesUnit", { count: state.library.size }))}</span></div>
+        <div class="summary-item"><strong>${esc(conversations.length.toLocaleString(uiLocaleTag()))}</strong><span>${esc(t("home.conversationsUnit", { count: conversations.length }))}</span></div>
+        <div class="summary-item"><strong>${state.bookmarks.length}</strong><span>${esc(t("home.bookmarksUnit", { count: state.bookmarks.length }))}</span></div>
+        <div class="summary-item"><strong>${state.annotations.length}</strong><span>${esc(t("home.highlightsUnit", { count: state.annotations.length }))}</span></div>
       </div>
-      <div class="summary-note">全部文字保存在本机 · 附件按需连接</div>`;
+      <div class="summary-note">${esc(t("home.note"))}</div>`;
     }
 
     [...(home.querySelectorAll?.("[data-home-open]") || [])].forEach(element => {
@@ -917,7 +1119,7 @@ window.OD = window.OD || {};
     $("reader").classList.add("hidden");
     $("welcome").classList.add("hidden");
     $("libraryHome")?.classList?.remove?.("hidden");
-    $("currentTitle").textContent = "书库";
+    $("currentTitle").textContent = t("nav.library");
     return true;
   }
 
@@ -969,7 +1171,8 @@ window.OD = window.OD || {};
     "fixtures/normalized-v1.json",
     "fixtures/ciel-house-v1.json",
     "fixtures/chatgpt-official-2026.json",
-    "fixtures/claude-official-2026.json"
+    "fixtures/claude-official-2026.json",
+    "fixtures/personal-archive-v1-synthetic.json"
   ];
 
   async function loadDemoLibrary(fetcher) {
@@ -981,15 +1184,13 @@ window.OD = window.OD || {};
         if (!response?.ok) continue;
         const parsed = await OD.registry.parseJSON(await response.json());
         if (!parsed?.recognized) continue;
-        loadArchive(parsed.archive, `示例 · ${parsed.adapter.label}`);
+        loadArchive(parsed.archive, t("demo.sourceLabel", { label: parsed.archive?.source?.sourceLabel || parsed.adapter.label }));
         added += 1;
       } catch (error) {
         console.warn("示例文件载入失败", url, error);
       }
     }
-    setStatus(added
-      ? `已载入合成示例书库；每个示例来源都可以随时用 × 移除。`
-      : "示例文件载入失败；请检查网络后重试。", !added);
+    setStatus(added ? t("demo.loaded") : t("demo.failed"), !added);
     return added;
   }
 
@@ -999,7 +1200,7 @@ window.OD = window.OD || {};
     const sourceLabelOf = conversation => state.library.sourceForConversation(conversation)?.label || "";
     if (["current-markdown", "current-json", "current-html"].includes(kind)) {
       if (!state.current) {
-        setStatus("先打开一段对话，再导出。", true);
+        setStatus(t("export.needConversation"), true);
         return null;
       }
       const title = displayConversationTitle(state.current);
@@ -1015,12 +1216,12 @@ window.OD = window.OD || {};
         content: OD.exporter.conversationToJSON(state.current) };
     }
     if (!state.filtered.length) {
-      setStatus("当前列表是空的；调整筛选后再导出。", true);
+      setStatus(t("export.emptyList"), true);
       return null;
     }
     const stamp = new Date().toISOString().slice(0, 10);
     const listName = extension =>
-      OD.exporter.safeFilename(`our-dialogues-${stamp}（${state.filtered.length} 段）`, extension);
+      OD.exporter.safeFilename(t("export.listFilename", { stamp, count: state.filtered.length }), extension);
     if (kind === "list-markdown") {
       return { filename: listName("md"), mimeType: "text/markdown",
         content: OD.exporter.conversationsToMarkdown(state.filtered, { sourceLabelOf }) };
@@ -1047,7 +1248,7 @@ window.OD = window.OD || {};
   function triggerDownload(payload) {
     if (!payload) return false;
     if (typeof document.createElement !== "function" || typeof Blob === "undefined" || !URL?.createObjectURL) {
-      setStatus("这个环境无法触发下载。", true);
+      setStatus(t("export.unsupported"), true);
       return false;
     }
     const url = URL.createObjectURL(new Blob([payload.content], { type: payload.mimeType }));
@@ -1058,7 +1259,7 @@ window.OD = window.OD || {};
     link.click();
     link.remove?.();
     setTimeout(() => URL.revokeObjectURL(url), 4000);
-    setStatus(`已导出 ${payload.filename}。`);
+    setStatus(t("export.done", { filename: payload.filename }));
     return true;
   }
 
@@ -1070,7 +1271,7 @@ window.OD = window.OD || {};
     const star = $("favoriteToggle");
     if (star) {
       const active = state.current ? OD.organization.isFavorite(state.organization, state.current.id) : false;
-      star.textContent = active ? "⭐ 已收藏" : "☆ 收藏";
+      star.textContent = active ? t("organize.favorited") : t("organize.favorite");
       star.setAttribute?.("aria-pressed", String(active));
     }
     $("favoritesFilter")?.setAttribute?.("aria-pressed", String(!!state.favoritesOnly));
@@ -1079,8 +1280,8 @@ window.OD = window.OD || {};
       const tags = OD.organization.allTags(state.organization);
       if (state.tagFilter && !tags.some(item => item.tag === state.tagFilter)) state.tagFilter = "";
       filter.innerHTML = [
-        `<option value="">全部标签</option>`,
-        ...tags.map(item => `<option value="${esc(item.tag)}">${esc(item.tag)}（${item.count}）</option>`)
+        `<option value="">${esc(t("library.allTags"))}</option>`,
+        ...tags.map(item => `<option value="${esc(item.tag)}">${esc(t("library.tagOption", { tag: item.tag, count: item.count }))}</option>`)
       ].join("");
       filter.value = state.tagFilter;
     }
@@ -1088,12 +1289,12 @@ window.OD = window.OD || {};
 
   function toggleFavorite(conversationId = state.current?.id) {
     if (!conversationId) {
-      setStatus("先打开一段对话，再收藏。", true);
+      setStatus(t("organize.needConversation"), true);
       return false;
     }
     state.organization = OD.organization.toggleFavorite(state.organization, conversationId);
     const active = OD.organization.isFavorite(state.organization, conversationId);
-    setStatus(active ? "⭐ 已收藏这段对话。" : "已取消收藏。");
+    setStatus(active ? t("organize.favoritedStatus") : t("organize.unfavorited"));
     syncOrganizeControls();
     renderList();
     void saveReaderState();
@@ -1129,18 +1330,18 @@ window.OD = window.OD || {};
     const suggestions = $("tagSuggestions");
     if (!chips || !suggestions) return;
     if (!state.current) {
-      chips.innerHTML = `<span class="tag-empty">先打开一段对话。</span>`;
+      chips.innerHTML = `<span class="tag-empty">${esc(t("organize.tagNeedConversation"))}</span>`;
       suggestions.innerHTML = "";
       return;
     }
     const current = OD.organization.tagsOf(state.organization, state.current.id);
     chips.innerHTML = current.length
-      ? current.map(tag => `<span class="tag-chip">${esc(tag)}<button type="button" data-remove-tag="${esc(tag)}" aria-label="移除标签 ${esc(tag)}">✕</button></span>`).join("")
-      : `<span class="tag-empty">还没有标签。</span>`;
+      ? current.map(tag => `<span class="tag-chip">${esc(tag)}<button type="button" data-remove-tag="${esc(tag)}" aria-label="${esc(t("organize.removeTagAria", { tag }))}">✕</button></span>`).join("")
+      : `<span class="tag-empty">${esc(t("organize.noTags"))}</span>`;
     const others = OD.organization.allTags(state.organization)
       .filter(item => !current.includes(item.tag)).slice(0, 8);
     suggestions.innerHTML = others.length
-      ? `<span class="tag-suggest-label">已有：</span>` + others.map(item =>
+      ? `<span class="tag-suggest-label">${esc(t("organize.existing"))}</span>` + others.map(item =>
           `<button type="button" class="tag-suggest" data-add-tag="${esc(item.tag)}">${esc(item.tag)}</button>`).join("")
       : "";
     [...document.querySelectorAll("#tagChips [data-remove-tag]")].forEach(button => {
@@ -1183,14 +1384,14 @@ window.OD = window.OD || {};
     syncSearchScope();
     if (!query) {
       countElement.textContent = "";
-      results.innerHTML = `<div class="bookmarks-empty">输入关键词后回车。「当前对话」搜正在读的这一段，「全部书库」搜所有来源。</div>`;
+      results.innerHTML = `<div class="bookmarks-empty">${esc(t("search.hint"))}</div>`;
       return [];
     }
     let outcome;
     if (state.searchScope === "current") {
       if (!state.current) {
         countElement.textContent = "";
-        results.innerHTML = `<div class="bookmarks-empty">先打开一段对话，或切换到「全部书库」。</div>`;
+        results.innerHTML = `<div class="bookmarks-empty">${esc(t("search.needConversation"))}</div>`;
         return [];
       }
       outcome = OD.messageSearch.searchConversation(state.current, query);
@@ -1207,16 +1408,27 @@ window.OD = window.OD || {};
     const { hits, truncated } = outcome;
     countElement.textContent = hits.length ? `${hits.length}${truncated ? "+" : ""}` : "";
     if (!hits.length) {
-      results.innerHTML = `<div class="bookmarks-empty">没搜到。${state.searchScope === "current" ? "可以试试「全部书库」范围。" : ""}</div>`;
+      results.innerHTML = `<div class="bookmarks-empty">${esc(state.searchScope === "current" ? t("search.noHitsCurrentScope") : t("search.noHits"))}</div>`;
       return hits;
     }
-    const titles = new Map((state.archive?.conversations || []).map(conversation =>
-      [conversation.id, displayConversationTitle(conversation)]
+    const conversationsById = new Map((state.archive?.conversations || []).map(conversation =>
+      [conversation.id, conversation]
     ));
+    /* Personal documents announce provenance as 集合 · 条目 — never a fake
+       speaker prefix; chats keep their title · speaker form. */
+    const hitLabel = hit => {
+      const conversation = conversationsById.get(hit.conversationId);
+      if (!conversation) return String(hit.conversationId);
+      if (isDocumentConversation(conversation)) {
+        return [conversation.context?.sourceMetadata?.collectionName, displayConversationTitle(conversation)]
+          .filter(Boolean).join(" · ");
+      }
+      return `${displayConversationTitle(conversation)}${hit.speaker ? ` · ${hit.speaker}` : ""}`;
+    };
     results.innerHTML = [
-      truncated ? `<div class="bookmarks-empty">命中太多，只列前 ${OD.messageSearch.DEFAULT_LIMIT} 处；换个更具体的词。</div>` : "",
+      truncated ? `<div class="bookmarks-empty">${esc(t("search.truncated", { limit: OD.messageSearch.DEFAULT_LIMIT }))}</div>` : "",
       ...hits.map(hit => `<div class="search-hit" data-search-conversation="${esc(hit.conversationId)}" data-search-message="${esc(hit.messageId)}">
-        <div class="bookmark-meta">${esc(titles.get(hit.conversationId) || hit.conversationId)}${hit.speaker ? ` · ${esc(hit.speaker)}` : ""}</div>
+        <div class="bookmark-meta">${esc(hitLabel(hit))}</div>
         <div class="search-snippet">${hit.before ? "…" : ""}${esc(hit.before)}<b>${esc(hit.match)}</b>${esc(hit.after)}…</div>
       </div>`)
     ].join("");
@@ -1243,8 +1455,8 @@ window.OD = window.OD || {};
       state.searchSourceId = "all";
     }
     control.innerHTML = [
-      `<option value="all">全部来源</option>`,
-      ...sources.map(source => `<option value="${esc(source.id)}">${esc(source.label)}（${source.conversations.length}）</option>`)
+      `<option value="all">${esc(t("library.allSources"))}</option>`,
+      ...sources.map(source => `<option value="${esc(source.id)}">${esc(t("library.sourceOption", { label: source.label, count: source.conversations.length }))}</option>`)
     ].join("");
     control.value = state.searchSourceId;
   }
@@ -1274,7 +1486,7 @@ window.OD = window.OD || {};
     if (!list) return;
     const sources = state.library.sources();
     if (!sources.length) {
-      list.innerHTML = `<div class="bookmarks-empty">还没有来源；用「＋」菜单里的导入添加。</div>`;
+      list.innerHTML = `<div class="bookmarks-empty">${esc(t("source.manageEmpty"))}</div>`;
       return;
     }
     list.innerHTML = sources.map(source => {
@@ -1282,11 +1494,11 @@ window.OD = window.OD || {};
       return `<div class="source-manage-row">
         <div class="source-manage-copy">
           <div class="source-manage-label">${esc(source.label)}</div>
-          <small>${source.conversations.length} 段${source.importDetails ? ` · ${esc(source.importDetails)}` : ""}</small>
+          <small>${esc(t("conv.segmentCount", { count: source.conversations.length }))}${source.importDetails ? ` · ${esc(source.importDetails)}` : ""}</small>
         </div>
         <span class="source-manage-actions">
-          ${canReconnect ? `<button type="button" data-reconnect-source-row="${esc(source.id)}" title="重新连接本地文件或文件夹">重连</button>` : ""}
-          <button type="button" data-remove-source="${esc(source.id)}" title="从书库移除这个来源">移除</button>
+          ${canReconnect ? `<button type="button" data-reconnect-source-row="${esc(source.id)}" title="${esc(t("source.reconnectTitle"))}">${esc(t("source.reconnectShort"))}</button>` : ""}
+          <button type="button" data-remove-source="${esc(source.id)}" title="${esc(t("source.removeTitle"))}">${esc(t("source.remove"))}</button>
         </span>
       </div>`;
     }).join("");
@@ -1302,8 +1514,8 @@ window.OD = window.OD || {};
     const selected = sources.some(source => source.id === state.sourceFilter) ? state.sourceFilter : "all";
     state.sourceFilter = selected;
     $("sourceFilter").innerHTML = [
-      `<option value="all">全部来源（${sources.length}）</option>`,
-      ...sources.map(source => `<option value="${esc(source.id)}">${esc(source.label)}（${source.conversations.length}）</option>`)
+      `<option value="all">${esc(t("library.allSourcesCount", { count: sources.length }))}</option>`,
+      ...sources.map(source => `<option value="${esc(source.id)}">${esc(t("library.sourceOption", { label: source.label, count: source.conversations.length }))}</option>`)
     ].join("");
     $("sourceFilter").value = selected;
     $("clearSources").disabled = sources.length === 0;
@@ -1372,7 +1584,7 @@ window.OD = window.OD || {};
       });
     });
 
-    $("archiveMeta").textContent = `${state.filtered.length} / ${all.length} 段对话 · ${state.library.size} 个来源`;
+    $("archiveMeta").textContent = t("library.archiveMeta", { filtered: state.filtered.length, total: all.length, sources: state.library.size });
     renderBookmarks();
     renderAnnotations();
     renderRecent();
@@ -1443,8 +1655,8 @@ window.OD = window.OD || {};
     const canOpen = !!(info.resolved?.available && state.assetSession?.objectURLs?.get);
     const source = state.library.sourceForConversation(state.current);
     const canReconnect = !canOpen && source?.assetMode === "local-reconnect";
-    const availability = canOpen ? "滚动到此处时载入" : (canReconnect ? "重新连接来源后打开" : "仅显示附件信息");
-    const reconnect = canReconnect ? `<button class="attachment-reconnect" type="button" data-reconnect-source="${esc(source.id)}">重新连接来源</button>` : "";
+    const availability = canOpen ? t("attachment.lazyLoad") : (canReconnect ? t("attachment.reconnectToOpen") : t("attachment.infoOnly"));
+    const reconnect = canReconnect ? `<button class="attachment-reconnect" type="button" data-reconnect-source="${esc(source.id)}">${esc(t("attachment.reconnectSource"))}</button>` : "";
 
     if (info.kind === "file") {
       return `<div class="attachment attachment-file lazy-attachment${canOpen ? "" : " is-unavailable"}" data-attachment-index="${index}">
@@ -1487,7 +1699,7 @@ window.OD = window.OD || {};
 
     try {
       const url = await Promise.resolve(manager.get(attachment));
-      if (!url) throw new Error("本地归档中没有找到这个附件文件。");
+      if (!url) throw new Error(t("attachment.notFound"));
       if (token !== state.renderToken || !element.isConnected) {
         // The render transition already revoked its previous URL set. Revoking
         // by attachment here could accidentally revoke a newer render's URL
@@ -1500,7 +1712,7 @@ window.OD = window.OD || {};
         link.href = url;
         link.download = info.name;
         link.removeAttribute("aria-disabled");
-        link.querySelector(".attachment-action").textContent = "下载";
+        link.querySelector(".attachment-action").textContent = t("attachment.download");
       } else {
         const media = document.createElement(info.kind === "image" ? "img" : info.kind);
         media.src = url;
@@ -1526,9 +1738,9 @@ window.OD = window.OD || {};
       element.classList.remove("is-loading");
       element.classList.add("is-error");
       const loading = element.querySelector(".attachment-loading");
-      if (loading) loading.textContent = error?.message || "附件无法打开";
+      if (loading) loading.textContent = error?.message || t("attachment.openFailed");
       const action = element.querySelector(".attachment-action");
-      if (action) action.textContent = "无法打开";
+      if (action) action.textContent = t("attachment.cantOpen");
     }
   }
 
@@ -1583,11 +1795,11 @@ window.OD = window.OD || {};
   function solVoiceMarkup(clip, index) {
     return `<figure class="solvoice-player lazy-solvoice" data-solvoice-index="${index}">
       <figcaption class="solvoice-caption">
-        <span>${esc(clip.voiceLabel || "语音")}</span>
+        <span>${esc(clip.voiceLabel || t("voice.fallbackLabel"))}</span>
         <small title="Reader v1 only attaches confidence=strong mappings">local · strong</small>
       </figcaption>
       <div class="solvoice-viewport">
-        <div class="solvoice-loading">Ready when this message scrolls into view</div>
+        <div class="solvoice-loading">${esc(t("voice.lazyReady"))}</div>
       </div>
     </figure>`;
   }
@@ -1600,13 +1812,13 @@ window.OD = window.OD || {};
 
     try {
       const url = await Promise.resolve(manager.get(clip));
-      if (!url) throw new Error("The local SolVoice audio file is unavailable.");
+      if (!url) throw new Error(t("voice.fileUnavailable"));
       if (token !== state.renderToken || !element.isConnected) return;
       const audio = document.createElement("audio");
       audio.controls = true;
       audio.preload = "metadata";
       audio.src = url;
-      audio.setAttribute("aria-label", "SolVoice local audio");
+      audio.setAttribute("aria-label", t("voice.playerAria"));
       audio.addEventListener("error", () => element.classList.add("is-unavailable"), { once: true });
       element.querySelector(".solvoice-viewport").replaceChildren(audio);
       element.dataset.solvoiceState = "loaded";
@@ -1617,7 +1829,7 @@ window.OD = window.OD || {};
       element.dataset.solvoiceState = "unavailable";
       element.classList.add("is-unavailable");
       const loading = element.querySelector(".solvoice-loading");
-      if (loading) loading.textContent = "Local audio unavailable";
+      if (loading) loading.textContent = t("voice.unavailable");
     }
   }
 
@@ -1658,7 +1870,7 @@ window.OD = window.OD || {};
     const notes = Array.isArray(block.notes) ? block.notes.filter(Boolean) : [];
     const items = Array.isArray(block.items) ? block.items.filter(item => item?.text) : [];
     const progress = block.progress && Number.isFinite(Number(block.progress.value))
-      ? { label: block.progress.label || "进度", value: Math.max(0, Math.min(100, Number(block.progress.value))) }
+      ? { label: block.progress.label || t("richblock.progressFallback"), value: Math.max(0, Math.min(100, Number(block.progress.value))) }
       : null;
     const variant = /^[a-z0-9-]+$/.test(String(block.variant || "")) ? String(block.variant) : "generic";
     const kind = /^[a-z0-9-]+$/.test(String(block.kind || "")) ? String(block.kind) : "status-card";
@@ -1676,7 +1888,7 @@ window.OD = window.OD || {};
       return `<section class="source-rich-block source-rich-hud source-rich-${variant}"><header><div>${block.title ? `<strong>${esc(block.title)}</strong>` : ""}${block.subtitle ? `<small>${esc(block.subtitle)}</small>` : ""}</div></header>${content}</section>`;
     }
     if (block.kind === "details") {
-      return `<details class="source-rich-block source-rich-details source-rich-${variant}"><summary>${esc(block.title || "详情")}</summary><div class="source-rich-details-body">${content}</div></details>`;
+      return `<details class="source-rich-block source-rich-details source-rich-${variant}"><summary>${esc(block.title || t("richblock.detailsFallback"))}</summary><div class="source-rich-details-body">${content}</div></details>`;
     }
     return `<section class="source-rich-block source-rich-status source-rich-kind-${kind} source-rich-${variant}">${block.title ? `<header>${esc(block.title)}</header>` : ""}${block.subtitle ? `<div class="source-rich-subtitle">${esc(block.subtitle)}</div>` : ""}${content}</section>`;
   }
@@ -1714,8 +1926,8 @@ window.OD = window.OD || {};
       return solVoiceMarkup(clip, index);
     }).join("") || "";
     const traceLabel = message.metadata?.sourceTraceKind === "official-tools"
-      ? "Tool activity · recorded in the official export"
-      : "Exporter source trace · heuristic, not official thinking";
+      ? t("trace.official")
+      : t("trace.heuristic");
     const sourceTraceHTML = sourceTrace.length ? `<div class="source-trace"><strong>${esc(traceLabel)}</strong>\n${sourceTrace.map(item => item.type === "marker"
       ? `<span class="source-trace-marker">[${esc(item.marker || "marker")}] ${esc(item.text)}</span>`
       : esc(item.text)).join("\n\n")}</div>` : "";
@@ -1724,7 +1936,7 @@ window.OD = window.OD || {};
       ${contentHTML}
       ${attachmentHTML ? `<div class="attachments">${attachmentHTML}</div>` : ""}
       ${solVoiceHTML ? `<div class="solvoice-clips">${solVoiceHTML}</div>` : ""}
-      ${(thinking || recaps.length) ? `<div class="thinking"><strong>编者附记 · Thinking / Trace（来源导出）</strong>${recaps.length ? `\n${esc(recaps.join(" · "))}` : ""}${thinking ? `\n\n${esc(thinking)}` : ""}</div>` : ""}
+      ${(thinking || recaps.length) ? `<div class="thinking"><strong>${esc(t("message.thinkingLabel"))}</strong>${recaps.length ? `\n${esc(recaps.join(" · "))}` : ""}${thinking ? `\n\n${esc(thinking)}` : ""}</div>` : ""}
       ${sourceTraceHTML}
       ${message.createdAt ? `<div class="message-time">${esc(fmtDate(message.createdAt))}</div>` : ""}
     </section>`;
@@ -1738,8 +1950,8 @@ window.OD = window.OD || {};
     const hasNext = state.pageIndex < state.pages.length - 1 || (conversationIndex >= 0 && conversationIndex < order.length - 1);
     $("previousPage").disabled = !hasPrevious;
     $("nextPage").disabled = !hasNext;
-    $("previousPage").textContent = state.pageIndex > 0 ? "← 上一页" : "← 上一段";
-    $("nextPage").textContent = state.pageIndex < state.pages.length - 1 ? "下一页 →" : "下一段 →";
+    $("previousPage").textContent = state.pageIndex > 0 ? t("pager.prevPage") : t("pager.prevConversation");
+    $("nextPage").textContent = state.pageIndex < state.pages.length - 1 ? t("pager.nextPage") : t("pager.nextConversation");
     $("pageIndicator").hidden = !pageMode;
     const progressLabel = $("readingProgressLabel");
     if (progressLabel) progressLabel.hidden = pageMode;
@@ -1791,11 +2003,23 @@ window.OD = window.OD || {};
     $("currentTitle").textContent = displayedTitle;
     $("readerTitle").textContent = displayedTitle;
 
+    const documentMode = isDocumentConversation(c);
+    document.body.classList.toggle("document-mode", documentMode);
     const bits = [];
-    if (source?.label) bits.push(source.label);
-    if (c.context?.room?.name) bits.push(c.context.room.name);
-    if (c.createdAt) bits.push(fmtDate(c.createdAt));
-    bits.push(`${c.messages.length} 段`);
+    if (documentMode) {
+      /* A personal document reads as a page: collection · author (· date
+         when the title itself is not already the date). No segment count —
+         the body is one document, not a transcript. */
+      const sourceMetadata = c.context?.sourceMetadata || {};
+      if (sourceMetadata.collectionName) bits.push(sourceMetadata.collectionName);
+      if (sourceMetadata.authorName) bits.push(sourceMetadata.authorName);
+      if (c.createdAt && sourceMetadata.titleSource !== "date") bits.push(fmtDateOnly(c.createdAt));
+    } else {
+      if (source?.label) bits.push(source.label);
+      if (c.context?.room?.name) bits.push(c.context.room.name);
+      if (c.createdAt) bits.push(fmtDate(c.createdAt));
+      bits.push(t("conv.segmentCount", { count: c.messages.length }));
+    }
     $("readerMeta").innerHTML = bits.map(x => `<span>${esc(x)}</span>`).join('<span class="meta-dot" aria-hidden="true"> · </span>');
 
     state.pages = OD.readerParity.paginateMessages(c.messages, {
@@ -1823,7 +2047,7 @@ window.OD = window.OD || {};
     closeSidebarOnNarrow();
     syncOrganizeControls();
     if (!$("tagEditor")?.hidden) renderTagEditor();
-    if (resumed && switching) setStatus("回到上次读到的地方。");
+    if (resumed && switching) setStatus(t("status.resumedPosition"));
     void saveReaderState();
   }
 
@@ -1910,7 +2134,7 @@ window.OD = window.OD || {};
   async function loadSolVoiceMapping(file) {
     upsertVoiceMapping(OD.solVoiceSidecar.parseMapping(await file.text()));
     const session = rebuildSolVoiceSession();
-    state.statusText = state.archiveStatusText;
+    state.statusText = archiveStatusText();
     renderStatus();
     return session;
   }
@@ -1933,7 +2157,7 @@ window.OD = window.OD || {};
       )
     );
     const session = rebuildSolVoiceSession();
-    state.statusText = state.archiveStatusText;
+    state.statusText = archiveStatusText();
     renderStatus();
     return session;
   }
@@ -1949,18 +2173,18 @@ window.OD = window.OD || {};
     state.solVoiceSession = null;
     state.solVoiceMapping = null;
     state.solVoiceAudioFiles = [];
-    state.statusText = state.archiveStatusText;
+    state.statusText = archiveStatusText();
     state.statusError = false;
     if (currentId && state.archive) openConversation(currentId);
     renderStatus();
   }
 
   function loadArchive(archive, adapterLabel, assetSession=null, importDetails="", options={}) {
-    if (!archive?.conversations?.length) throw new Error("识别成功，但没有找到任何对话。");
+    if (!archive?.conversations?.length) throw new Error(t("error.noConversations"));
     const expected = options.expectedSourceId ? state.library.get(options.expectedSourceId) : null;
     if (expected && expected.fingerprint !== OD.sourceLibrary.archiveFingerprint(archive)) {
       OD.sourceLibrary._internals.disposeAssetSession(assetSession);
-      throw new Error("选择的文件与需要重新连接的来源不一致；文字书库未改变。");
+      throw new Error(t("error.reconnectMismatch"));
     }
     const added = state.library.add({
       archive,
@@ -1976,12 +2200,27 @@ window.OD = window.OD || {};
     state.current = null;
     rebuildSolVoiceSession({ rerender: false });
     const detail = importDetails ? ` · ${importDetails}` : "";
-    state.archiveStatusText = added.reconnected
-      ? `已重新连接：${added.source.label} · 聊天文字未重复导入`
-      : added.duplicate
-      ? `已在书库中：${adapterLabel} · 未重复导入 · 共 ${state.library.size} 个来源`
-      : `已加入：${adapterLabel} · ${added.source.conversations.length} 段对话${detail} · 共 ${state.library.size} 个来源`;
-    setStatus(state.archiveStatusText);
+    const personalImport = archive?.source?.platform === "personal-archive"
+      ? archive.source.personalImport
+      : null;
+    if (added.reconnected) {
+      setArchiveStatus("status.reconnected", { label: added.source.label });
+    } else if (added.duplicate) {
+      setArchiveStatus("status.duplicate", { label: adapterLabel, count: state.library.size });
+    } else if (personalImport) {
+      const summary = [
+        t("personal.collectionsCount", { count: personalImport.collections }),
+        t("personal.entriesCount", { count: personalImport.entries })
+      ].join(t("common.listComma"));
+      setArchiveStatus("personal.addedStatus", { label: adapterLabel, summary, sources: state.library.size });
+    } else {
+      setArchiveStatus("status.added", {
+        label: adapterLabel,
+        conversations: added.source.conversations.length,
+        detail,
+        sources: state.library.size
+      });
+    }
     renderSourceControls();
     renderList();
     const first = OD.conversationOrder.sortConversations(added.source.conversations, state.sortMode)[0];
@@ -1993,10 +2232,11 @@ window.OD = window.OD || {};
   function showEmptyLibrary() {
     state.current = null;
     state.assetSession = null;
+    document.body.classList.toggle("document-mode", false);
     $("reader").classList.add("hidden");
     $("libraryHome")?.classList?.add?.("hidden");
     $("welcome").classList.remove("hidden");
-    $("currentTitle").textContent = "尚未载入档案";
+    $("currentTitle").textContent = t("reader.noArchive");
     $("readerTitle").textContent = "";
     $("readerMeta").innerHTML = "";
     $("messages").innerHTML = "";
@@ -2013,7 +2253,7 @@ window.OD = window.OD || {};
     void state.persistence?.removeSource?.(source.id)
       .then(() => refreshAcceptanceAudit())
       .catch(error => {
-        state.persistenceError = error?.message || "移除本地来源失败";
+        state.persistenceError = error?.message || t("error.removeSource");
         renderLocalLibraryStatus();
       });
     state.archive = state.library.size ? state.library.archive() : null;
@@ -2025,10 +2265,8 @@ window.OD = window.OD || {};
     const first = OD.conversationOrder.sortConversations(state.archive?.conversations || [], state.sortMode)[0];
     if (first) openConversation(first.id);
     else showEmptyLibrary();
-    state.archiveStatusText = state.library.size
-      ? `已移除：${source.label} · 书库剩余 ${state.library.size} 个来源`
-      : "书库已清空；本页仍不会上传任何文件。";
-    setStatus(state.archiveStatusText);
+    if (state.library.size) setArchiveStatus("status.removed", { label: source.label, count: state.library.size });
+    else setArchiveStatus("status.clearedEmpty");
     void saveReaderState();
     return true;
   }
@@ -2048,13 +2286,11 @@ window.OD = window.OD || {};
     void state.persistence?.clearSources?.()
       .then(() => refreshAcceptanceAudit())
       .catch(error => {
-        state.persistenceError = error?.message || "清除本地书库失败";
+        state.persistenceError = error?.message || t("error.clearLibrary");
         renderLocalLibraryStatus();
       });
-    state.archiveStatusText = count
-      ? `已清空 ${count} 个来源；本地持久书库也已清除。`
-      : "书库目前为空。";
-    setStatus(state.archiveStatusText);
+    if (count) setArchiveStatus("status.clearedAll", { count });
+    else setArchiveStatus("status.emptyLibrary");
     void saveReaderState();
     return count;
   }
@@ -2068,12 +2304,12 @@ window.OD = window.OD || {};
   }
 
   async function loadFile(file, options={}) {
-    setStatus(`正在本地解析：${file.name}`);
+    setStatus(t("status.parsing", { name: file.name }));
     if (/\.zip$/i.test(file.name) || file.type === "application/zip") {
       const result = requireRecognized(await OD.registry.parseZIP(file));
       return loadArchive(
         result.archive,
-        result.adapter.label,
+        result.archive?.source?.sourceLabel || result.adapter.label,
         result.assetSession || null,
         result.importDetails || "",
         { ...options, reconnectMode: "file" }
@@ -2082,7 +2318,9 @@ window.OD = window.OD || {};
     const text = await file.text();
     const data = JSON.parse(text.replace(/^\uFEFF/, ""));
     const result = requireRecognized(await OD.registry.parseJSON(data));
-    return loadArchive(result.archive, result.adapter.label, null, "", { ...options, reconnectMode: "file" });
+    /* Adapters may name the source themselves (a personal archive shows its
+       own archive name instead of the generic adapter label). */
+    return loadArchive(result.archive, result.archive?.source?.sourceLabel || result.adapter.label, null, "", { ...options, reconnectMode: "file" });
   }
 
   /*
@@ -2094,10 +2332,10 @@ window.OD = window.OD || {};
   */
   async function loadSourceFolder(files, options={}) {
     if (typeof OD.sourceFolder?.parse !== "function") {
-      throw new Error("当前版本缺少来源文件夹导入器。");
+      throw new Error(t("error.noFolderImporter"));
     }
 
-    setStatus(`正在识别来源文件夹（${files.length} 个文件）…`);
+    setStatus(t("status.scanningFolder", { count: files.length }));
     const result = await OD.sourceFolder.parse(files);
     return loadArchive(
       result.archive,
@@ -2156,18 +2394,29 @@ window.OD = window.OD || {};
       state.pendingReconnectSourceId = source.id;
       if (source.reconnectMode === "file") $("fileInput").click();
       else $("folderInput").click();
-      setStatus(`请选择“${source.label}”原来的本地${source.reconnectMode === "file" ? "文件" : "文件夹"}；聊天文字仍可阅读。`);
+      setStatus(t("status.reconnectPrompt", {
+        label: source.label,
+        kind: t(source.reconnectMode === "file" ? "common.file" : "common.folder")
+      }));
       return true;
     } catch (error) {
       if (error?.name === "AbortError") return false;
       console.error(error);
-      setStatus(error?.message || "无法重新连接本地来源。", true);
+      setStatus(error?.message || t("error.reconnectFailed"), true);
       return false;
     }
   }
 
   function applyReaderSettings(settings) {
     if (!settings || typeof settings !== "object") return;
+    if (OD.i18n) {
+      const nextLocale = OD.i18n.normalizeSetting(settings.locale);
+      state.locale = nextLocale;
+      const control = $("uiLocale");
+      if (control) control.value = nextLocale;
+      const before = OD.i18n.currentLocale();
+      if (OD.i18n.setLocale(nextLocale) !== before) applyLocaleToChrome();
+    }
     state.sortMode = ["asc", "desc"].includes(settings.conversationSort) ? settings.conversationSort : state.sortMode;
     $("hideUser").checked = !!settings.hideUser;
     $("showThinking").checked = !!settings.showThinking;
@@ -2238,17 +2487,17 @@ window.OD = window.OD || {};
           : null;
         openConversation(recent.id, { restorePosition: position });
       }
-      state.archiveStatusText = restored.sources.length
-        ? `从本地书库恢复 ${restored.sources.length} 个来源 / ${conversations.length} 段对话；聊天文字可直接阅读。`
-        : "文件只在本机浏览器中解析，不会上传。";
-      setStatus(state.archiveStatusText);
+      if (restored.sources.length) {
+        setArchiveStatus("status.restored", { sources: restored.sources.length, conversations: conversations.length });
+      } else {
+        setArchiveStatus("status.localOnly");
+      }
       state.booted = true;
       return { sourceCount: restored.sources.length, conversationCount: conversations.length };
     } catch (error) {
       console.error("Could not restore the local library", error);
-      state.persistenceError = `${error?.message || "恢复失败"}；可清除本地书库后重新导入`;
-      state.archiveStatusText = "本地书库恢复失败；Reader 仍可继续添加来源。";
-      setStatus(state.archiveStatusText, true);
+      state.persistenceError = t("status.restoreFailedDetail", { message: error?.message || t("error.restore") });
+      setArchiveStatus("status.restoreFailed", null, true);
       state.booted = true;
       return { sourceCount: 0, conversationCount: 0, error };
     }
@@ -2294,7 +2543,7 @@ window.OD = window.OD || {};
     } catch (error) {
       if (error?.name === "AbortError") return;
       console.error(error);
-      setStatus(error?.message || "无法打开来源文件夹。", true);
+      setStatus(error?.message || t("error.openFolderFailed"), true);
     }
   });
 
@@ -2333,7 +2582,7 @@ window.OD = window.OD || {};
         await state.persistence.reset();
         state.persistenceError = "";
       } catch (error) {
-        setStatus(error?.message || "无法重置本地书库。", true);
+        setStatus(error?.message || t("error.resetLibrary"), true);
         return;
       }
     }
@@ -2365,6 +2614,7 @@ window.OD = window.OD || {};
     localStorage.setItem("our-dialogues.theme", event.target.value);
     void saveReaderState();
   });
+  $("uiLocale")?.addEventListener?.("change", event => setUiLocale(event.target.value));
   function updateReaderPreference(key, value, { rerender = true } = {}) {
     const position = readerSettings().readingPosition;
     state.readerPrefs = OD.readerParity.normalizePreferences({ ...state.readerPrefs, [key]: value });
@@ -2919,18 +3169,30 @@ window.OD = window.OD || {};
     hideAnnotationUI();
   });
 
-  $("annotationColors").innerHTML = OD.annotations.COLORS.map(color =>
-    `<button type="button" class="annotation-swatch hl-${color}" data-annotation-color="${color}" title="${
-      ({ yellow: "黄", green: "绿", pink: "粉", blue: "蓝", purple: "紫" })[color] || color
-    }" aria-label="荧光笔：${color}"></button>`
-  ).join("");
-  [...document.querySelectorAll("[data-annotation-color]")].forEach(swatch => {
-    swatch.addEventListener("click", () => {
-      if (!annotationEditorState) return;
-      annotationEditorState.color = swatch.dataset.annotationColor;
-      syncAnnotationSwatches(annotationEditorState.color);
+  /* Rebuilt on locale change as well as at boot; fresh buttons get fresh
+     listeners, so re-running never double-binds an existing element. */
+  const ANNOTATION_COLOR_KEYS = {
+    yellow: "annotate.colorYellow",
+    green: "annotate.colorGreen",
+    pink: "annotate.colorPink",
+    blue: "annotate.colorBlue",
+    purple: "annotate.colorPurple"
+  };
+  function renderAnnotationSwatches() {
+    $("annotationColors").innerHTML = OD.annotations.COLORS.map(color =>
+      `<button type="button" class="annotation-swatch hl-${color}" data-annotation-color="${color}" title="${
+        esc(ANNOTATION_COLOR_KEYS[color] ? t(ANNOTATION_COLOR_KEYS[color]) : color)
+      }" aria-label="${esc(t("annotate.colorAria", { color }))}"></button>`
+    ).join("");
+    [...document.querySelectorAll("[data-annotation-color]")].forEach(swatch => {
+      swatch.addEventListener("click", () => {
+        if (!annotationEditorState) return;
+        annotationEditorState.color = swatch.dataset.annotationColor;
+        syncAnnotationSwatches(annotationEditorState.color);
+      });
     });
-  });
+  }
+  renderAnnotationSwatches();
   $("main").addEventListener("scroll", () => {
     trackToolbarOnScroll();
     void saveReaderState();
@@ -3055,6 +3317,19 @@ window.OD = window.OD || {};
     auditPersistentLibrary: refreshAcceptanceAudit
   };
 
+  /* Resolve the UI locale before the first render pass: the stored setting
+     rides in the reader-state mirror (missing or legacy values normalize to
+     "auto"), and applying the static dictionary is visually a no-op for
+     zh-CN because the markup's inline text already is the zh-CN copy. */
+  if (OD.i18n) {
+    state.locale = OD.i18n.normalizeSetting(readSettingsMirror()?.locale);
+    OD.i18n.setLocale(state.locale);
+    OD.i18n.applyStatic(document);
+    $("currentTitle").textContent = OD.i18n.t("reader.noArchive");
+    const localeControl = $("uiLocale");
+    if (localeControl) localeControl.value = state.locale;
+  }
+
   const savedTheme = localStorage.getItem("our-dialogues.theme");
   if (savedTheme) {
     state.readerPrefs = OD.readerParity.normalizePreferences({ ...state.readerPrefs, theme: savedTheme });
@@ -3063,7 +3338,6 @@ window.OD = window.OD || {};
 
   renderSortControl();
   renderSourceControls();
-  setStatus("文件只在本机浏览器中解析，不会上传。");
-  state.archiveStatusText = state.statusText;
+  setArchiveStatus("status.localOnly");
   OD.app.ready = bootPersistentLibrary();
 })(window.OD);

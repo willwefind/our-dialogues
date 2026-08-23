@@ -22,25 +22,44 @@ window.OD = window.OD || {};
     return { thinking, trace };
   }
 
+  /* Personal documents export as pages, not transcripts: no speaker lines,
+     a quiet collection · author byline under the title. Gated on the same
+     explicit contentKind marker the Reader uses; chats are untouched.
+     Returns null for ordinary conversations, the byline string (possibly
+     empty) for personal documents. */
+  function documentByline(conversation) {
+    const sourceMetadata = conversation?.context?.sourceMetadata;
+    if (sourceMetadata?.contentKind !== "personal-document") return null;
+    return [sourceMetadata.collectionName, sourceMetadata.authorName]
+      .filter(Boolean).map(String).join(" · ");
+  }
+
   function conversationToMarkdown(conversation, { sourceLabel = "" } = {}) {
+    const byline = documentByline(conversation);
     const lines = [];
     lines.push(`# ${String(conversation.title || conversation.id || "对话")}`);
     lines.push("");
-    if (sourceLabel) lines.push(`- 来源：${sourceLabel}`);
-    if (conversation.createdAt) lines.push(`- 开始时间：${conversation.createdAt}`);
-    lines.push(`- 消息：${(conversation.messages || []).length} 条`);
-    const hidden = countHidden(conversation);
-    if (hidden.thinking || hidden.trace) {
-      const parts = [];
-      if (hidden.thinking) parts.push(`思考 ${hidden.thinking} 条`);
-      if (hidden.trace) parts.push(`工具轨迹 ${hidden.trace} 条`);
-      lines.push(`- 未包含在本导出中：${parts.join(" · ")}（仍保留在原始导出与阅读器中）`);
+    if (byline !== null) {
+      if (byline) lines.push(`*${byline}*`, "");
+    } else {
+      if (sourceLabel) lines.push(`- 来源：${sourceLabel}`);
+      if (conversation.createdAt) lines.push(`- 开始时间：${conversation.createdAt}`);
+      lines.push(`- 消息：${(conversation.messages || []).length} 条`);
+      const hidden = countHidden(conversation);
+      if (hidden.thinking || hidden.trace) {
+        const parts = [];
+        if (hidden.thinking) parts.push(`思考 ${hidden.thinking} 条`);
+        if (hidden.trace) parts.push(`工具轨迹 ${hidden.trace} 条`);
+        lines.push(`- 未包含在本导出中：${parts.join(" · ")}（仍保留在原始导出与阅读器中）`);
+      }
+      lines.push("", "---", "");
     }
-    lines.push("", "---", "");
     for (const message of conversation.messages || []) {
-      const speaker = message.speaker || message.role || "";
-      const time = message.createdAt ? ` · ${message.createdAt}` : "";
-      lines.push(`**${speaker}**${time}`, "");
+      if (byline === null) {
+        const speaker = message.speaker || message.role || "";
+        const time = message.createdAt ? ` · ${message.createdAt}` : "";
+        lines.push(`**${speaker}**${time}`, "");
+      }
       const body = textOf(message.content);
       if (body) lines.push(body, "");
       for (const attachment of message.attachments || []) {
@@ -86,11 +105,14 @@ window.OD = window.OD || {};
             hidden.trace ? `工具轨迹 ${hidden.trace} 条` : ""
           ].filter(Boolean).join(" · ")}（仍保留在原始导出与阅读器中）</p>`
         : "";
-      const meta = [
-        sourceLabelOf?.(conversation) || "",
-        conversation.createdAt || "",
-        `${(conversation.messages || []).length} 条`
-      ].filter(Boolean).map(escapeHTML).join(" · ");
+      const byline = documentByline(conversation);
+      const meta = byline !== null
+        ? escapeHTML(byline)
+        : [
+            sourceLabelOf?.(conversation) || "",
+            conversation.createdAt || "",
+            `${(conversation.messages || []).length} 条`
+          ].filter(Boolean).map(escapeHTML).join(" · ");
       const messages = (conversation.messages || []).map(message => {
         const speaker = escapeHTML(message.speaker || message.role || "");
         const time = message.createdAt ? ` · ${escapeHTML(message.createdAt)}` : "";
@@ -98,9 +120,8 @@ window.OD = window.OD || {};
         const attachments = (message.attachments || [])
           .map(attachment => `<p class="attachment">[附件：${escapeHTML(attachment?.name || "未命名文件")}]</p>`)
           .join("");
-        return `<div class="msg ${message.role === "user" ? "user" : "assistant"}">
-<p class="who">${speaker}${time}</p>
-${body ? htmlParagraphs(body) : ""}${attachments}
+        return `<div class="msg ${byline !== null ? "document" : (message.role === "user" ? "user" : "assistant")}">
+${byline !== null ? "" : `<p class="who">${speaker}${time}</p>\n`}${body ? htmlParagraphs(body) : ""}${attachments}
 </div>`;
       }).join("\n");
       return `<section id="c${index + 1}">
