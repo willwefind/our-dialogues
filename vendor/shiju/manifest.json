@@ -1,0 +1,8 @@
+{
+  "name": "shiju-embed",
+  "version": "0.17.0",
+  "source": "https://github.com/willwefind/shiju",
+  "sourceCommit": "42b5da6b56777695c202299e5b9c17a3f45cc607",
+  "license": "AGPL-3.0",
+  "generatedBy": "tools/sync-shiju-vendor.mjs"
+}

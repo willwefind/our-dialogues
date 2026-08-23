@@ -154,6 +154,7 @@ async function loadAppRuntime(savedSortMode="asc", options={}) {
     "src/core/export.js",
     "src/core/zip-writer.js",
     "src/core/epub.js",
+    "src/core/shiju-embed.js",
     "src/locales/zh-CN.js",
     "src/locales/en.js",
     "src/i18n.js"
