@@ -3055,6 +3055,16 @@ window.OD = window.OD || {};
     auditPersistentLibrary: refreshAcceptanceAudit
   };
 
+  /* Resolve the UI locale before the first render pass: the stored setting
+     rides in the reader-state mirror (missing or legacy values normalize to
+     "auto"), and applying the static dictionary is visually a no-op for
+     zh-CN because the markup's inline text already is the zh-CN copy. */
+  if (OD.i18n) {
+    OD.i18n.setLocale(OD.i18n.normalizeSetting(readSettingsMirror()?.locale));
+    OD.i18n.applyStatic(document);
+    $("currentTitle").textContent = OD.i18n.t("reader.noArchive");
+  }
+
   const savedTheme = localStorage.getItem("our-dialogues.theme");
   if (savedTheme) {
     state.readerPrefs = OD.readerParity.normalizePreferences({ ...state.readerPrefs, theme: savedTheme });

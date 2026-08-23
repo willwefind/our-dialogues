@@ -102,7 +102,7 @@ window.OD = window.OD || {};
   "search.hint": "Type keywords and press Enter. \"This conversation\" searches what you are reading; \"Library\" searches every source.",
   "search.needConversation": "Open a conversation first, or switch to \"Library\".",
   "search.noHits": "Nothing found.",
-  "search.tryLibrary": "Try the \"Library\" scope.",
+  "search.noHitsCurrentScope": "Nothing found. Try the \"Library\" scope.",
   "search.truncated": "Too many hits; showing the first {limit}. Try a more specific term.",
 
   /* ── status line & persistence ── */
@@ -281,6 +281,7 @@ window.OD = window.OD || {};
   "conv.messageCount": { "one": "{count} message", "other": "{count} messages" },
   "conv.segmentCount": { "one": "{count} message", "other": "{count} messages" },
   "conv.unknownYear": "Undated",
+  "conv.unnamedCharacter": "Unnamed character",
   "message.thinkingLabel": "Editor's note · Thinking / Trace (from the export)",
   "trace.official": "Tool activity · recorded in the official export",
   "trace.heuristic": "Exporter source trace · heuristic, not official thinking",

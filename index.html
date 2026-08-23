@@ -9,105 +9,105 @@
 </head>
 <body>
   <aside id="sidebar">
-    <button id="sidebarClose" class="sidebar-close" type="button" aria-label="收起侧栏" title="收起侧栏">✕</button>
+    <button id="sidebarClose" class="sidebar-close" type="button" aria-label="收起侧栏" title="收起侧栏" data-i18n-aria-label="sidebar.collapse" data-i18n-title="sidebar.collapse">✕</button>
     <header class="od-logo">
       <div class="od-wordmark">Our Dialogues</div>
       <div class="od-wordmark-sub">PRIVATE READING ROOM</div>
     </header>
 
-    <nav class="od-primary-nav" aria-label="侧栏模式">
-      <button id="navLibrary" type="button" aria-pressed="true"><span class="od-nav-icon od-icon-directory" aria-hidden="true"></span>书库</button>
-      <button id="navTraces" type="button" aria-pressed="false"><span class="od-nav-icon od-icon-bookmark" aria-hidden="true"></span>阅读痕迹</button>
-      <button id="toolTabSearch" type="button" aria-pressed="false" title="全文搜索"><span class="od-nav-icon od-icon-search" aria-hidden="true"></span>搜索<span id="searchHitCount" class="bookmarks-count"></span></button>
+    <nav class="od-primary-nav" aria-label="侧栏模式" data-i18n-aria-label="nav.sidebarModes">
+      <button id="navLibrary" type="button" aria-pressed="true"><span class="od-nav-icon od-icon-directory" aria-hidden="true"></span><span data-i18n="nav.library">书库</span></button>
+      <button id="navTraces" type="button" aria-pressed="false"><span class="od-nav-icon od-icon-bookmark" aria-hidden="true"></span><span data-i18n="nav.history">阅读痕迹</span></button>
+      <button id="toolTabSearch" type="button" aria-pressed="false" title="全文搜索" data-i18n-title="nav.searchTitle"><span class="od-nav-icon od-icon-search" aria-hidden="true"></span><span data-i18n="nav.search">搜索</span><span id="searchHitCount" class="bookmarks-count"></span></button>
     </nav>
 
     <div id="libraryPane" class="od-mode-pane">
       <div class="search-wrap">
-        <input id="search" type="search" placeholder="筛选书名、角色或正文" aria-label="筛选目录" title="边输入边收窄目录；想精确找到某句话并跳过去，用左侧一级导航的「搜索」">
-        <button id="filterMenuToggle" type="button" title="收藏、标签、排序与来源筛选" aria-haspopup="true">筛选</button>
+        <input id="search" type="search" placeholder="筛选书名、角色或正文" aria-label="筛选目录" title="边输入边收窄目录；想精确找到某句话并跳过去，用左侧一级导航的「搜索」" data-i18n-placeholder="library.filterPlaceholder" data-i18n-aria-label="library.filterAria" data-i18n-title="library.filterTitle">
+        <button id="filterMenuToggle" type="button" title="收藏、标签、排序与来源筛选" aria-haspopup="true" data-i18n="library.filter" data-i18n-title="library.filterMenuTitle">筛选</button>
       </div>
       <div id="filterMenu" class="od-menu" hidden>
         <div class="organize-tools">
-          <button id="favoritesFilter" type="button" aria-pressed="false" title="只看收藏的对话">⭐ 只看收藏</button>
-          <select id="tagFilter" aria-label="按标签筛选">
-            <option value="">全部标签</option>
+          <button id="favoritesFilter" type="button" aria-pressed="false" title="只看收藏的对话" data-i18n="library.favoritesOnly" data-i18n-title="library.favoritesOnlyTitle">⭐ 只看收藏</button>
+          <select id="tagFilter" aria-label="按标签筛选" data-i18n-aria-label="library.tagFilterAria">
+            <option value="" data-i18n="library.allTags">全部标签</option>
           </select>
         </div>
         <div class="source-tools">
-          <select id="sourceFilter" aria-label="按来源筛选">
-            <option value="all">全部来源</option>
+          <select id="sourceFilter" aria-label="按来源筛选" data-i18n-aria-label="library.sourceFilterAria">
+            <option value="all" data-i18n="library.allSources">全部来源</option>
           </select>
         </div>
         <div class="archive-tools">
           <div id="archiveMeta" class="archive-meta"></div>
-          <div class="sort-control" role="group" aria-label="按对话创建时间排序">
-            <button id="sortAscending" type="button" data-sort-mode="asc" title="正序：最早到最新" aria-label="正序：最早到最新">正序</button>
-            <button id="sortDescending" type="button" data-sort-mode="desc" title="倒序：最新到最早" aria-label="倒序：最新到最早">倒序</button>
+          <div class="sort-control" role="group" aria-label="按对话创建时间排序" data-i18n-aria-label="library.sortAria">
+            <button id="sortAscending" type="button" data-sort-mode="asc" title="正序：最早到最新" aria-label="正序：最早到最新" data-i18n="library.sortAsc" data-i18n-title="library.sortAscTitle" data-i18n-aria-label="library.sortAscTitle">正序</button>
+            <button id="sortDescending" type="button" data-sort-mode="desc" title="倒序：最新到最早" aria-label="倒序：最新到最早" data-i18n="library.sortDesc" data-i18n-title="library.sortDescTitle" data-i18n-aria-label="library.sortDescTitle">倒序</button>
           </div>
         </div>
       </div>
 
       <div class="od-source-row">
-        <span class="od-source-row-label">来源</span>
-        <button id="sourceAddToggle" type="button" aria-label="添加来源或管理来源" aria-haspopup="true" title="导入 ChatGPT 文件夹、JSON / ZIP，连接语音档案，管理已连接来源">＋</button>
+        <span class="od-source-row-label" data-i18n="source.label">来源</span>
+        <button id="sourceAddToggle" type="button" aria-label="添加来源或管理来源" aria-haspopup="true" title="导入 ChatGPT 文件夹、JSON / ZIP，连接语音档案，管理已连接来源" data-i18n-aria-label="source.addAria" data-i18n-title="source.addTitle">＋</button>
       </div>
 
       <div id="sourceAddMenu" class="od-menu" hidden>
         <details id="importPanel" class="import-panel" open>
-          <summary>添加来源</summary>
+          <summary data-i18n="source.add">添加来源</summary>
           <div class="import-picks">
             <button id="directoryPicker" class="pick pick-folder directory-picker" type="button" hidden>
-              <span>添加来源文件夹</span>
-              <small>推荐 · 可在浏览器允许时记住文件夹权限</small>
+              <span data-i18n="source.pickFolder">添加来源文件夹</span>
+              <small data-i18n="source.pickFolderHint">推荐 · 可在浏览器允许时记住文件夹权限</small>
             </button>
             <label class="pick pick-folder">
               <input id="folderInput" type="file" webkitdirectory directory multiple hidden>
-              <span>选择来源文件夹（兼容添加）</span>
-              <small>ChatGPT 官方 Export · 多个 Mufy ZIP</small>
+              <span data-i18n="source.pickFolderCompat">选择来源文件夹（兼容添加）</span>
+              <small data-i18n="source.pickFolderCompatHint">ChatGPT 官方 Export · 多个 Mufy ZIP</small>
             </label>
 
-            <div class="pick-divider"><span>或</span></div>
+            <div class="pick-divider"><span data-i18n="source.or">或</span></div>
 
             <label class="pick pick-secondary">
               <input id="fileInput" type="file" accept=".json,.zip,application/json,application/zip" multiple hidden>
-              <span>选择 JSON / ZIP</span>
+              <span data-i18n="source.pickFiles">选择 JSON / ZIP</span>
             </label>
           </div>
 
-          <div class="sidecar-picks" aria-label="可选的本地语音档案">
-            <div class="sidecar-title">语音档案（可选）· 本地音频与映射</div>
-            <label class="sidecar-pick" title="选整个 VoiceArchive 文件夹；里面的 SolVoice 和 CielVoice 映射会一起被发现">
+          <div class="sidecar-picks" aria-label="可选的本地语音档案" data-i18n-aria-label="voice.sidecarAria">
+            <div class="sidecar-title" data-i18n="voice.sidecarTitle">语音档案（可选）· 本地音频与映射</div>
+            <label class="sidecar-pick" title="选整个 VoiceArchive 文件夹；里面的 SolVoice 和 CielVoice 映射会一起被发现" data-i18n-title="voice.archiveTitle">
               <input id="voiceArchiveInput" type="file" webkitdirectory directory multiple hidden>
-              <span>选择 VoiceArchive 文件夹</span>
+              <span data-i18n="voice.pickArchive">选择 VoiceArchive 文件夹</span>
             </label>
-            <label class="sidecar-pick" title="也可以单独选一份映射 JSON（chatgpt-solvoice / claude-cielvoice）">
+            <label class="sidecar-pick" title="也可以单独选一份映射 JSON（chatgpt-solvoice / claude-cielvoice）" data-i18n-title="voice.pickMappingTitle">
               <input id="voiceMappingInput" type="file" accept=".json,application/json" hidden>
-              <span>单选映射 JSON</span>
+              <span data-i18n="voice.pickMapping">单选映射 JSON</span>
             </label>
-            <button id="clearSolVoice" class="sidecar-clear" type="button">清除语音连接</button>
+            <button id="clearSolVoice" class="sidecar-clear" type="button" data-i18n="voice.clear">清除语音连接</button>
           </div>
         </details>
-        <button id="sourceManageToggle" class="od-menu-secondary" type="button">管理已连接来源…</button>
+        <button id="sourceManageToggle" class="od-menu-secondary" type="button" data-i18n="source.manage">管理已连接来源…</button>
       </div>
 
       <div id="sourceManagePanel" class="od-menu" hidden>
-        <div class="od-menu-title">已连接来源<button id="sourceManageClose" type="button" aria-label="关闭来源管理">✕</button></div>
+        <div class="od-menu-title"><span data-i18n="source.connected">已连接来源</span><button id="sourceManageClose" type="button" aria-label="关闭来源管理" data-i18n-aria-label="source.manageCloseAria">✕</button></div>
         <div id="sourceManageList"></div>
         <div class="local-library" aria-live="polite">
           <div id="localLibraryStatus">本地书库：正在准备…</div>
-          <button id="clearLocalLibrary" type="button" disabled>清除本地书库</button>
+          <button id="clearLocalLibrary" type="button" disabled data-i18n="library.clearLocal">清除本地书库</button>
         </div>
-        <button id="clearSources" type="button" disabled class="od-danger-quiet">清空全部来源</button>
+        <button id="clearSources" type="button" disabled class="od-danger-quiet" data-i18n="source.clearAll">清空全部来源</button>
       </div>
 
       <nav id="conversationList" class="conversation-list"></nav>
     </div>
 
     <div id="tracesPane" class="od-mode-pane" hidden>
-      <div class="od-segmented" role="group" aria-label="阅读痕迹">
-        <button id="toolTabRecent" type="button" title="最近阅读">最近<span id="recentCount" class="bookmarks-count"></span></button>
-        <button id="toolTabBookmarks" type="button" title="书签">书签<span id="bookmarksCount" class="bookmarks-count"></span></button>
-        <button id="toolTabAnnotations" type="button" title="划线与小注">划线<span id="annotationsCount" class="bookmarks-count"></span></button>
+      <div class="od-segmented" role="group" aria-label="阅读痕迹" data-i18n-aria-label="history.ariaGroup">
+        <button id="toolTabRecent" type="button" title="最近阅读" data-i18n-title="history.recentTitle"><span data-i18n="history.recent">最近</span><span id="recentCount" class="bookmarks-count"></span></button>
+        <button id="toolTabBookmarks" type="button" title="书签" data-i18n-title="history.bookmarksTitle"><span data-i18n="history.bookmarks">书签</span><span id="bookmarksCount" class="bookmarks-count"></span></button>
+        <button id="toolTabAnnotations" type="button" title="划线与小注" data-i18n-title="history.highlightsTitle"><span data-i18n="history.highlights">划线</span><span id="annotationsCount" class="bookmarks-count"></span></button>
       </div>
       <div id="toolPanels" class="tool-panels">
         <div id="recentPane">
@@ -123,14 +123,14 @@
     </div>
 
     <div id="searchPane" class="od-mode-pane" hidden>
-      <div class="search-scope" role="group" aria-label="搜索范围">
-        <button id="searchScopeCurrent" type="button">当前对话</button>
-        <button id="searchScopeLibrary" type="button">书库</button>
+      <div class="search-scope" role="group" aria-label="搜索范围" data-i18n-aria-label="search.scopeAria">
+        <button id="searchScopeCurrent" type="button" data-i18n="search.current">当前对话</button>
+        <button id="searchScopeLibrary" type="button" data-i18n="search.library">书库</button>
       </div>
-      <select id="searchSource" aria-label="搜索哪个来源" title="书库范围内搜哪个来源；和书库模式里的目录来源过滤互不影响">
-        <option value="all">全部来源</option>
+      <select id="searchSource" aria-label="搜索哪个来源" title="书库范围内搜哪个来源；和书库模式里的目录来源过滤互不影响" data-i18n-aria-label="search.sourceAria" data-i18n-title="search.sourceTitle">
+        <option value="all" data-i18n="library.allSources">全部来源</option>
       </select>
-      <input id="searchQuery" type="search" placeholder="搜关键词，回车" aria-label="全文搜索关键词">
+      <input id="searchQuery" type="search" placeholder="搜关键词，回车" aria-label="全文搜索关键词" data-i18n-placeholder="search.placeholder" data-i18n-aria-label="search.queryAria">
       <div id="searchResults" class="bookmarks-list"></div>
     </div>
 
@@ -142,178 +142,178 @@
 
   <main id="main">
     <div id="readerToolbar" class="toolbar">
-      <button id="sidebarToggle" class="ghost icon-button" title="显示/隐藏侧栏">☰</button>
+      <button id="sidebarToggle" class="ghost icon-button" title="显示/隐藏侧栏" data-i18n-title="reader.sidebarToggleTitle">☰</button>
       <div id="currentTitle" class="current-title">尚未载入档案</div>
-      <button id="bookmarkAdd" class="ghost icon-button" type="button" title="把当前读到的位置存为书签；同一位置再存会刷新它" aria-label="存书签">🔖</button>
-      <button id="readerPrefsToggle" class="ghost icon-button" type="button" title="阅读设置：主题、印刷风格、排版、字体、显示开关" aria-haspopup="true">Aa</button>
-      <button id="readerMoreToggle" class="ghost icon-button" type="button" title="更多：收藏、标签、导出、跳转、语音状态" aria-haspopup="true" aria-label="更多操作">···</button>
+      <button id="bookmarkAdd" class="ghost icon-button" type="button" title="把当前读到的位置存为书签；同一位置再存会刷新它" aria-label="存书签" data-i18n-title="reader.bookmarkTitle" data-i18n-aria-label="reader.bookmark">🔖</button>
+      <button id="readerPrefsToggle" class="ghost icon-button" type="button" title="阅读设置：主题、印刷风格、排版、字体、显示开关" aria-haspopup="true" data-i18n-title="settings.toggleTitle">Aa</button>
+      <button id="readerMoreToggle" class="ghost icon-button" type="button" title="更多：收藏、标签、导出、跳转、语音状态" aria-haspopup="true" aria-label="更多操作" data-i18n-title="reader.moreTitle" data-i18n-aria-label="reader.more">···</button>
     </div>
 
     <div id="readerMoreMenu" class="reader-prefs-panel reader-more-menu" hidden>
-      <button id="favoriteToggle" type="button" title="收藏 / 取消收藏当前对话" aria-pressed="false">☆ 收藏</button>
-      <button id="tagToggle" type="button" title="给当前对话加标签" aria-haspopup="true">🏷 标签</button>
-      <button id="exportToggle" type="button" title="导出当前对话或当前列表" aria-haspopup="true">⬇ 导出</button>
+      <button id="favoriteToggle" type="button" title="收藏 / 取消收藏当前对话" aria-pressed="false" data-i18n-title="organize.favoriteTitle">☆ 收藏</button>
+      <button id="tagToggle" type="button" title="给当前对话加标签" aria-haspopup="true" data-i18n="organize.tags" data-i18n-title="organize.tagsTitle">🏷 标签</button>
+      <button id="exportToggle" type="button" title="导出当前对话或当前列表" aria-haspopup="true" data-i18n="export.menu" data-i18n-title="export.menuTitle">⬇ 导出</button>
       <div class="more-menu-divider" aria-hidden="true"></div>
-      <button id="toTop" type="button" title="回到顶部（Home）">↑ 回到顶部</button>
-      <button id="toEnd" type="button" title="到最底部（End）">↓ 到最底部</button>
+      <button id="toTop" type="button" title="回到顶部（Home）" data-i18n="reader.backToTop" data-i18n-title="reader.backToTopTitle">↑ 回到顶部</button>
+      <button id="toEnd" type="button" title="到最底部（End）" data-i18n="reader.toEnd" data-i18n-title="reader.toEndTitle">↓ 到最底部</button>
       <div id="voiceStatusLine" class="more-voice-status" hidden></div>
     </div>
 
     <div id="exportMenu" class="reader-prefs-panel export-menu" hidden>
-      <div class="pref-label tag-editor-title">导出（本地生成，不上传）</div>
-      <button id="exportCurrentMd" type="button">当前对话 → Markdown</button>
-      <button id="exportCurrentJson" type="button">当前对话 → JSON（规范化）</button>
-      <button id="exportCurrentHtml" type="button">当前对话 → HTML 单文件</button>
-      <button id="exportListMd" type="button">当前列表 → Markdown 合集</button>
-      <button id="exportListJsonl" type="button">当前列表 → JSONL</button>
-      <button id="exportListEpub" type="button">当前列表 → EPUB 电子书</button>
-      <button id="exportListHtml" type="button">当前列表 → HTML 单文件</button>
-      <p class="small export-note">「当前列表」= 左侧目录此刻筛出的对话（搜索、来源、收藏、标签过滤都会生效）。</p>
+      <div class="pref-label tag-editor-title" data-i18n="export.title">导出（本地生成，不上传）</div>
+      <button id="exportCurrentMd" type="button" data-i18n="export.currentMd">当前对话 → Markdown</button>
+      <button id="exportCurrentJson" type="button" data-i18n="export.currentJson">当前对话 → JSON（规范化）</button>
+      <button id="exportCurrentHtml" type="button" data-i18n="export.currentHtml">当前对话 → HTML 单文件</button>
+      <button id="exportListMd" type="button" data-i18n="export.listMd">当前列表 → Markdown 合集</button>
+      <button id="exportListJsonl" type="button" data-i18n="export.listJsonl">当前列表 → JSONL</button>
+      <button id="exportListEpub" type="button" data-i18n="export.listEpub">当前列表 → EPUB 电子书</button>
+      <button id="exportListHtml" type="button" data-i18n="export.listHtml">当前列表 → HTML 单文件</button>
+      <p class="small export-note" data-i18n="export.note">「当前列表」= 左侧目录此刻筛出的对话（搜索、来源、收藏、标签过滤都会生效）。</p>
     </div>
 
     <div id="tagEditor" class="reader-prefs-panel tag-editor" hidden>
-      <div class="pref-label tag-editor-title">当前对话的标签</div>
+      <div class="pref-label tag-editor-title" data-i18n="organize.tagEditorTitle">当前对话的标签</div>
       <div id="tagChips" class="tag-chips"></div>
-      <input id="tagInput" type="text" maxlength="24" placeholder="输入标签，回车添加" aria-label="新标签">
+      <input id="tagInput" type="text" maxlength="24" placeholder="输入标签，回车添加" aria-label="新标签" data-i18n-placeholder="organize.tagPlaceholder" data-i18n-aria-label="organize.tagAria">
       <div id="tagSuggestions" class="tag-suggestions"></div>
     </div>
 
     <div id="readerPrefsPanel" class="reader-prefs-panel aa-panel" hidden>
       <div class="aa-head">
-        <span class="aa-title">阅读设置</span>
-        <button id="aaDone" type="button" title="关闭；设置在选择时已即时生效">完成</button>
+        <span class="aa-title" data-i18n="settings.title">阅读设置</span>
+        <button id="aaDone" type="button" title="关闭；设置在选择时已即时生效" data-i18n="settings.done" data-i18n-title="settings.doneTitle">完成</button>
       </div>
 
-      <div class="aa-section-label">主题</div>
-      <div id="themeCards" class="theme-cards" role="group" aria-label="主题">
+      <div class="aa-section-label" data-i18n="settings.theme">主题</div>
+      <div id="themeCards" class="theme-cards" role="group" aria-label="主题" data-i18n-aria-label="settings.theme">
         <button type="button" class="theme-card theme-card-paper" data-theme-card="paper" aria-pressed="false">
           <span class="od-nav-icon od-icon-theme-paper" aria-hidden="true"></span>
-          <span class="theme-card-name">纸页</span>
+          <span class="theme-card-name" data-i18n="theme.paper">纸页</span>
           <span class="theme-card-sample">纸上重逢</span>
         </button>
         <button type="button" class="theme-card theme-card-mist" data-theme-card="mist" aria-pressed="false">
           <span class="od-nav-icon od-icon-theme-eye" aria-hidden="true"></span>
-          <span class="theme-card-name">护眼</span>
+          <span class="theme-card-name" data-i18n="theme.readingGreen">护眼</span>
           <span class="theme-card-sample">纸上重逢</span>
         </button>
         <button type="button" class="theme-card theme-card-night" data-theme-card="night" aria-pressed="false">
           <span class="od-nav-icon od-icon-theme-night" aria-hidden="true"></span>
-          <span class="theme-card-name">夜墨</span>
+          <span class="theme-card-name" data-i18n="theme.nightInk">夜墨</span>
           <span class="theme-card-sample">纸上重逢</span>
         </button>
       </div>
 
-      <div class="aa-section-label">印刷风格<small>再点一次可退出预设</small></div>
-      <div id="presetCards" class="preset-cards" role="group" aria-label="印刷风格">
+      <div class="aa-section-label"><span data-i18n="settings.printStyle">印刷风格</span><small data-i18n="settings.printStyleHint">再点一次可退出预设</small></div>
+      <div id="presetCards" class="preset-cards" role="group" aria-label="印刷风格" data-i18n-aria-label="settings.printStyle">
         <button type="button" class="preset-card" data-preset-card="anthology" aria-pressed="false">
-          <span class="preset-card-name">文集</span>
+          <span class="preset-card-name" data-i18n="preset.anthology">文集</span>
           <span class="preset-card-sample preset-sample-anthology">一页旧文</span>
         </button>
         <button type="button" class="preset-card" data-preset-card="old-press" aria-pressed="false">
-          <span class="preset-card-name">旧刊</span>
+          <span class="preset-card-name" data-i18n="preset.oldPress">旧刊</span>
           <span class="preset-card-sample preset-sample-oldpress">第七卷</span>
         </button>
         <button type="button" class="preset-card" data-preset-card="typescript" aria-pressed="false">
-          <span class="preset-card-name">打字稿</span>
+          <span class="preset-card-name" data-i18n="preset.typescript">打字稿</span>
           <span class="preset-card-sample preset-sample-typescript">RECORD 18</span>
         </button>
         <button type="button" class="preset-card" data-preset-card="correspondence" aria-pressed="false">
-          <span class="preset-card-name">书信</span>
+          <span class="preset-card-name" data-i18n="preset.correspondence">书信</span>
           <span class="preset-card-sample preset-sample-correspondence">亲爱的你</span>
         </button>
       </div>
-      <select id="printPreset" aria-label="印刷风格" hidden>
-        <option value="" selected>不使用</option>
-        <option value="anthology">文集</option>
-        <option value="old-press">旧刊</option>
-        <option value="typescript">打字稿</option>
-        <option value="correspondence">书信</option>
+      <select id="printPreset" aria-label="印刷风格" hidden data-i18n-aria-label="settings.printStyle">
+        <option value="" selected data-i18n="preset.none">不使用</option>
+        <option value="anthology" data-i18n="preset.anthology">文集</option>
+        <option value="old-press" data-i18n="preset.oldPress">旧刊</option>
+        <option value="typescript" data-i18n="preset.typescript">打字稿</option>
+        <option value="correspondence" data-i18n="preset.correspondence">书信</option>
       </select>
-      <select id="theme" hidden aria-label="主题">
-        <option value="paper">纸页</option>
-        <option value="mist">护眼</option>
-        <option value="night">夜墨</option>
+      <select id="theme" hidden aria-label="主题" data-i18n-aria-label="settings.theme">
+        <option value="paper" data-i18n="theme.paper">纸页</option>
+        <option value="mist" data-i18n="theme.readingGreen">护眼</option>
+        <option value="night" data-i18n="theme.nightInk">夜墨</option>
       </select>
 
       <details class="aa-accordion">
-        <summary>排版</summary>
-        <div class="pref-row"><span class="pref-label">字号</span>
-          <button id="fontSmaller" class="ghost" type="button" title="减小字号">A−</button>
-          <button id="fontLarger" class="ghost" type="button" title="增大字号">A+</button>
+        <summary data-i18n="settings.typography">排版</summary>
+        <div class="pref-row"><span class="pref-label" data-i18n="typography.fontSize">字号</span>
+          <button id="fontSmaller" class="ghost" type="button" title="减小字号" data-i18n-title="typography.smallerTitle">A−</button>
+          <button id="fontLarger" class="ghost" type="button" title="增大字号" data-i18n-title="typography.largerTitle">A+</button>
         </div>
-        <div class="pref-row"><span class="pref-label">行距</span>
-          <select id="lineHeight" aria-label="行距">
-            <option value="1.7">紧</option>
-            <option value="1.95" selected>中</option>
-            <option value="2.2">松</option>
+        <div class="pref-row"><span class="pref-label" data-i18n="typography.lineHeight">行距</span>
+          <select id="lineHeight" aria-label="行距" data-i18n-aria-label="typography.lineHeightAria">
+            <option value="1.7" data-i18n="typography.lineTight">紧</option>
+            <option value="1.95" selected data-i18n="typography.lineMedium">中</option>
+            <option value="2.2" data-i18n="typography.lineLoose">松</option>
           </select>
         </div>
-        <div class="pref-row"><span class="pref-label">正文宽度</span>
-          <select id="contentWidth" aria-label="正文宽度">
-            <option value="640">窄</option>
-            <option value="800" selected>中</option>
-            <option value="960">宽</option>
+        <div class="pref-row"><span class="pref-label" data-i18n="typography.contentWidth">正文宽度</span>
+          <select id="contentWidth" aria-label="正文宽度" data-i18n-aria-label="typography.contentWidthAria">
+            <option value="640" data-i18n="typography.widthNarrow">窄</option>
+            <option value="800" selected data-i18n="typography.widthMedium">中</option>
+            <option value="960" data-i18n="typography.widthWide">宽</option>
           </select>
         </div>
-        <div class="pref-row"><span class="pref-label">翻页方式</span>
-          <select id="readingMode" aria-label="阅读模式">
-            <option value="scroll" selected>滚动</option>
-            <option value="page">分页</option>
+        <div class="pref-row"><span class="pref-label" data-i18n="typography.pagingMode">翻页方式</span>
+          <select id="readingMode" aria-label="阅读模式" data-i18n-aria-label="typography.readingModeAria">
+            <option value="scroll" selected data-i18n="typography.modeScroll">滚动</option>
+            <option value="page" data-i18n="typography.modePaged">分页</option>
           </select>
-          <select id="pageLength" aria-label="分页长度">
-            <option value="short">页短</option>
-            <option value="mid" selected>页中</option>
-            <option value="long">页长</option>
-          </select>
-        </div>
-      </details>
-
-      <details class="aa-accordion">
-        <summary>更多字体</summary>
-        <div class="pref-row"><span class="pref-label">字体</span>
-          <select id="fontFamily" aria-label="正文字体" title="精细覆盖；手动选字体会退出上方的印刷预设，字体文件缺失时自动退回系统字体">
-            <optgroup label="内置字体">
-              <option value="huiwen">汇文明朝体</option>
-              <option value="zhuque">朱雀仿宋</option>
-              <option value="typewriter">打字机 · 明朝</option>
-              <option value="fell">古籍英文 · 明朝</option>
-              <option value="kinghwa">京華老宋（需本地字体文件）</option>
-            </optgroup>
-            <optgroup label="系统字体">
-              <option value="serif" selected>默认衬线</option>
-              <option value="song">宋体</option>
-              <option value="kai">楷体</option>
-              <option value="fangsong">仿宋</option>
-              <option value="sans">黑体</option>
-              <option value="dengxian">等线</option>
-            </optgroup>
+          <select id="pageLength" aria-label="分页长度" data-i18n-aria-label="typography.pageLengthAria">
+            <option value="short" data-i18n="typography.pageShort">页短</option>
+            <option value="mid" selected data-i18n="typography.pageMid">页中</option>
+            <option value="long" data-i18n="typography.pageLong">页长</option>
           </select>
         </div>
       </details>
 
       <details class="aa-accordion">
-        <summary>显示</summary>
-        <div class="pref-row pref-row-toggle"><label><input id="hideUser" type="checkbox"> 隐藏我的发言</label></div>
-        <div class="pref-row pref-row-toggle"><label><input id="showThinking" type="checkbox"> 展开 Thinking / Trace</label></div>
+        <summary data-i18n="settings.fonts">更多字体</summary>
+        <div class="pref-row"><span class="pref-label" data-i18n="fonts.family">字体</span>
+          <select id="fontFamily" aria-label="正文字体" title="精细覆盖；手动选字体会退出上方的印刷预设，字体文件缺失时自动退回系统字体" data-i18n-aria-label="fonts.familyAria" data-i18n-title="fonts.familyTitle">
+            <optgroup label="内置字体" data-i18n-label="fonts.bundled">
+              <option value="huiwen" data-i18n="fonts.huiwen">汇文明朝体</option>
+              <option value="zhuque" data-i18n="fonts.zhuque">朱雀仿宋</option>
+              <option value="typewriter" data-i18n="fonts.typewriter">打字机 · 明朝</option>
+              <option value="fell" data-i18n="fonts.fell">古籍英文 · 明朝</option>
+              <option value="kinghwa" data-i18n="fonts.kinghwa">京華老宋（需本地字体文件）</option>
+            </optgroup>
+            <optgroup label="系统字体" data-i18n-label="fonts.system">
+              <option value="serif" selected data-i18n="fonts.serif">默认衬线</option>
+              <option value="song" data-i18n="fonts.song">宋体</option>
+              <option value="kai" data-i18n="fonts.kai">楷体</option>
+              <option value="fangsong" data-i18n="fonts.fangsong">仿宋</option>
+              <option value="sans" data-i18n="fonts.sans">黑体</option>
+              <option value="dengxian" data-i18n="fonts.dengxian">等线</option>
+            </optgroup>
+          </select>
+        </div>
       </details>
 
-      <button id="resetPrefs" type="button" class="aa-reset">恢复默认</button>
+      <details class="aa-accordion">
+        <summary data-i18n="settings.display">显示</summary>
+        <div class="pref-row pref-row-toggle"><label><input id="hideUser" type="checkbox"> <span data-i18n="display.hideUser">隐藏我的发言</span></label></div>
+        <div class="pref-row pref-row-toggle"><label><input id="showThinking" type="checkbox"> <span data-i18n="display.showThinking">展开 Thinking / Trace</span></label></div>
+      </details>
+
+      <button id="resetPrefs" type="button" class="aa-reset" data-i18n="settings.reset">恢复默认</button>
     </div>
 
     <section id="libraryHome" class="library-home hidden">
       <div class="library-home-inner">
         <header class="library-home-head">
-          <h2>私人阅览室</h2>
-          <p>把散落的对话收回一间安静、只属于你的房间。</p>
+          <h2 data-i18n="home.title">私人阅览室</h2>
+          <p data-i18n="home.subtitle">把散落的对话收回一间安静、只属于你的房间。</p>
         </header>
         <div id="continueCard"></div>
         <div class="library-home-lower">
           <section class="home-recent">
-            <h3>最近加入</h3>
+            <h3 data-i18n="home.recentAdditions">最近加入</h3>
             <div id="recentAdditions"></div>
           </section>
           <aside class="home-summary">
-            <h3>书库摘要</h3>
+            <h3 data-i18n="home.summary">书库摘要</h3>
             <div id="librarySummary"></div>
           </aside>
         </div>
@@ -324,10 +324,10 @@
       <div class="welcome-card">
         <div class="mark">“</div>
         <h2>I knew the conversation existed.<br>I just wanted to find it again.</h2>
-        <p>选择 ChatGPT 官方 Export 文件夹、包含多个 Mufy ZIP 的文件夹，或载入已有的 AI 对话 JSON / ZIP。Reader 会在本地识别并转换为统一阅读结构。</p>
-        <p class="small">文件不会上传。官方导出的对话分片会自动合并，图片、音频、视频和其他附件只在滚动到附近时才从本地文件创建临时地址。</p>
-        <p class="small" id="mobileHint" hidden><b>手机上请用「选择 JSON / ZIP」一次多选文件。</b>「选择文件夹」在手机浏览器里常退化成一次只能选一个，几十个文件会点到崩溃——别走那条。</p>
-        <button id="demoImport" class="pick pick-secondary demo-import" type="button" hidden>👀 先看一个示例书库（全合成数据，一键载入）</button>
+        <p data-i18n="welcome.intro">选择 ChatGPT 官方 Export 文件夹、包含多个 Mufy ZIP 的文件夹，或载入已有的 AI 对话 JSON / ZIP。Reader 会在本地识别并转换为统一阅读结构。</p>
+        <p class="small" data-i18n="welcome.privacy">文件不会上传。官方导出的对话分片会自动合并，图片、音频、视频和其他附件只在滚动到附近时才从本地文件创建临时地址。</p>
+        <p class="small" id="mobileHint" hidden><b data-i18n="welcome.mobileHintStrong">手机上请用「选择 JSON / ZIP」一次多选文件。</b><span data-i18n="welcome.mobileHintRest">「选择文件夹」在手机浏览器里常退化成一次只能选一个，几十个文件会点到崩溃——别走那条。</span></p>
+        <button id="demoImport" class="pick pick-secondary demo-import" type="button" hidden data-i18n="welcome.demo">👀 先看一个示例书库（全合成数据，一键载入）</button>
       </div>
     </section>
 
@@ -337,23 +337,23 @@
         <div id="readerMeta" class="reader-meta"></div>
       </header>
       <div id="messages"></div>
-      <nav id="pageNavigation" class="page-navigation" aria-label="翻页">
+      <nav id="pageNavigation" class="page-navigation" aria-label="翻页" data-i18n-aria-label="pager.aria">
         <button id="previousPage" type="button">← 上一段</button>
-        <label id="pageIndicator">第 <input id="pageJump" type="number" min="1" value="1" aria-label="跳到页码"> / <span id="pageCount">1</span> 页</label>
+        <label id="pageIndicator"><span data-i18n="pager.pagePrefix">第 </span><input id="pageJump" type="number" min="1" value="1" aria-label="跳到页码" data-i18n-aria-label="pager.jumpAria"> / <span id="pageCount">1</span><span data-i18n="pager.pageSuffix"> 页</span></label>
         <span id="readingProgressLabel" class="reading-progress-label" hidden></span>
         <button id="nextPage" type="button">下一段 →</button>
       </nav>
     </article>
   </main>
 
-  <button id="highlightButton" class="highlight-button" type="button" hidden>🖍 标记这段</button>
+  <button id="highlightButton" class="highlight-button" type="button" hidden data-i18n="annotate.highlightButton">🖍 标记这段</button>
   <div id="annotationEditor" class="annotation-editor" hidden>
-    <div id="annotationColors" class="annotation-colors" role="group" aria-label="荧光笔颜色"></div>
-    <textarea id="annotationNote" placeholder="写点小注（留空＝只划线）" aria-label="小注"></textarea>
+    <div id="annotationColors" class="annotation-colors" role="group" aria-label="荧光笔颜色" data-i18n-aria-label="annotate.colorsAria"></div>
+    <textarea id="annotationNote" placeholder="写点小注（留空＝只划线）" aria-label="小注" data-i18n-placeholder="annotate.notePlaceholder" data-i18n-aria-label="annotate.noteAria"></textarea>
     <div class="annotation-editor-actions">
-      <button id="annotationSave" type="button">保存</button>
-      <button id="annotationCancel" type="button">取消</button>
-      <button id="annotationDelete" type="button" hidden>删除</button>
+      <button id="annotationSave" type="button" data-i18n="common.save">保存</button>
+      <button id="annotationCancel" type="button" data-i18n="common.cancel">取消</button>
+      <button id="annotationDelete" type="button" hidden data-i18n="common.delete">删除</button>
     </div>
   </div>
 
@@ -383,6 +383,9 @@
   <script src="src/adapters/chatgpt-official.js"></script>
   <script src="src/adapters/registry.js"></script>
   <script src="src/core/source-folder.js"></script>
+  <script src="src/locales/zh-CN.js"></script>
+  <script src="src/locales/en.js"></script>
+  <script src="src/i18n.js"></script>
   <script src="src/app.js"></script>
 </body>
 </html>

@@ -101,7 +101,7 @@ window.OD = window.OD || {};
   "search.hint": "输入关键词后回车。「当前对话」搜正在读的这一段，「全部书库」搜所有来源。",
   "search.needConversation": "先打开一段对话，或切换到「全部书库」。",
   "search.noHits": "没搜到。",
-  "search.tryLibrary": "可以试试「全部书库」范围。",
+  "search.noHitsCurrentScope": "没搜到。可以试试「全部书库」范围。",
   "search.truncated": "命中太多，只列前 {limit} 处；换个更具体的词。",
 
   /* ── status line & persistence ── */
@@ -280,6 +280,7 @@ window.OD = window.OD || {};
   "conv.messageCount": "{count} 条",
   "conv.segmentCount": "{count} 段",
   "conv.unknownYear": "日期不详",
+  "conv.unnamedCharacter": "未命名角色",
   "message.thinkingLabel": "编者附记 · Thinking / Trace（来源导出）",
   "trace.official": "Tool activity · recorded in the official export",
   "trace.heuristic": "Exporter source trace · heuristic, not official thinking",

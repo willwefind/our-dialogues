@@ -110,6 +110,10 @@ async function loadAppRuntime(savedSortMode="asc", options={}) {
     TextDecoder,
     setTimeout,
     clearTimeout,
+    // The harness mirrors Dawn's real environment: a zh-CN browser, so the
+    // "auto" locale resolves to zh-CN and existing Chinese-text assertions
+    // keep describing the default UI.
+    navigator: { language: "zh-CN", languages: ["zh-CN"] },
     localStorage: {
       getItem(key) { return stored.get(key) ?? null; },
       setItem(key, value) { stored.set(key, value); }
@@ -149,7 +153,10 @@ async function loadAppRuntime(savedSortMode="asc", options={}) {
     "src/core/organization.js",
     "src/core/export.js",
     "src/core/zip-writer.js",
-    "src/core/epub.js"
+    "src/core/epub.js",
+    "src/locales/zh-CN.js",
+    "src/locales/en.js",
+    "src/i18n.js"
   ];
   if (options.driver) runtimeFiles.push("src/core/persistent-library.js");
   for (const relativePath of runtimeFiles) {

@@ -178,6 +178,29 @@ test("t() translates per locale, interpolates params, and never throws on gaps",
   assert.equal(i18n.t("x.count"), "{count} items", "missing params leave the placeholder visible");
 });
 
+test("every data-i18n marker in index.html resolves to a dictionary key", async () => {
+  const { OD } = await loadI18n();
+  const html = await readFile(path.join(repositoryRoot, "index.html"), "utf8");
+  const keys = [...html.matchAll(/data-i18n(?:-title|-aria-label|-placeholder|-label)?="([^"]+)"/g)]
+    .map(match => match[1]);
+  assert.ok(keys.length >= 100, `expected a fully marked static chrome, found ${keys.length} markers`);
+  for (const key of keys) {
+    assert.notEqual(OD.i18nDictionaries["zh-CN"][key], undefined, `zh-CN missing ${key}`);
+  }
+  // Load-bearing markers that must survive future markup edits.
+  for (const marker of [
+    'data-i18n="nav.library"',
+    'data-i18n="settings.reset"',
+    'data-i18n="welcome.demo"',
+    'data-i18n-placeholder="library.filterPlaceholder"',
+    'data-i18n-placeholder="search.placeholder"',
+    'data-i18n-aria-label="reader.bookmark"',
+    'data-i18n-label="fonts.bundled"'
+  ]) {
+    assert.ok(html.includes(marker), `index.html lost ${marker}`);
+  }
+});
+
 /* ── Static application ───────────────────────────────────────────── */
 
 function fakeElement(attributes) {
