@@ -1309,6 +1309,53 @@ test("personal documents enter document mode, chats keep their transcript chrome
   assert.equal(runtime.document.body.classList.contains("document-mode"), true);
 });
 
+test("personal collections group by declaration order with year and unknown-date headings", async () => {
+  const { runtime, elements } = await loadAppRuntime("asc");
+  await runtime.OD.app.ready;
+  const doc = (collectionId, collectionName, documentType, id, createdAt, text) => ({
+    id: `personal:${collectionId}:${id}`,
+    title: createdAt ? String(createdAt).slice(0, 10) : text.slice(0, 8),
+    createdAt,
+    context: { room: null, sourceMetadata: {
+      contentKind: "personal-document", collectionId, collectionName, documentType,
+      authorName: "半夏", titleSource: createdAt ? "date" : "first-line"
+    } },
+    participants: [{ id: "banxia", name: "半夏", role: "other" }],
+    messages: [{ id: `personal:${collectionId}:${id}:body`, role: "other", speaker: "半夏", createdAt, content: [{ type: "text", text }], metadata: { personalDocument: true } }]
+  });
+  runtime.OD.app.loadArchive({
+    schema: "our-dialogues.normalized.v1",
+    source: { platform: "personal-archive", exporter: "our-dialogues-personal-archive", formatVersion: 1, sourceLabel: "半夏的字纸箱" },
+    conversations: [
+      doc("col-diary", "纸上日子", "diary", "d-2015-05-01", "2015-05-01T12:00:00.000Z", "旧年的一页。"),
+      doc("col-diary", "纸上日子", "diary", "d-2016-03-17", "2016-03-17T12:00:00.000Z", "青苔巷的猫。"),
+      doc("col-diary", "纸上日子", "diary", "d-undated", null, "没有日期的一页。"),
+      doc("col-frag", "字纸篓", "fragment", "f-0001", null, "一句没头没尾的话。")
+    ]
+  }, "半夏的字纸箱");
+
+  const list = String(elements.get("conversationList").innerHTML);
+  assert.ok(list.includes("::collection:col-diary"), "collections persist under the collection-prefixed group key");
+  assert.match(list, /title="日记">纸上日子</, "the collection summary names the collection with its localized type");
+  assert.match(list, /title="碎片">字纸篓</);
+  assert.match(list, /year-heading[^>]*>2015</);
+  assert.match(list, /year-heading[^>]*>2016</);
+  assert.match(list, /year-heading[^>]*>日期未知</, "undated entries trail under the localized unknown-date heading");
+  assert.equal(list.split("year-heading").length - 1, 3, "the single-year fragment collection stays flat");
+  assert.ok(list.indexOf("纸上日子") < list.indexOf("字纸篓"), "collection order follows the archive declaration order");
+
+  // The sidebar's visible order doubles as the reading order, across collections.
+  assert.equal(runtime.OD.app.getState().current.id, "personal:col-diary:d-2015-05-01");
+  elements.get("nextPage").click();
+  assert.equal(runtime.OD.app.getState().current.id, "personal:col-diary:d-2016-03-17");
+  elements.get("nextPage").click();
+  assert.equal(runtime.OD.app.getState().current.id, "personal:col-diary:d-undated");
+  elements.get("nextPage").click();
+  assert.equal(runtime.OD.app.getState().current.id, "personal:col-frag:f-0001",
+    "next crosses into the following collection exactly as the eye sees it");
+  assert.equal(elements.get("nextPage").disabled, true, "the last visible entry is the end of the reading order");
+});
+
 test("the demo library loads synthetic sources once and skips duplicates on a second click", async () => {
   const { runtime } = await loadAppRuntime("asc");
   runtime.OD.registry = {

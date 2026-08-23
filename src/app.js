@@ -492,14 +492,23 @@ window.OD = window.OD || {};
 
   function conversationMarkup(c) {
     const active = state.current?.id === c.id ? " on" : "";
-    const room = c.context?.room?.name ? ` · ${esc(c.context.room.name)}` : "";
+    const documentRow = isDocumentConversation(c);
     const progress = progressLabel(state.readingProgress[c.id]);
     const favorite = OD.organization.isFavorite(state.organization, c.id) ? `<span class="conv-star" title="${esc(t("organize.favoritedTitle"))}">⭐</span> ` : "";
     const tagChips = OD.organization.tagsOf(state.organization, c.id).slice(0, 3)
       .map(tag => `<span class="conv-tag">${esc(tag)}</span>`).join("");
+    /* Document rows skip the transcript message count, and a date-titled
+       entry does not repeat its date in the meta line. */
+    const metaBits = [];
+    if (!documentRow) metaBits.push(esc(t("conv.messageCount", { count: c.messages.length })));
+    if (c.context?.room?.name) metaBits.push(esc(c.context.room.name));
+    if (c.createdAt && !(documentRow && c.context?.sourceMetadata?.titleSource === "date")) {
+      metaBits.push(esc(documentRow ? fmtDateOnly(c.createdAt) : fmtDate(c.createdAt)));
+    }
+    if (progress) metaBits.push(`<span class="conv-progress">${esc(progress)}</span>`);
     return `<div class="conv${active}" data-id="${esc(c.id)}">
       <div class="conv-title">${favorite}${esc(displayConversationTitle(c))}</div>
-      <div class="conv-meta">${esc(t("conv.messageCount", { count: c.messages.length }))}${room}${c.createdAt ? ` · ${esc(fmtDate(c.createdAt))}` : ""}${progress ? ` · <span class="conv-progress">${esc(progress)}</span>` : ""}${tagChips ? ` ${tagChips}` : ""}</div>
+      <div class="conv-meta">${metaBits.join(" · ")}${tagChips ? ` ${tagChips}` : ""}</div>
     </div>`;
   }
 
@@ -561,6 +570,64 @@ window.OD = window.OD || {};
     return html;
   }
 
+  /* ── Personal Archive directory: Source → Collection → Year → Entry ──
+     Collections are collapsible groups reusing the character-group
+     machinery (same class, same groupState.characters storage under a
+     "collection:"-prefixed key, same toggle listener). Year headings are
+     display-only and appear once a collection's dated entries span more
+     than one year; undated entries trail under 日期未知. Sort order inside
+     a collection follows the Reader sort mode untouched — the rendered
+     order is pushed into readingOrder exactly as the eye sees it. */
+  function personalYearListMarkup(ordered) {
+    const years = new Set(ordered.map(conversationYear).filter(Boolean));
+    if (years.size < 2) return ordered.map(conversationMarkup).join("");
+    let html = "";
+    let currentHeading;
+    for (const conversation of ordered) {
+      const heading = conversationYear(conversation) || t("personal.unknownDate");
+      if (heading !== currentHeading) {
+        currentHeading = heading;
+        html += `<div class="year-heading" aria-hidden="true">${esc(heading)}</div>`;
+      }
+      html += conversationMarkup(conversation);
+    }
+    return html;
+  }
+
+  function personalCollectionsMarkup(source, conversations, searching, readingOrder) {
+    const groups = new Map();
+    const groupFor = conversation => {
+      const collectionId = String(conversation.context?.sourceMetadata?.collectionId ?? "");
+      if (!groups.has(collectionId)) {
+        groups.set(collectionId, {
+          id: collectionId,
+          name: conversation.context?.sourceMetadata?.collectionName || collectionId || source.label,
+          type: conversation.context?.sourceMetadata?.documentType || "other",
+          conversations: []
+        });
+      }
+      return groups.get(collectionId);
+    };
+    // The archive's own declaration order decides collection order…
+    for (const conversation of source.conversations) groupFor(conversation);
+    // …and the caller's sorted, filtered list fills the visible entries.
+    for (const conversation of conversations) groupFor(conversation).conversations.push(conversation);
+    return [...groups.values()].filter(group => group.conversations.length).map(group => {
+      readingOrder?.push(...group.conversations);
+      const collectionKey = `${source.id}::collection:${group.id}`;
+      const stored = state.groupState.characters[collectionKey];
+      const containsCurrent = group.conversations.some(conversation => conversation.id === state.current?.id);
+      const open = searching || (stored === undefined ? containsCurrent : stored === true);
+      return `<details class="character-group" data-character-key="${esc(collectionKey)}"${open ? " open" : ""}>
+        <summary>
+          <span class="character-summary-label" title="${esc(t(`personal.type.${group.type}`))}">${esc(group.name)}</span>
+          <span class="character-count">${group.conversations.length}</span>
+        </summary>
+        <div class="character-conversations">${personalYearListMarkup(group.conversations)}</div>
+      </details>`;
+    }).join("");
+  }
+
   function sourceRowMenuMarkup(source, conversationCount) {
     const canReconnect = source.assetMode === "local-reconnect" || source.directoryHandle;
     return `<div class="source-row-menu" hidden>
@@ -601,6 +668,8 @@ window.OD = window.OD || {};
         <div class="character-conversations">${conversationListMarkup(ordered, { skipLeading: pinnedCount })}</div>
       </details>`;
       }).join("");
+    } else if (source.source?.platform === "personal-archive") {
+      children = personalCollectionsMarkup(source, conversations, searching, readingOrder);
     } else {
       readingOrder?.push(...conversations);
       children = `<div class="source-conversations">${conversationListMarkup(conversations)}</div>`;
