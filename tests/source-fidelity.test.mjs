@@ -17,6 +17,7 @@ async function loadRuntime() {
     "src/core/mufy-title-resolver.js",
     "src/adapters/contract.js",
     "src/adapters/normalized.js",
+    "src/adapters/personal-archive.js",
     "src/adapters/ciel-house.js",
     "src/adapters/mufy.js",
     "src/adapters/claude-web-exporter.js",
@@ -280,6 +281,7 @@ test("known JSON adapters detect mutually exclusively", async () => {
     [syntheticMufy(), "mufy-raw"],
     [JSON.parse(await readFile(path.join(repositoryRoot, "fixtures/ciel-house-v1.json"), "utf8")), "ciel-house-v1"],
     [JSON.parse(await readFile(path.join(repositoryRoot, "fixtures/normalized-v1.json"), "utf8")), "normalized-v1"],
+    [JSON.parse(await readFile(path.join(repositoryRoot, "fixtures/personal-archive-v1-synthetic.json"), "utf8")), "personal-archive-v1"],
     [JSON.parse(await readFile(path.join(repositoryRoot, "fixtures/claude-web-exporter-synthetic.json"), "utf8")), "claude-web-exporter"],
     [JSON.parse(await readFile(path.join(repositoryRoot, "fixtures/claude-official-2026.json"), "utf8")), "claude-official"],
     [JSON.parse(await readFile(path.join(repositoryRoot, "fixtures/chatgpt-official-2026.json"), "utf8")), "chatgpt-official-2026"]
@@ -295,7 +297,7 @@ test("known JSON adapters detect mutually exclusively", async () => {
 
   assert.deepEqual(
     [...OD.registry.capabilities().map(capability => capability.id)],
-    ["normalized-v1", "ciel-house-v1", "mufy-raw", "claude-web-exporter", "claude-official", "chatgpt-official-2026"]
+    ["normalized-v1", "personal-archive-v1", "ciel-house-v1", "mufy-raw", "claude-web-exporter", "claude-official", "chatgpt-official-2026"]
   );
 });
 

@@ -338,6 +338,23 @@ window.OD = window.OD || {};
   "common.cancel": "取消",
   "common.delete": "删除",
 
+  /* ── personal archive (Phase 1.5) ── */
+  "personal.archive": "私人文字档案",
+  "personal.untitled": "无题",
+  "personal.unknownDate": "日期未知",
+  "personal.type.diary": "日记",
+  "personal.type.dream": "梦境",
+  "personal.type.essay": "随笔",
+  "personal.type.microblog": "微博",
+  "personal.type.note": "备忘",
+  "personal.type.letter": "信件",
+  "personal.type.fragment": "碎片",
+  "personal.type.other": "其他",
+  "personal.collectionsCount": "{count} 个集合",
+  "personal.entriesCount": "{count} 篇",
+  "personal.addedStatus": "已导入私人文字档案：{label} · {summary} · 共 {sources} 个来源",
+  "common.listComma": "，",
+
   /* ── attachments ── */
   "attachment.lazyLoad": "滚动到此处时载入",
   "attachment.reconnectToOpen": "重新连接来源后打开",

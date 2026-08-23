@@ -339,6 +339,23 @@ window.OD = window.OD || {};
   "common.cancel": "Cancel",
   "common.delete": "Delete",
 
+  /* ── personal archive (Phase 1.5) ── */
+  "personal.archive": "Personal Archive",
+  "personal.untitled": "Untitled",
+  "personal.unknownDate": "Unknown date",
+  "personal.type.diary": "Diary",
+  "personal.type.dream": "Dream",
+  "personal.type.essay": "Essay",
+  "personal.type.microblog": "Microblog",
+  "personal.type.note": "Note",
+  "personal.type.letter": "Letter",
+  "personal.type.fragment": "Fragment",
+  "personal.type.other": "Other",
+  "personal.collectionsCount": { "one": "{count} collection", "other": "{count} collections" },
+  "personal.entriesCount": { "one": "{count} entry", "other": "{count} entries" },
+  "personal.addedStatus": "Imported personal archive: {label} · {summary} · {sources} sources total",
+  "common.listComma": ", ",
+
   /* ── attachments ── */
   "attachment.lazyLoad": "Loads when scrolled into view",
   "attachment.reconnectToOpen": "Reconnect the source to open",
