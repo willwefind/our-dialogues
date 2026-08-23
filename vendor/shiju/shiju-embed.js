@@ -225,9 +225,11 @@ const inkColorOf = st => rgb2css(shade(hex2rgb(inkOf(st.ink)), (st.inkLight || 0
 // 读 cfg('latinFont')，familyOf/cjkStack 读 cfg('myFonts')；量宽走 PLATFORM）。
 const FONTS = [
   { id:'sys',      name:'系统宋体',  probes:[] },
-  { id:'zhuque',   name:'朱雀仿宋',  probes:['Zhuque Fangsong (technical preview)','Zhuque Fangsong (technical prev','朱雀仿宋（预览测试版）','朱雀仿宋'] },
-  { id:'jinghua',  name:'京華老宋',  probes:['KingHwaOldSong','京華老宋體','京華老宋体'] },
-  { id:'huiwen',   name:'汇文明朝',  probes:['Huiwen-mincho','汇文明朝体'] },
+  // 各条 probes 末尾的英文名是 Our Dialogues 阅读器捆包字体的 @font-face 族名 ——
+  // 嵌入阅读器时靠它认出「阅读器已经带了这款字」，一个文件都不用重复装（去重清单 §9.1）
+  { id:'zhuque',   name:'朱雀仿宋',  probes:['Zhuque Fangsong (technical preview)','Zhuque Fangsong (technical prev','朱雀仿宋（预览测试版）','朱雀仿宋','Zhuque Fangsong'] },
+  { id:'jinghua',  name:'京華老宋',  probes:['KingHwaOldSong','京華老宋體','京華老宋体','KingHwa OldSong'] },
+  { id:'huiwen',   name:'汇文明朝',  probes:['Huiwen-mincho','汇文明朝体','Huiwen Mincho'] },
   { id:'jinshu',   name:'寒蝉锦书',  probes:['寒蝉锦书宋','寒蟬錦書宋','ChillJinshuSong'] },
   { id:'chillhuo', name:'寒蝉活宋',  probes:['ChillHuoSong_F','寒蝉活宋体__'] },
   { id:'duanhei',  name:'寒蝉端黑',  probes:['寒蝉端黑宋Pro','寒蟬端黑宋Pro','ChillDuanHeiSongPro'] },
@@ -329,6 +331,18 @@ async function ensureCustomFonts(){
     try { const face = new FontFace(f.id, `url(${f.data})`); await face.load(); document.fonts.add(face); loadedCustom.add(f.id); }
     catch (e){ console.warn('[拾句] 装不上字体', f.name, e.message); }
   }
+}
+
+// 嵌入方给可再分发西文字体提供文件 URL 时，**选中那一刻**才真正装载（§9.3 懒加载）。
+// 装完清探测缓存，让 hasFont 重探出「装上了」。用户脚本路径不带 URL，此函数永不被调。
+const urlFontLoaded = new Set();
+async function ensureUrlFont(family, url){
+  if (urlFontLoaded.has(family)) return;
+  const face = new FontFace(family, 'url("' + url + '")');
+  await face.load();
+  document.fonts.add(face);
+  urlFontLoaded.add(family);
+  probeCache.clear();
 }
 
 // ════════════════════════════════════════════════════════════════════
@@ -1157,6 +1171,8 @@ const STUDIO_I18N = {
     'font.addTitle': '存在油猴里，所有网站通用',
     'font.tooBig': '{name} 有 {mb}MB，太大存不进油猴。请用裁过子集的版本，或直接双击装进系统。',
     'font.installFail': '装不上：{name}',
+    'font.urlLoading': '正在装载 {name}…',
+    'font.urlFailed': '{name} 装载失败。',
     'font.notInstalledTip': '这款字系统里没装。双击字体文件装进 Windows（装完要**完全重开浏览器**），或按下面的「＋ 从文件装」。',
 
     // ── 色 ───────────────────────────────────────────────────────
@@ -1303,6 +1319,8 @@ const STUDIO_I18N = {
     'font.addTitle': 'Stored in the userscript manager, works on every site',
     'font.tooBig': '{name} is {mb}MB — too big to store in the userscript manager. Use a subsetted version, or double-click the file to install it system-wide.',
     'font.installFail': 'Could not install: {name}',
+    'font.urlLoading': 'Loading {name}…',
+    'font.urlFailed': 'Could not load {name}.',
     'font.notInstalledTip': 'This font is not installed. Double-click the font file to install it into Windows (then fully restart the browser), or use “＋ Install a font from file” below.',
 
     // ── 色 ───────────────────────────────────────────────────────
@@ -1580,6 +1598,8 @@ const pickFiles = accept => new Promise(res => {
 function openPanel(text, init = {}){
   // 语言先落定再建面板：面板 HTML 是开面板时现拼的，t() 在拼的那一刻取词
   setStudioLocale(init.locale || 'auto');
+  // 嵌入方可为可再分发西文字体提供文件 URL（{latinId: url}）——选中才装载
+  const embedFontUrls = (init.fontUrls && typeof init.fontUrls === 'object') ? init.fontUrls : {};
   ui();
   if (mask) mask.remove();
   const blank = !String(text || '').trim();     // 空手起稿（写日记随笔），不是从网页上摘的
@@ -2142,13 +2162,28 @@ function openPanel(text, init = {}){
       box.append(b);
     }
 
-    // 西文字体：只列真装了的，每行用它自己写 "Aa Bb 0123"
+    // 西文字体：列真装了的；嵌入方给了文件 URL 的也列（选中那一刻才装载，§9.3）
     const lb = q('#latin'); lb.textContent = '';
     for (const l of LATIN){
       const hit = l.probes.length ? resolveFont(l) : null;
-      if (l.probes.length && !hit) continue;
-      lb.append(fontRow(l.id, l.id === 'none' ? t('font.noneLatin') : `${l.name} — Aa Bb 0123`,
-                        hit ? `"${hit}"` : null, l.hint ? tName('hint', l.id, l.hint) : ''));
+      const url = !hit && l.probes.length ? embedFontUrls[l.id] : null;
+      if (l.probes.length && !hit && !url) continue;
+      const row = fontRow(l.id, l.id === 'none' ? t('font.noneLatin') : `${l.name} — Aa Bb 0123`,
+                        hit ? `"${hit}"` : null, l.hint ? tName('hint', l.id, l.hint) : '');
+      if (url) row.addEventListener('click', async e => {
+        e.stopPropagation();               // 拦下通用委托，先装字再落选
+        tipEl.textContent = t('font.urlLoading', { name: l.name });
+        try {
+          await ensureUrlFont(l.probes[0], url);
+          if (!alive()) return;
+          st.latinFont = l.id; setCfg('latinFont', st.latinFont);
+          buildFonts(); sync(); draw();
+          tipEl.textContent = '';
+        } catch (err) {
+          if (alive()) tipEl.textContent = t('font.urlFailed', { name: l.name });
+        }
+      });
+      lb.append(row);
     }
 
     // 标题字体：中文和英文都能挑（挑了英文字，汉字会自动落回正文的中文字体）

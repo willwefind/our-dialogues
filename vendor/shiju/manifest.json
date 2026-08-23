@@ -2,7 +2,26 @@
   "name": "shiju-embed",
   "version": "0.17.0",
   "source": "https://github.com/willwefind/shiju",
-  "sourceCommit": "42b5da6b56777695c202299e5b9c17a3f45cc607",
+  "sourceCommit": "d231b36a537e84fb130d7fd0c030215732f7fae7",
   "license": "AGPL-3.0",
-  "generatedBy": "tools/sync-shiju-vendor.mjs"
+  "generatedBy": "tools/sync-shiju-vendor.mjs",
+  "fonts": {
+    "fellPica": "vendor/shiju/fonts/IM_Fell_DW_Pica/IMFellDWPica-Italic.ttf",
+    "beau": "vendor/shiju/fonts/Beau_Rivage/BeauRivage-Regular.ttf",
+    "coral": "vendor/shiju/fonts/Coral_Pixels/CoralPixels-Regular.ttf",
+    "jim": "vendor/shiju/fonts/Jim_Nightshade/JimNightshade-Regular.ttf",
+    "limelight": "vendor/shiju/fonts/Limelight/Limelight-Regular.ttf",
+    "smokum": "vendor/shiju/fonts/Smokum/Smokum-Regular.ttf",
+    "tages": "vendor/shiju/fonts/Tagesschrift/Tagesschrift-Regular.ttf",
+    "uncial": "vendor/shiju/fonts/Uncial_Antiqua/UncialAntiqua-Regular.ttf"
+  },
+  "fontReuse": {
+    "Huiwen Mincho": "reuse Our Dialogues bundle",
+    "Zhuque Fangsong": "reuse Our Dialogues bundle",
+    "IM Fell English": "reuse Our Dialogues bundle",
+    "Special Elite": "reuse Our Dialogues bundle",
+    "KingHwa OldSong": "system/local only (32MB, never bundled)",
+    "IM Fell DW Pica / Beau Rivage / Coral Pixels / Jim Nightshade / Limelight / Smokum / Tagesschrift / Uncial Antiqua": "vendored, FontFace-loaded on selection",
+    "other CJK fonts": "system-installed only (§9.2)"
+  }
 }

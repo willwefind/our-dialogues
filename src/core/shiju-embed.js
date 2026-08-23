@@ -99,19 +99,47 @@
     return false;
   }
 
-  // 开 Studio：懒加载 → 语言跟着阅读器 → onClose 由调用方收回锚点/焦点。
+  // 阅读器已捆的字体给拾句复用（§9.1）：开面板前先把 @font-face 真正取下来，
+  // 否则拾句的宽度探测量到的是回退字体，会把它们当「没装」。
+  // 京華老宋的字体文件默认不在仓里（32MB 本地自备）——load 失败就当没装，探测如实变灰。
+  var SHARED_FACES = ["Huiwen Mincho", "Zhuque Fangsong", "IM Fell English", "Special Elite", "KingHwa OldSong"];
+  function preloadSharedFaces() {
+    if (!document.fonts || typeof document.fonts.load !== "function") return Promise.resolve();
+    var loads = SHARED_FACES.map(function (family) {
+      return document.fonts.load('16px "' + family + '"').catch(function () {});
+    });
+    var timeout = new Promise(function (resolve) { setTimeout(resolve, 1500); });
+    return Promise.race([Promise.all(loads), timeout]);
+  }
+
+  var vendorManifest = null;
+  function loadVendorManifest() {
+    if (vendorManifest) return Promise.resolve(vendorManifest);
+    if (typeof fetch !== "function") return Promise.resolve({});
+    return fetch("vendor/shiju/manifest.json")
+      .then(function (r) { return r.ok ? r.json() : {}; })
+      .then(function (m) { vendorManifest = m; return m; })
+      .catch(function () { return {}; });
+  }
+
+  // 开 Studio：懒加载 + 共享字体预载 + 清单（西文字体 URL 表）并行 →
+  // 语言跟着阅读器 → onClose 由调用方收回锚点/焦点。
   function open(payload, opts) {
     var o = opts || {};
-    return ensureLoaded().then(function (embed) {
-      embed.openPanel(payload.text, {
-        title: payload.title,
-        source: payload.source,
-        date: payload.date,
-        locale: (window.OD.i18n && OD.i18n.currentLocale()) || "zh-CN",
-        onClose: function () { if (typeof o.onClose === "function") o.onClose(); },
+    return Promise.all([ensureLoaded(), preloadSharedFaces(), loadVendorManifest()])
+      .then(function (results) {
+        var embed = results[0];
+        var manifest = results[2] || {};
+        embed.openPanel(payload.text, {
+          title: payload.title,
+          source: payload.source,
+          date: payload.date,
+          locale: (window.OD.i18n && OD.i18n.currentLocale()) || "zh-CN",
+          fontUrls: manifest.fonts || {},
+          onClose: function () { if (typeof o.onClose === "function") o.onClose(); },
+        });
+        return embed;
       });
-      return embed;
-    });
   }
 
   OD.shijuStudio = {
