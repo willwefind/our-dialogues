@@ -314,6 +314,7 @@ window.OD = window.OD || {};
   "bookmark.rename": "改名",
   "bookmark.remove": "删除书签",
   "common.sourceMissing": "（来源不在书库中）",
+  "common.sourceMissingSuffix": " ·（来源不在书库中）",
 
   /* ── highlights & notes ── */
   "annotate.needConversation": "先打开一段对话，再划线。",

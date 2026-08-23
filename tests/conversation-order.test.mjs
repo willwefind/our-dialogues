@@ -923,6 +923,32 @@ test("old persisted toolTab values restore into the right sidebar mode", async (
   assert.equal(elements.get("libraryPane").hidden, true);
 });
 
+test("a stored en locale boots the Reader with English runtime strings", async () => {
+  const stored = new Map([
+    ["our-dialogues.conversation-sort", "asc"],
+    ["our-dialogues.reader-state.v1", JSON.stringify({ locale: "en" })]
+  ]);
+  const { runtime, elements } = await loadAppRuntime("asc", { stored });
+  await runtime.OD.app.ready;
+  assert.equal(runtime.OD.i18n.currentLocale(), "en", "the persisted locale wins over the zh browser");
+  assert.equal(runtime.document.documentElement.lang, "en", "<html lang> follows the resolved locale");
+  assert.equal(elements.get("status").textContent, "Files are parsed in your browser only and never uploaded.");
+  assert.equal(elements.get("currentTitle").textContent, "No archive loaded yet");
+});
+
+test("legacy settings without a locale normalize to auto and keep the zh browser default", async () => {
+  const stored = new Map([
+    ["our-dialogues.conversation-sort", "asc"],
+    ["our-dialogues.reader-state.v1", JSON.stringify({ toolTab: null })]
+  ]);
+  const { runtime, elements } = await loadAppRuntime("asc", { stored });
+  await runtime.OD.app.ready;
+  assert.equal(runtime.OD.i18n.currentSetting(), "auto", "missing locale normalizes to auto");
+  assert.equal(runtime.OD.i18n.currentLocale(), "zh-CN", "auto resolves through the zh-CN fake navigator");
+  assert.equal(runtime.document.documentElement.lang, "zh-CN");
+  assert.equal(elements.get("status").textContent, "文件只在本机浏览器中解析，不会上传。");
+});
+
 test("library home renders continue-reading, recent additions, and summary without stealing the reader", async () => {
   const { runtime, elements } = await loadAppRuntime("asc");
   const conversation = (id, createdAt) => ({

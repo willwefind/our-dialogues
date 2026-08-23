@@ -315,6 +315,7 @@ window.OD = window.OD || {};
   "bookmark.rename": "Rename",
   "bookmark.remove": "Delete bookmark",
   "common.sourceMissing": "(source not in the library)",
+  "common.sourceMissingSuffix": " · (source not in the library)",
 
   /* ── highlights & notes ── */
   "annotate.needConversation": "Open a conversation first, then highlight.",
