@@ -1,0 +1,185 @@
+{
+  "schema": "our-dialogues.personal-archive.v1",
+  "archive": {
+    "id": "archive-banxia-01",
+    "name": "半夏的字纸箱",
+    "author": { "id": "author-banxia", "name": "半夏" }
+  },
+  "exportedAt": "2026-08-23T13:45:00+08:00",
+  "collections": [
+    {
+      "id": "col-diary",
+      "name": "纸上日子",
+      "type": "diary",
+      "entries": [
+        {
+          "id": "diary-2014-11-02",
+          "title": null,
+          "createdAt": "2014-11-02",
+          "updatedAt": null,
+          "text": "降温了。中午去食堂的路上，梧桐叶一口气落了一半，像有人在楼上抖床单。晚自习停电十分钟，大家莫名高兴，黑暗里有人小声唱歌，跑调，但没有人笑。来电之后，教室反而安静了。",
+          "tags": [],
+          "metadata": {}
+        },
+        {
+          "id": "diary-2015-06-30",
+          "title": null,
+          "createdAt": "2015-06-30",
+          "updatedAt": "2015-07-02T22:10:00+08:00",
+          "text": "上半年的最后一天，照例盘点：搬了一次家，读完十一本书，学会了修自行车的闸线。没做到的事就不写了，写下来像给自己打欠条。\n\n雨季正式开始。晾在阳台的白衬衫三天没干，闻起来像水草。房东说这栋楼比我年纪还大，我摸了摸楼梯扶手，忽然对它客气起来。\n\n夜里想给阿蓟写信，写到一半发现没有她的新地址，就把信纸折成一只船，摆在窗台上。就当寄出去了。",
+          "tags": [],
+          "metadata": {}
+        },
+        {
+          "id": "diary-2016-03-17",
+          "title": null,
+          "createdAt": "2016-03-17",
+          "updatedAt": null,
+          "text": "青苔巷的猫有名字了，楼下的小孩管它叫馒头。它谁也不理，只在落雨前蹲上配电箱。今天它蹲上去了，我就把伞放进包里。傍晚果然下雨。猫比天气预报可信。",
+          "tags": [],
+          "metadata": {}
+        },
+        {
+          "id": "diary-2016-03-17-02",
+          "title": null,
+          "createdAt": "2016-03-17",
+          "updatedAt": null,
+          "text": "补记：睡前想起白天漏写的一件事。修伞的师傅收我五块，找不开，塞给我两颗水果糖当零钱，我说好。世界上有些账，是这样结清的。",
+          "tags": [],
+          "metadata": {}
+        }
+      ]
+    },
+    {
+      "id": "col-dream",
+      "name": "潮汐记录",
+      "type": "dream",
+      "entries": [
+        {
+          "id": "dream-2024-09-08-01",
+          "title": "灯塔图书馆",
+          "createdAt": "2024-09-08T07:26:00+08:00",
+          "updatedAt": null,
+          "text": "梦见一座开在灯塔里的图书馆，书架是螺旋形的，顺着楼梯一直长到灯室。书脊上没有书名，只印着一小格天气：晴、雾、大风。管理员说，借书不用还书，要还的是你读它时的那种天气。我借走了一本“雾”。醒来的时候，窗外真的起雾了。",
+          "tags": ["图书馆", "雾", "反复出现"],
+          "metadata": {}
+        },
+        {
+          "id": "dream-2024-12-21-01",
+          "title": "旧车站的钟",
+          "createdAt": "2024-12-21T06:58:00+08:00",
+          "updatedAt": null,
+          "text": "旧车站的大钟停在四点十分，站台上的人都按这个时间生活，永远差十分钟到四点。有人递来一张车票，目的地印着“原地”。我在梦里觉得这非常合理，检了票，找座位坐下。火车始终没开，窗外的风景自己动了起来。",
+          "tags": [],
+          "metadata": {}
+        },
+        {
+          "id": "dream-2025-04-03-01",
+          "title": null,
+          "createdAt": "2025-04-03",
+          "updatedAt": null,
+          "text": "只记得一小段：在水下上合唱课，老师说唱错也没关系，气泡会替你们改。我们唱的歌没有歌词。浮出水面时，每个人手里多了一枚很轻的石头。醒来后手心是空的，但我记得那个重量。",
+          "tags": [],
+          "metadata": {}
+        }
+      ]
+    },
+    {
+      "id": "col-weibo",
+      "name": "碎碎念存档",
+      "type": "microblog",
+      "entries": [
+        {
+          "id": "weibo-3498273412",
+          "title": null,
+          "createdAt": "2013-08-05T23:47:00+08:00",
+          "updatedAt": null,
+          "text": "凌晨的风把窗帘吹成船帆。睡不着的人，大概都在假装航行。",
+          "tags": [],
+          "metadata": {}
+        },
+        {
+          "id": "weibo-3512087745",
+          "title": null,
+          "createdAt": "2013-09-14T18:22:00+08:00",
+          "updatedAt": null,
+          "text": "傍晚的人行道树影一晃一晃，像 slow motion 的海。今天学到一个新词：petrichor，雨后泥土的那阵味道。中文要一整句才说得完的东西，英文一个词就装下了。Languages are unfair, and lovely.",
+          "tags": [],
+          "metadata": {}
+        },
+        {
+          "id": "weibo-3550419208",
+          "title": null,
+          "createdAt": "2013-11-02T08:05:00+08:00",
+          "updatedAt": null,
+          "text": "早高峰的公交挤得像沙丁鱼罐头，司机师傅倒温柔，每次急刹车前都先喊一声“抓稳”。全车人一起晃，像排练过的合唱团。",
+          "tags": [],
+          "metadata": { "client": "手机客户端", "place": "白盏镇·汐洲路站", "likes": 3, "reposts": 0 }
+        },
+        {
+          "id": "weibo-3607114521",
+          "title": null,
+          "createdAt": "2013-12-31T23:58:00+08:00",
+          "updatedAt": null,
+          "text": "跨年夜，楼下小卖部的灯还亮着。老板说他不守岁，守店。听起来也很像一种浪漫。新年快乐。",
+          "tags": [],
+          "metadata": {}
+        }
+      ]
+    },
+    {
+      "id": "col-fragment",
+      "name": "字纸篓",
+      "type": "fragment",
+      "entries": [
+        {
+          "id": "fragment-0001",
+          "title": null,
+          "createdAt": null,
+          "updatedAt": null,
+          "text": "夹在旧课本里的一句话，没头没尾：“先把水烧上，其余的事，等水开了再说。”不记得是谁说的，也可能就是我自己。",
+          "tags": [],
+          "metadata": {}
+        },
+        {
+          "id": "fragment-0002",
+          "title": null,
+          "createdAt": null,
+          "updatedAt": null,
+          "text": "Found an old bus ticket in a coat pocket. The route was discontinued years ago. Strange, how a small piece of paper can outlive the road it was printed for. It works as a bookmark now, so it still goes somewhere every night.",
+          "tags": [],
+          "metadata": {}
+        },
+        {
+          "id": "fragment-0003",
+          "title": null,
+          "createdAt": null,
+          "updatedAt": null,
+          "text": "# 越冬清单\n\n给窗缝贴好胶条。\n把绿萝从阳台搬进客厅。\n答应自己：天最冷的那几天，不做任何重大决定。\n剩下的，交给春天。",
+          "tags": [],
+          "metadata": {}
+        }
+      ]
+    },
+    {
+      "id": "col-poetry",
+      "name": "未寄出的诗",
+      "type": "poetry",
+      "entries": [
+        {
+          "id": "poem-0001",
+          "title": "白盏镇的雪",
+          "createdAt": "2022-01-20",
+          "updatedAt": null,
+          "text": "雪落在白盏镇，\n落进邮筒生锈的口音。\n没有人写信了，\n雪替我们把地址\n一个一个，还给天空。",
+          "tags": [],
+          "metadata": {}
+        },
+        {
+          "id": "poem-0002",
+          "text": "把“来日方长”写在纸上，\n纸很快就旧了。\n原来纸也不信。"
+        }
+      ]
+    }
+  ]
+}
