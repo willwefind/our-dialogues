@@ -358,6 +358,8 @@ mark.annotation.annotation-flash{animation:bookmark-flash 1.4s ease 2}
 .annotation-item:hover{background:var(--user)}
 .annotation-item.missing{opacity:.55;cursor:default}
 .highlight-button{position:fixed;z-index:60;padding:6px 13px;border-radius:999px;cursor:pointer;border:1px solid var(--accent);background:var(--panel);color:var(--accent);font:12px/1.3 ui-sans-serif,system-ui,sans-serif;box-shadow:0 6px 22px rgba(0,0,0,.22)}
+/* 禁用态的拾句钮（跨消息选区）：变淡但仍可点 —— 点了用状态行解释原因 */
+.highlight-button[data-blocked="1"]{opacity:.55}
 .annotation-editor{position:fixed;z-index:61;width:min(320px,90vw);padding:12px;border-radius:12px;border:1px solid var(--line);background:var(--panel);box-shadow:0 10px 38px rgba(0,0,0,.28)}
 .annotation-colors{display:flex;gap:7px;margin-bottom:9px}
 .annotation-swatch{width:24px;height:24px;border-radius:50%;cursor:pointer;border:1px solid var(--line);background:var(--hl);padding:0}

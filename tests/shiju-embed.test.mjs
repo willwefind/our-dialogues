@@ -59,6 +59,10 @@ test("载荷映射：assistant 带平台尾巴，user 裸名，文档走作者",
       source: paSource,
     }),
     "半夏");
+  // 说话人本身就是平台名 → 不加尾巴（避免「ChatGPT · ChatGPT」）
+  assert.equal(
+    studio.sourceLine({ conversation: {}, message: { role: "assistant", speaker: "ChatGPT" }, source: chatgptSource }),
+    "ChatGPT");
   // 拿不到说话人 → 来源标签兜底；内部 id 永不上纸面
   const fallback = studio.sourceLine({ conversation: {}, message: { role: "assistant" }, source: claudeSource });
   assert.equal(fallback, "Ciel 的对话");

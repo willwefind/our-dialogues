@@ -51,7 +51,11 @@
     if (message && message.role === "user") return speaker || label;
     var platform = source && source.source && source.source.platform;
     var plat = PLATFORM_LABELS[platform];
-    if (speaker && plat) return speaker + " · " + plat;
+    // 说话人本身就叫平台名（如通用导出里的 "ChatGPT"）就别再加尾巴，
+    // 免得印出「ChatGPT · ChatGPT」
+    if (speaker && plat && speaker.toLowerCase() !== plat.toLowerCase()) {
+      return speaker + " · " + plat;
+    }
     return speaker || label;
   }
 
