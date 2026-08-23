@@ -26,11 +26,20 @@ window.OD = window.OD || {};
 
   function chapterXHTML(conversation, { sourceLabel = "" } = {}) {
     const title = escapeXML(conversation.title || conversation.id || "对话");
-    const meta = [
-      sourceLabel ? escapeXML(sourceLabel) : "",
-      conversation.createdAt ? escapeXML(conversation.createdAt) : "",
-      `${(conversation.messages || []).length} 条`
-    ].filter(Boolean).join(" · ");
+    /* Personal documents read as book pages: byline instead of transcript
+       meta, no speaker lines. Same explicit marker as the Reader. */
+    const sourceMetadata = conversation?.context?.sourceMetadata;
+    const isDocument = sourceMetadata?.contentKind === "personal-document";
+    const byline = isDocument
+      ? [sourceMetadata.collectionName, sourceMetadata.authorName].filter(Boolean).map(escapeXML).join(" · ")
+      : "";
+    const meta = isDocument
+      ? byline
+      : [
+          sourceLabel ? escapeXML(sourceLabel) : "",
+          conversation.createdAt ? escapeXML(conversation.createdAt) : "",
+          `${(conversation.messages || []).length} 条`
+        ].filter(Boolean).join(" · ");
     let hiddenThinking = 0;
     let hiddenTrace = 0;
     const body = [];
@@ -43,9 +52,8 @@ window.OD = window.OD || {};
       const attachments = (message.attachments || [])
         .map(attachment => `<p class="attachment">[附件：${escapeXML(attachment?.name || "未命名文件")}]</p>`)
         .join("\n");
-      body.push(`<div class="msg ${message.role === "user" ? "user" : "assistant"}">
-<p class="who">${speaker}${time}</p>
-${text ? paragraphs(text) : ""}
+      body.push(`<div class="msg ${isDocument ? "document" : (message.role === "user" ? "user" : "assistant")}">
+${isDocument ? "" : `<p class="who">${speaker}${time}</p>\n`}${text ? paragraphs(text) : ""}
 ${attachments}
 </div>`);
     }

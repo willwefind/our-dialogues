@@ -18,6 +18,7 @@ async function loadRuntime() {
   vm.createContext(runtime);
   for (const relativePath of [
     "src/core/schema.js",
+    "src/core/export.js",
     "src/adapters/contract.js",
     "src/adapters/normalized.js",
     "src/adapters/personal-archive.js",
@@ -286,6 +287,46 @@ test("malformed collections and entries are skipped and counted, never guessed a
     skippedEntries: 3,
     types: { note: 1 }
   });
+});
+
+/* ── PA-5: document-shaped exports ──────────────────────────────────── */
+
+test("Markdown export renders a personal document as a page, chats as transcripts", async () => {
+  const OD = await loadRuntime();
+  const { archive } = await OD.registry.parseJSON(await loadFixture());
+  const diary = archive.conversations.find(conversation => conversation.id === "personal:col-diary:diary-2016-03-17");
+
+  const markdown = OD.exporter.conversationToMarkdown(diary, { sourceLabel: "半夏的字纸箱" });
+  assert.ok(markdown.startsWith("# 2016-03-17\n\n*纸上日子 · 半夏*\n\n青苔巷的猫"),
+    "title, byline, then the untouched body");
+  assert.ok(!markdown.includes("**半夏**"), "no speaker line");
+  assert.ok(!markdown.includes("- 消息："), "no transcript meta bullets");
+  assert.ok(!markdown.includes("---"), "no transcript divider");
+
+  const chat = {
+    id: "chat-1", title: "普通对话", createdAt: "2026-01-01T00:00:00.000Z",
+    messages: [{ id: "c1", role: "user", speaker: "You", content: [{ type: "text", text: "问题" }] }]
+  };
+  const chatMarkdown = OD.exporter.conversationToMarkdown(chat, { sourceLabel: "聊天来源" });
+  assert.ok(chatMarkdown.includes("**You**"), "chats keep their speaker lines");
+  assert.ok(chatMarkdown.includes("- 消息：1 条"), "chats keep their meta bullets");
+});
+
+test("HTML export drops the who-line for personal documents only", async () => {
+  const OD = await loadRuntime();
+  const { archive } = await OD.registry.parseJSON(await loadFixture());
+  const diary = archive.conversations.find(conversation => conversation.id === "personal:col-diary:diary-2016-03-17");
+  const chat = {
+    id: "chat-1", title: "普通对话", createdAt: "2026-01-01T00:00:00.000Z",
+    messages: [{ id: "c1", role: "user", speaker: "You", content: [{ type: "text", text: "问题" }] }]
+  };
+  const html = OD.exporter.conversationsToHTML([diary, chat], { title: "混合", sourceLabelOf: () => "来源" });
+  const diarySection = html.slice(html.indexOf('id="c1"'), html.indexOf('id="c2"'));
+  const chatSection = html.slice(html.indexOf('id="c2"'));
+  assert.ok(diarySection.includes('<p class="meta">纸上日子 · 半夏</p>'), "the byline is the document meta");
+  assert.ok(!diarySection.includes('class="who"'), "no who-line in the document section");
+  assert.ok(diarySection.includes("msg document"));
+  assert.ok(chatSection.includes('<p class="who">You</p>'), "the chat section keeps its who-line");
 });
 
 test("the source root carries the archive label and counts-only import stats", async () => {

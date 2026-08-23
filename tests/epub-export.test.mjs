@@ -74,6 +74,30 @@ test("the EPUB round-trips through this project's own zip reader with a valid sk
   assert.doesNotMatch(chapter, /内部/, "thinking text never leaks into the book");
 });
 
+test("personal-document chapters read as pages: byline, no speaker lines", async () => {
+  const runtime = await loadRuntime();
+  const bytes = runtime.OD.epub.buildEpub({
+    title: "字纸箱",
+    conversations: [{
+      id: "personal:col-diary:diary-2016-03-17",
+      title: "2016-03-17",
+      createdAt: "2016-03-17T12:00:00.000Z",
+      context: { room: null, sourceMetadata: { contentKind: "personal-document", collectionId: "col-diary", collectionName: "纸上日子", documentType: "diary", authorName: "半夏", titleSource: "date" } },
+      messages: [{ id: "b1", role: "other", speaker: "半夏", content: [{ type: "text", text: "第一段\n\n第二段" }] }]
+    }],
+    sourceLabelOf: () => "半夏的字纸箱",
+    identifier: "urn:test:2",
+    modified: "2026-08-23T00:00:00Z"
+  });
+  const zip = await runtime.OD.zip.readZip(new runtime.File([bytes], "doc.epub"));
+  const chapter = await zip.readText("OEBPS/chapter-1.xhtml");
+  assert.match(chapter, /<p class="meta">纸上日子 · 半夏<\/p>/, "the byline replaces transcript meta");
+  assert.doesNotMatch(chapter, /class="who"/, "no speaker line above a document body");
+  assert.doesNotMatch(chapter, /1 条/, "no message count for a document chapter");
+  assert.match(chapter, /msg document/);
+  assert.match(chapter, /第一段/);
+});
+
 test("the zip writer produces byte-accurate STORE entries the reader can trust", async () => {
   const runtime = await loadRuntime();
   const bytes = runtime.OD.zipWriter.createZip([

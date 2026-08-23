@@ -1043,10 +1043,19 @@ window.OD = window.OD || {};
         const excerpt = OD.schema.textOf(conversation.messages[index - 1]?.content ?? "")
           .trim().replace(/\s+/g, " ").slice(0, 64);
         const percent = Math.max(0, Math.min(100, Number(entry.percent) || 0));
+        const documentCard = isDocumentConversation(conversation);
+        const continueMeta = documentCard
+          ? [
+              conversation.context?.sourceMetadata?.collectionName || source?.label || "",
+              conversation.createdAt && conversation.context?.sourceMetadata?.titleSource !== "date"
+                ? fmtDateOnly(conversation.createdAt)
+                : ""
+            ].filter(Boolean).map(esc).join(" · ")
+          : `${esc(source?.label || "")}${conversation.createdAt ? ` · ${esc(fmtDate(conversation.createdAt))}` : ""} · ${esc(t("home.segmentPosition", { index, total }))}`;
         card.innerHTML = `<div class="continue-card" data-home-open="${esc(conversation.id)}" role="link" tabindex="0" aria-label="${esc(t("home.continueAria", { title: displayConversationTitle(conversation) }))}">
           <div class="continue-eyebrow">${esc(t("home.lastRead", { time: fmtRelative(entry.updatedAt) }))}</div>
           <div class="continue-title">${esc(displayConversationTitle(conversation))}</div>
-          <div class="continue-meta">${esc(source?.label || "")}${conversation.createdAt ? ` · ${esc(fmtDate(conversation.createdAt))}` : ""} · ${esc(t("home.segmentPosition", { index, total }))}</div>
+          <div class="continue-meta">${continueMeta}</div>
           ${excerpt ? `<div class="continue-excerpt">“${esc(excerpt)}”</div>` : ""}
           <div class="continue-foot">
             <div class="continue-progress" aria-hidden="true"><span style="width:${percent}%"></span></div>
@@ -1061,9 +1070,18 @@ window.OD = window.OD || {};
       const newest = OD.conversationOrder.sortConversations(conversations, "desc").slice(0, 3);
       additions.innerHTML = newest.length ? newest.map(conversation => {
         const source = state.library.sourceForConversation(conversation);
+        const documentCard = isDocumentConversation(conversation);
+        const additionMeta = documentCard
+          ? [
+              conversation.context?.sourceMetadata?.collectionName || source?.label || "",
+              conversation.createdAt && conversation.context?.sourceMetadata?.titleSource !== "date"
+                ? fmtDateOnly(conversation.createdAt)
+                : ""
+            ].filter(Boolean).map(esc).join(" · ")
+          : `${esc(source?.label || "")}${conversation.createdAt ? ` · ${esc(fmtDate(conversation.createdAt))}` : ""} · ${esc(t("conv.segmentCount", { count: conversation.messages.length }))}`;
         return `<div class="home-addition" data-home-open="${esc(conversation.id)}" role="link" tabindex="0">
           <div class="home-addition-title">${esc(displayConversationTitle(conversation))}</div>
-          <div class="home-addition-meta">${esc(source?.label || "")}${conversation.createdAt ? ` · ${esc(fmtDate(conversation.createdAt))}` : ""} · ${esc(t("conv.segmentCount", { count: conversation.messages.length }))}</div>
+          <div class="home-addition-meta">${additionMeta}</div>
         </div>`;
       }).join("") : `<div class="bookmarks-empty">${esc(t("home.additionsEmpty"))}</div>`;
     }
@@ -1393,13 +1411,24 @@ window.OD = window.OD || {};
       results.innerHTML = `<div class="bookmarks-empty">${esc(state.searchScope === "current" ? t("search.noHitsCurrentScope") : t("search.noHits"))}</div>`;
       return hits;
     }
-    const titles = new Map((state.archive?.conversations || []).map(conversation =>
-      [conversation.id, displayConversationTitle(conversation)]
+    const conversationsById = new Map((state.archive?.conversations || []).map(conversation =>
+      [conversation.id, conversation]
     ));
+    /* Personal documents announce provenance as 集合 · 条目 — never a fake
+       speaker prefix; chats keep their title · speaker form. */
+    const hitLabel = hit => {
+      const conversation = conversationsById.get(hit.conversationId);
+      if (!conversation) return String(hit.conversationId);
+      if (isDocumentConversation(conversation)) {
+        return [conversation.context?.sourceMetadata?.collectionName, displayConversationTitle(conversation)]
+          .filter(Boolean).join(" · ");
+      }
+      return `${displayConversationTitle(conversation)}${hit.speaker ? ` · ${hit.speaker}` : ""}`;
+    };
     results.innerHTML = [
       truncated ? `<div class="bookmarks-empty">${esc(t("search.truncated", { limit: OD.messageSearch.DEFAULT_LIMIT }))}</div>` : "",
       ...hits.map(hit => `<div class="search-hit" data-search-conversation="${esc(hit.conversationId)}" data-search-message="${esc(hit.messageId)}">
-        <div class="bookmark-meta">${esc(titles.get(hit.conversationId) || hit.conversationId)}${hit.speaker ? ` · ${esc(hit.speaker)}` : ""}</div>
+        <div class="bookmark-meta">${esc(hitLabel(hit))}</div>
         <div class="search-snippet">${hit.before ? "…" : ""}${esc(hit.before)}<b>${esc(hit.match)}</b>${esc(hit.after)}…</div>
       </div>`)
     ].join("");

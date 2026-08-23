@@ -1356,6 +1356,37 @@ test("personal collections group by declaration order with year and unknown-date
   assert.equal(elements.get("nextPage").disabled, true, "the last visible entry is the end of the reading order");
 });
 
+test("search results and home cards show collection provenance for personal documents", async () => {
+  const { runtime, elements } = await loadAppRuntime("asc");
+  await runtime.OD.app.ready;
+  runtime.OD.app.loadArchive({
+    schema: "our-dialogues.normalized.v1",
+    source: { platform: "personal-archive", exporter: "our-dialogues-personal-archive", formatVersion: 1, sourceLabel: "半夏的字纸箱" },
+    conversations: [{
+      id: "personal:col-diary:diary-2016-03-17",
+      title: "2016-03-17",
+      createdAt: "2016-03-17T12:00:00.000Z",
+      context: { room: null, sourceMetadata: { contentKind: "personal-document", collectionId: "col-diary", collectionName: "纸上日子", documentType: "diary", authorName: "半夏", titleSource: "date" } },
+      participants: [{ id: "banxia", name: "半夏", role: "other" }],
+      messages: [{ id: "personal:col-diary:diary-2016-03-17:body", role: "other", speaker: "半夏", createdAt: "2016-03-17T12:00:00.000Z", content: "猫在落雨前蹲上配电箱。", metadata: { personalDocument: true } }]
+    }]
+  }, "半夏的字纸箱");
+
+  runtime.OD.app.setSearchScope("library");
+  elements.get("searchQuery").value = "配电箱";
+  const hits = runtime.OD.app.performSearch();
+  assert.equal(hits.length, 1);
+  const resultsHTML = String(elements.get("searchResults").innerHTML);
+  assert.ok(resultsHTML.includes("纸上日子 · 2016年3月17日"), "provenance reads collection · entry");
+  assert.ok(!resultsHTML.includes("· 半夏"), "no speaker prefix on a personal document hit");
+
+  elements.get("navLibrary").click();
+  const continueHTML = String(elements.get("continueCard").innerHTML);
+  assert.ok(continueHTML.includes("2016年3月17日"), "the continue card title is the localized date");
+  assert.ok(continueHTML.includes("纸上日子"), "the continue card names the collection");
+  assert.ok(!continueHTML.includes("第 1 / 1 段"), "no segment position for a one-page document");
+});
+
 test("the demo library loads synthetic sources once and skips duplicates on a second click", async () => {
   const { runtime } = await loadAppRuntime("asc");
   runtime.OD.registry = {
