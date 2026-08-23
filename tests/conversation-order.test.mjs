@@ -1235,6 +1235,80 @@ test("removing the last use of a tag resets a stale tag filter instead of strand
   assert.equal(runtime.OD.app.getState().filteredIds.length, 1, "the catalog is not silently empty");
 });
 
+test("personal documents enter document mode, chats keep their transcript chrome", async () => {
+  const { runtime, elements } = await loadAppRuntime("asc");
+  await runtime.OD.app.ready;
+  const personalArchive = {
+    schema: "our-dialogues.normalized.v1",
+    source: {
+      platform: "personal-archive",
+      exporter: "our-dialogues-personal-archive",
+      formatVersion: 1,
+      sourceLabel: "半夏的字纸箱",
+      personalImport: { collections: 2, entries: 2, datedEntries: 1, undatedEntries: 1, skippedCollections: 0, skippedEntries: 0, types: { diary: 1, fragment: 1 } }
+    },
+    conversations: [
+      {
+        id: "personal:col-diary:diary-2016-03-17",
+        title: "2016-03-17",
+        createdAt: "2016-03-17T12:00:00.000Z",
+        context: { room: null, sourceMetadata: { contentKind: "personal-document", collectionId: "col-diary", collectionName: "纸上日子", documentType: "diary", authorName: "半夏", titleSource: "date" } },
+        participants: [{ id: "banxia", name: "半夏", role: "other" }],
+        messages: [{ id: "personal:col-diary:diary-2016-03-17:body", role: "other", speaker: "半夏", createdAt: "2016-03-17T12:00:00.000Z", content: [{ type: "text", text: "青苔巷的猫有名字了。" }], metadata: { personalDocument: true } }]
+      },
+      {
+        id: "personal:col-fragment:fragment-0001",
+        title: "夹在旧课本里的一句话",
+        createdAt: null,
+        context: { room: null, sourceMetadata: { contentKind: "personal-document", collectionId: "col-fragment", collectionName: "字纸篓", documentType: "fragment", authorName: "半夏", titleSource: "first-line" } },
+        participants: [{ id: "banxia", name: "半夏", role: "other" }],
+        messages: [{ id: "personal:col-fragment:fragment-0001:body", role: "other", speaker: "半夏", createdAt: null, content: [{ type: "text", text: "夹在旧课本里的一句话，没头没尾。" }], metadata: { personalDocument: true } }]
+      }
+    ]
+  };
+
+  runtime.OD.app.loadArchive(personalArchive, personalArchive.source.sourceLabel);
+
+  // The archive announces itself as a personal archive, by its own name.
+  assert.equal(elements.get("status").textContent,
+    "已导入私人文字档案：半夏的字纸箱 · 2 个集合，2 篇 · 共 1 个来源");
+  assert.deepEqual([...runtime.OD.app.getState().sources.map(source => source.label)], ["半夏的字纸箱"]);
+
+  // The dated diary opens first (asc sort): document mode, localized date title.
+  assert.equal(runtime.OD.app.getState().current.id, "personal:col-diary:diary-2016-03-17");
+  assert.equal(runtime.document.body.classList.contains("document-mode"), true);
+  assert.equal(elements.get("currentTitle").textContent, "2016年3月17日");
+  const personalMeta = String(elements.get("readerMeta").innerHTML);
+  assert.ok(personalMeta.includes("纸上日子") && personalMeta.includes("半夏"), "meta reads collection · author");
+  assert.ok(!personalMeta.includes(" 段"), "no transcript segment count for a document");
+
+  // Bookmarks keep working on personal documents.
+  assert.ok(runtime.OD.app.addBookmark(), "a bookmark anchors inside a personal document");
+
+  // An undated fragment keeps its conservative title and no invented date.
+  runtime.OD.app.openConversation("personal:col-fragment:fragment-0001");
+  assert.equal(elements.get("currentTitle").textContent, "夹在旧课本里的一句话");
+  assert.equal(runtime.document.body.classList.contains("document-mode"), true);
+
+  // A chat conversation switches the chrome straight back.
+  runtime.OD.app.loadArchive({
+    conversations: [{
+      id: "chat-1", title: "普通对话", createdAt: "2026-01-01T00:00:00.000Z",
+      messages: [
+        { id: "c1", role: "user", content: "问题" },
+        { id: "c2", role: "assistant", content: "回答" }
+      ]
+    }]
+  }, "聊天来源");
+  assert.equal(runtime.OD.app.getState().current.id, "chat-1");
+  assert.equal(runtime.document.body.classList.contains("document-mode"), false, "chats never enter document mode");
+  assert.ok(String(elements.get("readerMeta").innerHTML).includes("2 段"), "chat meta keeps its segment count");
+
+  // Reopening the personal document restores document mode.
+  runtime.OD.app.openConversation("personal:col-diary:diary-2016-03-17");
+  assert.equal(runtime.document.body.classList.contains("document-mode"), true);
+});
+
 test("the demo library loads synthetic sources once and skips duplicates on a second click", async () => {
   const { runtime } = await loadAppRuntime("asc");
   runtime.OD.registry = {

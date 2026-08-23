@@ -58,9 +58,24 @@ window.OD = window.OD || {};
      the i18n handoff. Formatter instances are cached per locale; the option
      set is chosen to match the old toLocaleString() output for zh-CN. */
   const dateFormatters = {};
+  const dateOnlyFormatters = {};
   const relativeFormatters = {};
   function uiLocaleTag() {
     return OD.i18n?.currentLocale?.() || "zh-CN";
+  }
+
+  function fmtDateOnly(value) {
+    if (!value) return "";
+    const d = new Date(value);
+    if (Number.isNaN(d.getTime())) return String(value);
+    const locale = uiLocaleTag();
+    try {
+      const formatter = dateOnlyFormatters[locale] ||
+        (dateOnlyFormatters[locale] = new Intl.DateTimeFormat(locale, { dateStyle: "long" }));
+      return formatter.format(d);
+    } catch (_) {
+      return String(value).slice(0, 10);
+    }
   }
 
   function fmtDate(value) {
@@ -181,12 +196,15 @@ window.OD = window.OD || {};
     }
   }
 
-  function messageAnchor() {
+  function messageAnchorElement() {
     const messages = [...$("messages").querySelectorAll("[data-message-id]")];
     if (!messages.length) return null;
     const scrollTop = Number($("main").scrollTop || 0);
-    const anchor = messages.find(element => Number(element.offsetTop || 0) >= scrollTop) || messages.at(-1);
-    return anchor?.dataset?.messageId || null;
+    return messages.find(element => Number(element.offsetTop || 0) >= scrollTop) || messages.at(-1);
+  }
+
+  function messageAnchor() {
+    return messageAnchorElement()?.dataset?.messageId || null;
   }
 
   function readerSettings() {
@@ -310,13 +328,26 @@ window.OD = window.OD || {};
   function recordReadingProgress() {
     if (!state.current) return;
     const source = state.library.sourceForConversation(state.current);
-    const messageId = messageAnchor();
+    const anchor = messageAnchorElement();
+    const messageId = anchor?.dataset?.messageId || null;
+    const main = $("main");
+    /* How far the viewport bottom has travelled through the anchored
+       message: neutral (clamps to 1) for chat messages shorter than the
+       viewport, meaningful for one long personal document. Layouts that
+       cannot be measured (fake DOM, zero heights) leave it undefined and
+       keep the historical anchored-message-counts-as-read behaviour. */
+    const anchorTop = Number(anchor?.offsetTop);
+    const anchorHeight = Number(anchor?.offsetHeight);
+    const viewportBottom = Number(main.scrollTop || 0) + Number(main.clientHeight);
+    const fraction = anchorHeight > 0 && Number.isFinite(anchorTop) && Number.isFinite(viewportBottom)
+      ? (viewportBottom - anchorTop) / anchorHeight
+      : undefined;
     state.readingProgress = OD.readingProgress.record(state.readingProgress, state.current.id, {
       sourceId: source?.id ?? null,
       messageId,
       page: state.pageIndex,
-      scrollTop: Number($("main").scrollTop || 0),
-      percent: OD.readingProgress.percent(state.current.messages, messageId)
+      scrollTop: Number(main.scrollTop || 0),
+      percent: OD.readingProgress.percent(state.current.messages, messageId, fraction)
     });
   }
 
@@ -436,7 +467,20 @@ window.OD = window.OD || {};
     state.solVoiceSession = null;
   }
 
+  /* Personal documents enter document mode only through this explicit
+     marker — never inferred from shape (one participant, one message, or
+     role "other" alone must not trigger it). */
+  function isDocumentConversation(conversation) {
+    return conversation?.context?.sourceMetadata?.contentKind === "personal-document";
+  }
+
   function displayConversationTitle(conversation) {
+    const sourceMetadata = conversation?.context?.sourceMetadata;
+    if (sourceMetadata?.contentKind === "personal-document" &&
+        sourceMetadata.titleSource === "date" && conversation.createdAt) {
+      const formatted = fmtDateOnly(conversation.createdAt);
+      if (formatted) return formatted;
+    }
     return state.titleLabels.get(String(conversation?.id)) || String(conversation?.title || "");
   }
 
@@ -1040,7 +1084,8 @@ window.OD = window.OD || {};
     "fixtures/normalized-v1.json",
     "fixtures/ciel-house-v1.json",
     "fixtures/chatgpt-official-2026.json",
-    "fixtures/claude-official-2026.json"
+    "fixtures/claude-official-2026.json",
+    "fixtures/personal-archive-v1-synthetic.json"
   ];
 
   async function loadDemoLibrary(fetcher) {
@@ -1052,7 +1097,7 @@ window.OD = window.OD || {};
         if (!response?.ok) continue;
         const parsed = await OD.registry.parseJSON(await response.json());
         if (!parsed?.recognized) continue;
-        loadArchive(parsed.archive, t("demo.sourceLabel", { label: parsed.adapter.label }));
+        loadArchive(parsed.archive, t("demo.sourceLabel", { label: parsed.archive?.source?.sourceLabel || parsed.adapter.label }));
         added += 1;
       } catch (error) {
         console.warn("示例文件载入失败", url, error);
@@ -1860,11 +1905,23 @@ window.OD = window.OD || {};
     $("currentTitle").textContent = displayedTitle;
     $("readerTitle").textContent = displayedTitle;
 
+    const documentMode = isDocumentConversation(c);
+    document.body.classList.toggle("document-mode", documentMode);
     const bits = [];
-    if (source?.label) bits.push(source.label);
-    if (c.context?.room?.name) bits.push(c.context.room.name);
-    if (c.createdAt) bits.push(fmtDate(c.createdAt));
-    bits.push(t("conv.segmentCount", { count: c.messages.length }));
+    if (documentMode) {
+      /* A personal document reads as a page: collection · author (· date
+         when the title itself is not already the date). No segment count —
+         the body is one document, not a transcript. */
+      const sourceMetadata = c.context?.sourceMetadata || {};
+      if (sourceMetadata.collectionName) bits.push(sourceMetadata.collectionName);
+      if (sourceMetadata.authorName) bits.push(sourceMetadata.authorName);
+      if (c.createdAt && sourceMetadata.titleSource !== "date") bits.push(fmtDateOnly(c.createdAt));
+    } else {
+      if (source?.label) bits.push(source.label);
+      if (c.context?.room?.name) bits.push(c.context.room.name);
+      if (c.createdAt) bits.push(fmtDate(c.createdAt));
+      bits.push(t("conv.segmentCount", { count: c.messages.length }));
+    }
     $("readerMeta").innerHTML = bits.map(x => `<span>${esc(x)}</span>`).join('<span class="meta-dot" aria-hidden="true"> · </span>');
 
     state.pages = OD.readerParity.paginateMessages(c.messages, {
@@ -2045,10 +2102,19 @@ window.OD = window.OD || {};
     state.current = null;
     rebuildSolVoiceSession({ rerender: false });
     const detail = importDetails ? ` · ${importDetails}` : "";
+    const personalImport = archive?.source?.platform === "personal-archive"
+      ? archive.source.personalImport
+      : null;
     if (added.reconnected) {
       setArchiveStatus("status.reconnected", { label: added.source.label });
     } else if (added.duplicate) {
       setArchiveStatus("status.duplicate", { label: adapterLabel, count: state.library.size });
+    } else if (personalImport) {
+      const summary = [
+        t("personal.collectionsCount", { count: personalImport.collections }),
+        t("personal.entriesCount", { count: personalImport.entries })
+      ].join(t("common.listComma"));
+      setArchiveStatus("personal.addedStatus", { label: adapterLabel, summary, sources: state.library.size });
     } else {
       setArchiveStatus("status.added", {
         label: adapterLabel,
@@ -2068,6 +2134,7 @@ window.OD = window.OD || {};
   function showEmptyLibrary() {
     state.current = null;
     state.assetSession = null;
+    document.body.classList.toggle("document-mode", false);
     $("reader").classList.add("hidden");
     $("libraryHome")?.classList?.add?.("hidden");
     $("welcome").classList.remove("hidden");
@@ -2144,7 +2211,7 @@ window.OD = window.OD || {};
       const result = requireRecognized(await OD.registry.parseZIP(file));
       return loadArchive(
         result.archive,
-        result.adapter.label,
+        result.archive?.source?.sourceLabel || result.adapter.label,
         result.assetSession || null,
         result.importDetails || "",
         { ...options, reconnectMode: "file" }
@@ -2153,7 +2220,9 @@ window.OD = window.OD || {};
     const text = await file.text();
     const data = JSON.parse(text.replace(/^\uFEFF/, ""));
     const result = requireRecognized(await OD.registry.parseJSON(data));
-    return loadArchive(result.archive, result.adapter.label, null, "", { ...options, reconnectMode: "file" });
+    /* Adapters may name the source themselves (a personal archive shows its
+       own archive name instead of the generic adapter label). */
+    return loadArchive(result.archive, result.archive?.source?.sourceLabel || result.adapter.label, null, "", { ...options, reconnectMode: "file" });
   }
 
   /*

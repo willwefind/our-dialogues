@@ -547,3 +547,11 @@ mark.annotation.annotation-flash{animation:bookmark-flash 1.4s ease 2}
 @font-face{font-family:"IM Fell English";src:url("fonts/im-fell-english/IMFellEnglish-Regular.ttf") format("truetype");font-display:swap}
 @font-face{font-family:"IM Fell English";src:url("fonts/im-fell-english/IMFellEnglish-Italic.ttf") format("truetype");font-style:italic;font-display:swap}
 @font-face{font-family:"Special Elite";src:url("fonts/special-elite/SpecialElite-Regular.ttf") format("truetype");font-display:swap}
+
+/* ── Document mode (personal archive) ──
+   Presentation-only: a personal document reads as a page, not a transcript.
+   app.js toggles body.document-mode from the explicit
+   contentKind === "personal-document" marker — never inferred from shape.
+   Chat conversations keep every piece of their chrome. */
+body.document-mode .message-who{display:none}
+body.document-mode .message-time{display:none}

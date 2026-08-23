@@ -73,3 +73,25 @@ test("percent approximates by anchor index and treats the last message as finish
   assert.equal(progress.isFinished({ percent: 100 }), true);
   assert.equal(progress.isFinished({ percent: 42 }), false);
 });
+
+test("percent scales inside the anchored message when a viewport fraction is supplied", async () => {
+  const progress = await loadReadingProgress();
+  const single = [{ id: "body" }];
+
+  // One long document (a diary entry) no longer opens as "finished".
+  assert.equal(progress.percent(single, "body", 0), 0);
+  assert.equal(progress.percent(single, "body", 0.37), 37);
+  assert.equal(progress.percent(single, "body", 1), 100);
+  assert.equal(progress.percent(single, "body"), 100, "no fraction keeps the historical behaviour");
+  assert.equal(progress.percent(single, "body", Number.NaN), 100, "unmeasurable layouts keep the historical behaviour");
+
+  // Fractions clamp instead of overflowing the scale.
+  assert.equal(progress.percent(single, "body", -3), 0);
+  assert.equal(progress.percent(single, "body", 42), 100);
+
+  // Multi-message conversations blend the fraction into the anchored slot.
+  const four = [{ id: "m1" }, { id: "m2" }, { id: "m3" }, { id: "m4" }];
+  assert.equal(progress.percent(four, "m2", 0.5), 38, "(1 + 0.5) / 4");
+  assert.equal(progress.percent(four, "m4", 0.5), 88, "a huge final message is no longer instantly finished");
+  assert.equal(progress.percent(four, "m4", 1), 100);
+});

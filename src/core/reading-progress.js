@@ -56,16 +56,20 @@ window.OD = window.OD || {};
       .map(([conversationId, entry]) => ({ conversationId, ...entry }));
   }
 
-  /* The anchor is the topmost visible message, so reaching the last message
-     counts as finished. Percent is an approximation for orientation, not a
-     precise character count. */
-  function percent(messages, messageId) {
+  /* The anchor is the topmost visible message. The optional `fraction`
+     (0..1) says how far the viewport has travelled through that anchored
+     message, so one long document (a diary entry is a single message) no
+     longer counts as finished the moment it opens. Callers that cannot
+     measure layout omit it and keep the historical behaviour: the anchored
+     message counts as fully read. Percent stays an approximation for
+     orientation, not a precise character count. */
+  function percent(messages, messageId, fraction) {
     const list = Array.isArray(messages) ? messages : [];
     if (!list.length || messageId == null) return 0;
     const index = list.findIndex(message => String(message?.id) === String(messageId));
     if (index < 0) return 0;
-    if (index >= list.length - 1) return 100;
-    return Math.round(((index + 1) / list.length) * 100);
+    const part = Number.isFinite(Number(fraction)) ? Math.max(0, Math.min(1, Number(fraction))) : 1;
+    return Math.round(((index + part) / list.length) * 100);
   }
 
   function isFinished(entry) {
