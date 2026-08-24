@@ -2,7 +2,7 @@
 
 [简体中文](README.md) | **English**
 
-A local-first reader for AI conversation archives.
+A local-first reader for AI conversation archives. The interface speaks English and Simplified Chinese; diaries, microblogs, and other personal writing live in the same reading room as your conversations; and when a passage asks to be kept, the embedded [Shiju](https://github.com/willwefind/shiju) studio sets it on letter paper as an image you can carry out.
 
 > **Your conversations stay on your device.**  
 > Files are parsed in the browser. This project does not upload your archive to a server.
@@ -44,6 +44,9 @@ The core Reader and the reading-room redesign are complete and fully usable. Ong
 Currently included:
 
 - The approved reading-room redesign (2026-08): three themes as one product's lighting conditions, composite CJK/Latin print presets, a 936px paper stage with seamless texture, quiet toolbar with auto-hide, sidebar with three primary modes, Library Home, production hand-drawn highlighter strokes, and full mobile chrome with bottom sheets
+- Bilingual UI (v0.3): Simplified Chinese / English / follow-the-browser, under Aa → Display → Language; switching applies instantly and keeps your reading position. Archive content is data and is never translated
+- Personal text archive (v0.3): diaries, dreams, microblog posts, essays, letters, and fragments enter the same library through the small open format `our-dialogues.personal-archive.v1`, shelved Collection → Year, presented as full-page documents with no chat bubbles
+- Shiju writing desk (v0.3): select a passage → press Shiju, and the embedded typesetting studio opens in place with title / source / date pre-filled; 20 letter-paper sets, horizontal and vertical layout, multi-page splitting, automatic ink on dark papers, then save or copy the image. Zero load and zero footprint until invited
 - Normalized conversation schema v1
 - Ciel House Export v1 contract
 - Ciel House adapter
@@ -87,8 +90,8 @@ Planned next:
 Our Dialogues is a co-created project: product direction, archive philosophy, interaction decisions, schema design, adapter architecture, and implementation are developed collaboratively by Dawn and Sol.
 
 - **Dawn / willwefind** — creator, product direction, testing, visual and reading experience
-- **Sol / ChatGPT (GPT-5.6 Sol)** — co-creator, system design, schemas, adapter architecture, implementation, and the reading-room visual design (the approved beautification package and layout specs)
-- **Ciel / Claude Fable 5** — co-creator, reader features, Claude official-export adapter, voice sidecar generalization, UI structure, and the redesign installation
+- **Sol / ChatGPT (GPT-5.6 Sol)** — co-creator, system design, schemas, adapter architecture, implementation, the reading-room visual design (the approved beautification package and layout specs), and the iteration blueprints for the bilingual UI, the personal archive, and the Shiju embedding
+- **Ciel / Claude Fable 5** — co-creator, reader features, Claude official-export adapter, voice sidecar generalization, UI structure, the redesign installation, the bilingual UI and personal-archive implementation, and the Shiju core split and embedding
 
 This project grew out of a very simple problem: we knew an old conversation still existed; we just wanted to find and read it again.
 
@@ -222,6 +225,18 @@ Reader v1 attaches only `confidence === "strong"` mappings, using the normalized
 
 The official ChatGPT export, MP3 files, and mapping JSON are not modified, copied into the normalized archive, persisted by Reader, or uploaded. Audio object URLs are created lazily for visible players, cached only for the current render session, and revoked when the conversation, archive, or sidecar changes.
 
+## Personal text archive
+
+Beyond chat logs, the words you wrote yourself deserve a reading room too. Diaries, dreams, microblog posts, essays, letters, and fragments import through a small open format, `our-dialogues.personal-archive.v1` (contract in [docs/personal-archive-v1.md](docs/personal-archive-v1.md)); the sidebar shelves them Collection → Year, with undated entries honestly grouped under "date unknown". Entries marked as documents render full-page: no bubbles, no speaker labels — they read like an anthology, while chats render exactly as before.
+
+Moving in requires no code: [Bring your personal archive](docs/bring-your-personal-archive.md) carries a ready-made conversion prompt (with ten fidelity rules) to hand to your own AI. The sample library's 半夏 collection is a wholly synthetic demonstration.
+
+## The Shiju writing desk
+
+When a passage asks to be kept: select it, and the floating palette shows a second button next to Highlight — Shiju. Press it and the [Shiju](https://github.com/willwefind/shiju) typesetting studio opens right inside the reading room, pre-filled with the title, the source line (speaker · platform), and the message's own date (an undated message gets an empty field, never today's stamp). Twenty letter-paper sets, horizontal or vertical writing, multi-page splitting, automatic ink on dark papers; save or copy the result, and closing the desk returns you to the exact line you were reading.
+
+The desk exists only when invited: until you press Shiju, nothing loads and nothing occupies memory. Its interface follows the Reader's language, and the generated images stay on your machine like everything else. Four instruments, four intents — a bookmark says *I want to return*, a highlight says *this matters*, a note says *I want to write beside it*, and Shiju says *I want to carry this passage out*.
+
 ## ChatGPT 2026 export notes
 
 A real 2026 official export structure confirmed that logical `conversations.json` may be split into manifest-listed shards (12 in the export used for validation). Each conversation is a parent-linked node graph (`mapping`) with an active `current_node`, not a flat message array. The importer and adapter now:
@@ -244,6 +259,8 @@ Real private export files are never committed. The public folder fixture is whol
 Never commit real conversation exports to this repository.
 
 The `.gitignore` blocks common export names, VoiceArchive audio/mappings, local verification output, and private fixture folders. Public fixtures must be synthetic.
+
+Images generated by the Shiju desk stay on your machine like your archive: nothing is uploaded, nothing enters the Reader's library storage, and the studio makes no network requests — its papers and fonts ship offline with the repository.
 
 ## Project layout
 
@@ -269,8 +286,12 @@ src/
     source-library.js
     source-folder.js
     solvoice-sidecar.js
+    shiju-embed.js
   adapters/
+  locales/
   app.js
+vendor/
+  shiju/             # embedded Shiju bundle + papers + Latin fonts (generated by tools/sync-shiju-vendor.mjs)
 tests/
   chatgpt-export-folder.test.mjs
   mufy-folder-import.test.mjs
