@@ -72,7 +72,7 @@ async function loadAppRuntime(savedSortMode="asc", options={}) {
     "pageIndicator", "pageJump", "pageCount", "toTop", "toEnd",
     "readerToolbar", "readerMoreToggle", "readerMoreMenu", "voiceStatusLine", "readingProgressLabel",
     "bookmarkAdd", "bookmarksList", "bookmarksCount",
-    "annotationsList", "annotationsCount", "highlightButton",
+    "annotationsList", "annotationsCount", "highlightButton", "shijuButton",
     "annotationEditor", "annotationColors", "annotationNote",
     "annotationSave", "annotationCancel", "annotationDelete", "importPanel",
     "recentList", "recentCount",
@@ -154,6 +154,7 @@ async function loadAppRuntime(savedSortMode="asc", options={}) {
     "src/core/export.js",
     "src/core/zip-writer.js",
     "src/core/epub.js",
+    "src/core/shiju-embed.js",
     "src/locales/zh-CN.js",
     "src/locales/en.js",
     "src/i18n.js"
@@ -699,6 +700,61 @@ test("an annotation whose source was removed stays listed but refuses to jump", 
   assert.equal(runtime.OD.app.getState().annotations.length, 1, "the annotation itself is not deleted");
   assert.match(elements.get("annotationsList").innerHTML, /来源不在书库中/);
   assert.equal(runtime.OD.app.jumpToAnnotation(annotation.id), false);
+});
+
+test("拾句按钮：点击才触发懒加载；假 DOM 造不出 <script> 时软着陆到状态行", async () => {
+  const { runtime, elements } = await loadAppRuntime("asc");
+  runtime.OD.app.loadArchive({
+    conversations: [{
+      id: "shiju-1",
+      title: "拾句段",
+      createdAt: "2026-02-02T00:00:00.000Z",
+      messages: [{ id: "shiju-1-m1", role: "assistant", speaker: "Ciel", content: "可以被摘走的一句话。" }]
+    }]
+  }, "ShijuSynthetic");
+  runtime.OD.app.openConversation("shiju-1");
+
+  // 全程 boot + 导入 + 开卷都没碰过拾句：包还没载
+  assert.equal(runtime.__shijuEmbed, undefined, "boot 阶段不许载入拾句包");
+
+  const highlight = elements.get("highlightButton");
+  const shiju = elements.get("shijuButton");
+  highlight.dataset.pending = JSON.stringify({
+    messageId: "shiju-1-m1", selectedText: "可以被摘走的一句话", x: 10, y: 10
+  });
+  shiju.hidden = false;
+  shiju.click();
+  await new Promise(resolve => setTimeout(resolve, 0));
+
+  assert.equal(shiju.hidden, true, "点完按钮要收起");
+  assert.equal(highlight.hidden, true, "标记钮一起收");
+  // 懒加载在假 DOM 里造不出 <script>（document.createElement 不存在）→
+  // Promise 拒绝 → 状态行如实说「拾句没能载入」，绝不静默
+  assert.match(elements.get("status").textContent, /拾句没能载入/);
+});
+
+test("拾句按钮：跨消息禁用态点击只解释原因，不开面板", async () => {
+  const { runtime, elements } = await loadAppRuntime("asc");
+  runtime.OD.app.loadArchive({
+    conversations: [{
+      id: "shiju-2",
+      title: "跨段",
+      createdAt: "2026-02-02T00:00:00.000Z",
+      messages: [{ id: "shiju-2-m1", role: "assistant", content: "第一条。" }]
+    }]
+  }, "ShijuSynthetic2");
+  runtime.OD.app.openConversation("shiju-2");
+
+  const shiju = elements.get("shijuButton");
+  shiju.hidden = false;
+  shiju.dataset.blocked = "1";
+  shiju.click();
+  await new Promise(resolve => setTimeout(resolve, 0));
+
+  assert.equal(shiju.hidden, true);
+  assert.equal(shiju.dataset.blocked, undefined, "禁用标记要清掉");
+  assert.match(elements.get("status").textContent, /一位说话人/);
+  assert.equal(runtime.__shijuEmbed, undefined, "禁用态绝不触发懒加载");
 });
 
 test("the import section opens on an empty library, folds after import, and a manual choice wins", async () => {

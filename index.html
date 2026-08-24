@@ -140,7 +140,8 @@
   </aside>
   <div id="sidebarBackdrop" class="sidebar-backdrop" hidden></div>
 
-  <main id="main">
+  <!-- tabindex=-1：只许脚本把焦点放回来（拾句关面板后收回焦点用），不进 Tab 序 -->
+  <main id="main" tabindex="-1">
     <div id="readerToolbar" class="toolbar">
       <button id="sidebarToggle" class="ghost icon-button" title="显示/隐藏侧栏" data-i18n-title="reader.sidebarToggleTitle">☰</button>
       <div id="currentTitle" class="current-title">尚未载入档案</div>
@@ -353,7 +354,8 @@
     </article>
   </main>
 
-  <button id="highlightButton" class="highlight-button" type="button" hidden data-i18n="annotate.highlightButton">🖍 标记这段</button>
+  <button id="highlightButton" class="highlight-button" type="button" hidden data-i18n="annotate.highlightButton">标记</button>
+  <button id="shijuButton" class="highlight-button shiju-button" type="button" hidden data-i18n="shiju.button">拾句</button>
   <div id="annotationEditor" class="annotation-editor" hidden>
     <div id="annotationColors" class="annotation-colors" role="group" aria-label="荧光笔颜色" data-i18n-aria-label="annotate.colorsAria"></div>
     <textarea id="annotationNote" placeholder="写点小注（留空＝只划线）" aria-label="小注" data-i18n-placeholder="annotate.notePlaceholder" data-i18n-aria-label="annotate.noteAria"></textarea>
@@ -391,6 +393,7 @@
   <script src="src/adapters/chatgpt-official.js"></script>
   <script src="src/adapters/registry.js"></script>
   <script src="src/core/source-folder.js"></script>
+  <script src="src/core/shiju-embed.js"></script>
   <script src="src/locales/zh-CN.js"></script>
   <script src="src/locales/en.js"></script>
   <script src="src/i18n.js"></script>

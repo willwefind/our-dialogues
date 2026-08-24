@@ -2726,6 +2726,7 @@ window.OD = window.OD || {};
     if (typeof getSelection === "function" && getSelection()?.isCollapsed === false) return true;
     const editor = $("annotationEditor");
     if (editor && !editor.hidden) return true;
+    if (OD.shijuStudio?.isOpen?.()) return true;
     if (toolbarHide.audioPlaying > 0) return true;
     if (anyToolbarPopoverOpen()) return true;
     return false;
@@ -3039,19 +3040,20 @@ window.OD = window.OD || {};
      annotations.locate() will search for at render time. */
   let annotationEditorState = null;
 
+  const messageBodyOf = node => {
+    for (let current = node; current; current = current.parentNode) {
+      if (current.classList?.contains?.("message-body")) return current;
+    }
+    return null;
+  };
+
   function selectionDraft() {
     if (typeof getSelection !== "function") return null;
     const selection = getSelection();
     if (!selection || selection.isCollapsed || !selection.rangeCount || !state.current) return null;
     const range = selection.getRangeAt(0);
-    const bodyOf = node => {
-      for (let current = node; current; current = current.parentNode) {
-        if (current.classList?.contains?.("message-body")) return current;
-      }
-      return null;
-    };
-    const body = bodyOf(range.startContainer);
-    if (!body || body !== bodyOf(range.endContainer)) return null;
+    const body = messageBodyOf(range.startContainer);
+    if (!body || body !== messageBodyOf(range.endContainer)) return null;
     const messageElement = body.closest?.("[data-message-id]");
     if (!messageElement) return null;
     const prefix = range.cloneRange();
@@ -3075,8 +3077,27 @@ window.OD = window.OD || {};
 
   function hideAnnotationUI() {
     $("highlightButton").hidden = true;
+    hideShijuButton();
     $("annotationEditor").hidden = true;
     annotationEditorState = null;
+  }
+
+  function hideShijuButton() {
+    const shiju = $("shijuButton");
+    shiju.hidden = true;
+    if (shiju.dataset) delete shiju.dataset.blocked;
+  }
+
+  /* 选区存在但跨了消息（或跨同一条消息里的不同内容块）——拾句一次只摘
+     一位说话人的话（§15），这种选区亮一颗禁用态的拾句钮说明原因，不静默。 */
+  function selectionCrossesMessages() {
+    if (typeof getSelection !== "function") return false;
+    const selection = getSelection();
+    if (!selection || selection.isCollapsed || !selection.rangeCount) return false;
+    const range = selection.getRangeAt(0);
+    const start = messageBodyOf(range.startContainer);
+    const end = messageBodyOf(range.endContainer);
+    return Boolean((start || end) && start !== end);
   }
 
   function syncAnnotationSwatches(color) {
@@ -3111,13 +3132,24 @@ window.OD = window.OD || {};
   }
 
   document.addEventListener("pointerup", event => {
-    if (event?.target?.closest?.("#annotationEditor, #highlightButton")) return;
+    if (event?.target?.closest?.("#annotationEditor, #highlightButton, #shijuButton")) return;
     // A short delay lets the selection settle, especially on touch screens.
     setTimeout(() => {
       const draft = selectionDraft();
       const button = $("highlightButton");
+      const shiju = $("shijuButton");
       if (!draft) {
-        if ($("annotationEditor").hidden) button.hidden = true;
+        if (selectionCrossesMessages()) {
+          button.hidden = true;
+          if (button.dataset) delete button.dataset.pending;
+          shiju.hidden = false;
+          if (shiju.dataset) shiju.dataset.blocked = "1";
+          shiju.title = t("shiju.crossMessage");
+          const rect = getSelection()?.getRangeAt?.(0)?.getBoundingClientRect?.();
+          if (rect) placeFloating(shiju, rect.left + rect.width / 2, rect.top);
+          return;
+        }
+        if ($("annotationEditor").hidden) { button.hidden = true; hideShijuButton(); }
         return;
       }
       $("annotationEditor").hidden = true;
@@ -3125,6 +3157,14 @@ window.OD = window.OD || {};
       button.hidden = false;
       placeFloating(button, draft.x, draft.y);
       button.dataset.pending = JSON.stringify(draft);
+      shiju.hidden = false;
+      if (shiju.dataset) delete shiju.dataset.blocked;
+      shiju.title = "";
+      // 与标记钮同排贴右；量不出宽度的环境按一颗药丸的兜底宽来
+      placeFloating(shiju, draft.x, draft.y);
+      const buttonLeft = parseFloat(button.style?.left) || 0;
+      const buttonWidth = Number(button.offsetWidth) || 72;
+      if (shiju.style) shiju.style.left = `${buttonLeft + buttonWidth + 8}px`;
     }, 30);
   });
 
@@ -3133,12 +3173,54 @@ window.OD = window.OD || {};
     let draft = null;
     try { draft = JSON.parse(button.dataset.pending || "null"); } catch (_) {}
     button.hidden = true;
+    hideShijuButton();
     if (!draft) return;
     openAnnotationEditor(
       { mode: "new", draft, color: state.annotationColor, note: "" },
       { x: draft.x, y: draft.y + 44 }
     );
   });
+
+  $("shijuButton").addEventListener("click", () => {
+    const shiju = $("shijuButton");
+    const blocked = shiju.dataset?.blocked === "1";
+    const button = $("highlightButton");
+    let draft = null;
+    try { draft = JSON.parse(button.dataset.pending || "null"); } catch (_) {}
+    button.hidden = true;
+    hideShijuButton();
+    if (blocked) { setArchiveStatus("shiju.crossMessage"); return; }
+    if (!draft || !state.current) return;
+    openShijuStudio(draft);
+  });
+
+  /* 拾句：把同一条消息里的选区连同出处元数据交给共享 Studio（懒加载）。
+     开面板前记下滚动位置，关上后若漂移就复位 —— 面板是覆盖层，正常不动，
+     但手机上的视口变化可能带着它走（§16）。 */
+  function openShijuStudio(draft) {
+    const conversation = state.current;
+    const message = (conversation.messages || [])
+      .find(item => String(item.id) === String(draft.messageId)) || null;
+    const source = state.library?.sourceForConversation?.(conversation) || null;
+    const payload = OD.shijuStudio.buildPayload({
+      text: draft.selectedText,
+      title: displayConversationTitle(conversation),
+      conversation,
+      message,
+      source
+    });
+    const main = $("main");
+    const returnScrollTop = Number(main?.scrollTop) || 0;
+    OD.shijuStudio.open(payload, {
+      onClose: () => {
+        if (main && Math.abs((Number(main.scrollTop) || 0) - returnScrollTop) > 4) {
+          main.scrollTop = returnScrollTop;
+        }
+        // 焦点也要收回来：拾句钮已随选区隐去，落回阅读面，键盘导航不断线
+        main?.focus?.();
+      }
+    }).catch(() => setArchiveStatus("shiju.loadFailed", undefined, true));
+  }
 
   $("messages").addEventListener("click", event => {
     const mark = event?.target?.closest?.("mark.annotation");
@@ -3199,6 +3281,8 @@ window.OD = window.OD || {};
   });
   document.addEventListener?.("keydown", event => {
     if (event.key === "Escape") {
+      // 拾句 Studio 开着时它自己的 Esc 收面板，阅读器这层按兵不动
+      if (OD.shijuStudio?.isOpen?.()) return;
       // Close the topmost transient layer first; never silently discard an
       // unsaved note — an edited annotation ignores Esc until saved/cancelled.
       const editor = $("annotationEditor");
@@ -3232,9 +3316,13 @@ window.OD = window.OD || {};
       setToolbarHidden(false);
       return;
     }
-    const target = event.target;
-    const tag = String(target?.tagName || "").toLowerCase();
-    if (["input", "textarea", "select"].includes(tag) || target?.isContentEditable) return;
+    // 事件可能来自拾句面板的 shadow root：那时 event.target 是宿主元素，
+    // 看不见里面的输入框 —— 取 composedPath 的真实源头，别让面板里打字翻了页
+    const origin = (typeof event.composedPath === "function"
+      ? event.composedPath()[0] || event.target
+      : event.target);
+    const tag = String(origin?.tagName || "").toLowerCase();
+    if (["input", "textarea", "select"].includes(tag) || origin?.isContentEditable) return;
     if (event.key === "ArrowLeft") goPrevious();
     else if (event.key === "ArrowRight") goNext();
     else if (event.key === "Home") { event.preventDefault(); scrollMain("top"); }
