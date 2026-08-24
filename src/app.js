@@ -3216,6 +3216,8 @@ window.OD = window.OD || {};
         if (main && Math.abs((Number(main.scrollTop) || 0) - returnScrollTop) > 4) {
           main.scrollTop = returnScrollTop;
         }
+        // 焦点也要收回来：拾句钮已随选区隐去，落回阅读面，键盘导航不断线
+        main?.focus?.();
       }
     }).catch(() => setArchiveStatus("shiju.loadFailed", undefined, true));
   }

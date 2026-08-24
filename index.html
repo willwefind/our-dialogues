@@ -140,7 +140,8 @@
   </aside>
   <div id="sidebarBackdrop" class="sidebar-backdrop" hidden></div>
 
-  <main id="main">
+  <!-- tabindex=-1：只许脚本把焦点放回来（拾句关面板后收回焦点用），不进 Tab 序 -->
+  <main id="main" tabindex="-1">
     <div id="readerToolbar" class="toolbar">
       <button id="sidebarToggle" class="ghost icon-button" title="显示/隐藏侧栏" data-i18n-title="reader.sidebarToggleTitle">☰</button>
       <div id="currentTitle" class="current-title">尚未载入档案</div>
