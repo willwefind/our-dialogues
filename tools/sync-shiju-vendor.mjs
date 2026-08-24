@@ -51,6 +51,27 @@ for (const [id, dir] of Object.entries(VENDOR_FONTS)) {
   fontUrls[id] = `vendor/shiju/fonts/${dir}/${face}`;
 }
 
+// 20 套信纸静态 vendor（Dawn 拍板：方案 A1）：40 张 webp 原件带走，
+// 元数据从素材包 json 提炼（名字/组/代表色），dataURL 一个字节不进 manifest。
+// 嵌入 Studio 开面板时 registerUrlPack 登记：不占浏览器存储配额，选纸才取图。
+const papersOut = path.join(outDir, 'papers');
+fs.mkdirSync(papersOut, { recursive: true });
+const packJson = JSON.parse(fs.readFileSync(path.join(src, 'papers', 'letterpaper-20sets.pack.json'), 'utf8'));
+const paperSets = [];
+for (const s of packJson.sets || []) {
+  const urls = {};
+  let missing = false;
+  for (const orient of ['portrait', 'landscape']) {
+    const file = `${s.key}_${orient}.webp`;
+    if (!fs.existsSync(path.join(src, 'papers', file))) { missing = true; break; }
+    fs.copyFileSync(path.join(src, 'papers', file), path.join(papersOut, file));
+    urls[orient] = `vendor/shiju/papers/${file}`;
+  }
+  if (missing) { console.error(`⚠️ ${s.key} 缺原件 webp，整套跳过`); continue; }
+  paperSets.push({ key: s.key, group: s.group, en: s.en, cn: s.cn, mean: s.mean,
+                   portrait: urls.portrait, landscape: urls.landscape });
+}
+
 const version = JSON.parse(fs.readFileSync(path.join(src, 'manifest.json'), 'utf8')).version;
 const commit = execFileSync('git', ['-C', src, 'rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
 const dirty = execFileSync('git', ['-C', src, 'status', '--porcelain'], { encoding: 'utf8' }).trim() ? '-dirty' : '';
@@ -64,6 +85,8 @@ fs.writeFileSync(path.join(outDir, 'manifest.json'), JSON.stringify({
   generatedBy: 'tools/sync-shiju-vendor.mjs',
   // 选中才装载的西文字体（拾句「字」屏用，§9.3）
   fonts: fontUrls,
+  // 静态信纸素材包（§10：元数据在此、图选中才取；来源与授权同拾句仓 papers/）
+  papers: { name: packJson.name || '信纸', sets: paperSets },
   // 去重清单（§9.1）：谁复用阅读器、谁走懒加载、谁只认系统
   fontReuse: {
     'Huiwen Mincho': 'reuse Our Dialogues bundle',
@@ -77,4 +100,4 @@ fs.writeFileSync(path.join(outDir, 'manifest.json'), JSON.stringify({
   },
 }, null, 2) + '\n');
 
-console.log(`vendor/shiju 同步完成：v${version} @ ${commit.slice(0, 7)}${dirty} · 字体 ${Object.keys(fontUrls).length} 款`);
+console.log(`vendor/shiju 同步完成：v${version} @ ${commit.slice(0, 7)}${dirty} · 字体 ${Object.keys(fontUrls).length} 款 · 信纸 ${paperSets.length} 套`);

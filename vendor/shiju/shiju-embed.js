@@ -459,7 +459,17 @@ function myPaper(id){
 // 3MB 的图不塞进脚本本体（脚本会被注入到你打开的每一个网页），
 // 而是导入一次进 GM 存储 —— GM 存储是跨网站共享的，导完就等于常驻在插件里。
 let _packs = null;
-const packs = () => (_packs || (_packs = cfg('packs') || []));
+// 嵌入方登记的「URL 素材包」：图是页面同源的静态文件（比如阅读器 vendor 下的
+// 40 张 webp），不进存储、不占配额，选纸那一刻浏览器才去取。与存储包并列出现；
+// key 撞了存储包优先（packSet 找先出现的）。重复登记 = 整体替换，幂等。
+let _urlPacks = [];
+function registerUrlPack(sets){
+  _urlPacks = (Array.isArray(sets) ? sets : [])
+    .filter(s => s && s.key && (s.portrait || s.landscape));
+  _packs = null; packImgs.clear(); meanCache.clear();
+  return _urlPacks.length;
+}
+const packs = () => (_packs || (_packs = (cfg('packs') || []).concat(_urlPacks)));
 const packSet = key => packs().find(s => s.key === key);
 const packImgs = new Map();
 function packImg(key, orient){
@@ -517,7 +527,7 @@ async function installPack(text, opt = {}){
   // 先把这一份记在内存里，再谈存不存得下 —— 存不下（localStorage 只有 ~5MB）也不该
   // 让刚导进来的纸当场消失。存不下的话回头告诉用户「这次能用，下次还得再导」。
   const kept = setCfg('packs', sets);
-  _packs = sets; packImgs.clear(); meanCache.clear();
+  _packs = null; packImgs.clear(); meanCache.clear();   // 重算合并视图（存储包 + URL 包）
   installPack.persisted = kept;
   // 等图真的解码完再说「装好了」，不然点开一张纸是白的
   if (opt.warm !== false)
@@ -2383,5 +2393,5 @@ const storedBytes = () => cfg('myPapers').reduce((a,p) => a + p.data.length, 0)
 // ── 嵌入导出面（窄）────────────────────────────────────────────
 // openPanel(text, init) 是全部入口；其余是素材接线和版本核对用。
 window.__shijuEmbed = { SHIJU_VERSION, openPanel, setStudioLocale,
-                        installPack, packs, paperMean, bestInk, planPages, renderPage };
+                        installPack, registerUrlPack, packs, paperMean, bestInk, planPages, renderPage };
 })();

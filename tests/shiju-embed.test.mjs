@@ -142,6 +142,38 @@ test("isOpen 看真 DOM；open 把语言和 onClose 接给拾句", async () => {
   assert.equal(closed, 1);
 });
 
+test("素材接线：registerUrlPack 收到清单里的信纸包，字体表原样返回", async () => {
+  const { studio } = await loadShijuEmbed();
+  const calls = [];
+  const embed = { registerUrlPack: sets => { calls.push(plain(sets)); return sets.length; } };
+  const fonts = studio.wireVendorAssets(embed, {
+    fonts: { beau: "vendor/shiju/fonts/Beau_Rivage/x.ttf" },
+    papers: { sets: [{ key: "soft01", cn: "象牙", portrait: "vendor/shiju/papers/soft01_portrait.webp" }] },
+  });
+  assert.deepEqual(plain(fonts), { beau: "vendor/shiju/fonts/Beau_Rivage/x.ttf" });
+  assert.deepEqual(calls, [[{ key: "soft01", cn: "象牙", portrait: "vendor/shiju/papers/soft01_portrait.webp" }]]);
+  // 清单缺席 → 登记空表；老 vendor 没有该导出 → 安静跳过，不抛
+  assert.deepEqual(plain(studio.wireVendorAssets(embed, null)), {});
+  assert.deepEqual(calls[1], []);
+  studio.wireVendorAssets({}, { papers: { sets: [{}] } });
+});
+
+test("vendor 清单带信纸包：20 套 40 张在位，URL 与文件一一对上", () => {
+  const manifest = JSON.parse(fs.readFileSync(path.join(repositoryRoot, "vendor", "shiju", "manifest.json"), "utf8"));
+  const sets = manifest.papers && manifest.papers.sets;
+  assert.ok(Array.isArray(sets) && sets.length === 20, "该有 20 套，实得 " + (sets ? sets.length : 0));
+  for (const s of sets) {
+    for (const orient of ["portrait", "landscape"]) {
+      const rel = s[orient];
+      assert.ok(rel && rel.startsWith("vendor/shiju/papers/"), s.key + " 的 " + orient + " URL 形状不对");
+      assert.ok(fs.existsSync(path.join(repositoryRoot, rel)), rel + " 文件不在位");
+    }
+    assert.ok(Array.isArray(s.mean) && s.mean.length === 3, s.key + " 缺代表色");
+    assert.ok(s.cn || s.en, s.key + " 缺名字");
+    assert.ok(!String(s.portrait).startsWith("data:"), "dataURL 不许进清单");
+  }
+});
+
 test("vendor 包在位且版本对账", () => {
   const bundle = fs.readFileSync(path.join(repositoryRoot, "vendor", "shiju", "shiju-embed.js"), "utf8");
   const manifest = JSON.parse(fs.readFileSync(path.join(repositoryRoot, "vendor", "shiju", "manifest.json"), "utf8"));

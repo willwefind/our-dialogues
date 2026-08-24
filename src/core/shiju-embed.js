@@ -122,20 +122,31 @@
       .catch(function () { return {}; });
   }
 
-  // 开 Studio：懒加载 + 共享字体预载 + 清单（西文字体 URL 表）并行 →
+  // 清单里的素材接线（open 时调用；单测也从这里进）：
+  // 信纸 = registerUrlPack 登记静态 URL 素材包（图不进存储，选纸才取）；
+  // 西文字体 = URL 表交给「字」屏按选中懒装。老 vendor 没有该导出就安静跳过。
+  function wireVendorAssets(embed, manifest) {
+    var m = manifest || {};
+    if (embed && typeof embed.registerUrlPack === "function") {
+      embed.registerUrlPack((m.papers && m.papers.sets) || []);
+    }
+    return m.fonts || {};
+  }
+
+  // 开 Studio：懒加载 + 共享字体预载 + 清单（字体 URL 表 + 信纸包）并行 →
   // 语言跟着阅读器 → onClose 由调用方收回锚点/焦点。
   function open(payload, opts) {
     var o = opts || {};
     return Promise.all([ensureLoaded(), preloadSharedFaces(), loadVendorManifest()])
       .then(function (results) {
         var embed = results[0];
-        var manifest = results[2] || {};
+        var fontUrls = wireVendorAssets(embed, results[2]);
         embed.openPanel(payload.text, {
           title: payload.title,
           source: payload.source,
           date: payload.date,
           locale: (window.OD.i18n && OD.i18n.currentLocale()) || "zh-CN",
-          fontUrls: manifest.fonts || {},
+          fontUrls: fontUrls,
           onClose: function () { if (typeof o.onClose === "function") o.onClose(); },
         });
         return embed;
@@ -148,6 +159,7 @@
     buildPayload: buildPayload,
     sourceLine: sourceLine,
     shijuDate: shijuDate,
+    wireVendorAssets: wireVendorAssets,
     isOpen: isOpen,
     open: open,
   };

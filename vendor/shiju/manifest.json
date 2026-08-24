@@ -2,7 +2,7 @@
   "name": "shiju-embed",
   "version": "0.17.0",
   "source": "https://github.com/willwefind/shiju",
-  "sourceCommit": "d231b36a537e84fb130d7fd0c030215732f7fae7",
+  "sourceCommit": "eb781445e5a2ad2671b27ac1bd2fecd25fbcfce1",
   "license": "AGPL-3.0",
   "generatedBy": "tools/sync-shiju-vendor.mjs",
   "fonts": {
@@ -14,6 +14,271 @@
     "smokum": "vendor/shiju/fonts/Smokum/Smokum-Regular.ttf",
     "tages": "vendor/shiju/fonts/Tagesschrift/Tagesschrift-Regular.ttf",
     "uncial": "vendor/shiju/fonts/Uncial_Antiqua/UncialAntiqua-Regular.ttf"
+  },
+  "papers": {
+    "name": "信纸 · 20 套 40 张",
+    "sets": [
+      {
+        "key": "soft01",
+        "group": "soft",
+        "en": "ivory",
+        "cn": "象牙",
+        "mean": [
+          253,
+          249,
+          243
+        ],
+        "portrait": "vendor/shiju/papers/soft01_portrait.webp",
+        "landscape": "vendor/shiju/papers/soft01_landscape.webp"
+      },
+      {
+        "key": "soft02",
+        "group": "soft",
+        "en": "warm_cream",
+        "cn": "暖奶油",
+        "mean": [
+          249,
+          243,
+          209
+        ],
+        "portrait": "vendor/shiju/papers/soft02_portrait.webp",
+        "landscape": "vendor/shiju/papers/soft02_landscape.webp"
+      },
+      {
+        "key": "soft03",
+        "group": "soft",
+        "en": "blush",
+        "cn": "胭脂粉",
+        "mean": [
+          249,
+          211,
+          212
+        ],
+        "portrait": "vendor/shiju/papers/soft03_portrait.webp",
+        "landscape": "vendor/shiju/papers/soft03_landscape.webp"
+      },
+      {
+        "key": "soft04",
+        "group": "soft",
+        "en": "lavender",
+        "cn": "薰衣草",
+        "mean": [
+          237,
+          212,
+          251
+        ],
+        "portrait": "vendor/shiju/papers/soft04_portrait.webp",
+        "landscape": "vendor/shiju/papers/soft04_landscape.webp"
+      },
+      {
+        "key": "soft05",
+        "group": "soft",
+        "en": "water_blue",
+        "cn": "水蓝",
+        "mean": [
+          206,
+          244,
+          250
+        ],
+        "portrait": "vendor/shiju/papers/soft05_portrait.webp",
+        "landscape": "vendor/shiju/papers/soft05_landscape.webp"
+      },
+      {
+        "key": "soft06",
+        "group": "soft",
+        "en": "mint",
+        "cn": "薄荷",
+        "mean": [
+          210,
+          245,
+          237
+        ],
+        "portrait": "vendor/shiju/papers/soft06_portrait.webp",
+        "landscape": "vendor/shiju/papers/soft06_landscape.webp"
+      },
+      {
+        "key": "soft07",
+        "group": "soft",
+        "en": "silver_gray",
+        "cn": "银灰",
+        "mean": [
+          236,
+          240,
+          242
+        ],
+        "portrait": "vendor/shiju/papers/soft07_portrait.webp",
+        "landscape": "vendor/shiju/papers/soft07_landscape.webp"
+      },
+      {
+        "key": "soft08",
+        "group": "soft",
+        "en": "sand",
+        "cn": "细沙",
+        "mean": [
+          245,
+          215,
+          197
+        ],
+        "portrait": "vendor/shiju/papers/soft08_portrait.webp",
+        "landscape": "vendor/shiju/papers/soft08_landscape.webp"
+      },
+      {
+        "key": "soft09",
+        "group": "soft",
+        "en": "klein_mist",
+        "cn": "克莱因雾",
+        "mean": [
+          193,
+          209,
+          254
+        ],
+        "portrait": "vendor/shiju/papers/soft09_portrait.webp",
+        "landscape": "vendor/shiju/papers/soft09_landscape.webp"
+      },
+      {
+        "key": "soft10",
+        "group": "soft",
+        "en": "night_mist",
+        "cn": "夜雾",
+        "mean": [
+          197,
+          207,
+          241
+        ],
+        "portrait": "vendor/shiju/papers/soft10_portrait.webp",
+        "landscape": "vendor/shiju/papers/soft10_landscape.webp"
+      },
+      {
+        "key": "bold01",
+        "group": "bold",
+        "en": "true_klein_blue",
+        "cn": "克莱因蓝",
+        "mean": [
+          1,
+          47,
+          175
+        ],
+        "portrait": "vendor/shiju/papers/bold01_portrait.webp",
+        "landscape": "vendor/shiju/papers/bold01_landscape.webp"
+      },
+      {
+        "key": "bold02",
+        "group": "bold",
+        "en": "dusk_indigo",
+        "cn": "暮青",
+        "mean": [
+          48,
+          53,
+          102
+        ],
+        "portrait": "vendor/shiju/papers/bold02_portrait.webp",
+        "landscape": "vendor/shiju/papers/bold02_landscape.webp"
+      },
+      {
+        "key": "bold03",
+        "group": "bold",
+        "en": "burgundy",
+        "cn": "酒红",
+        "mean": [
+          129,
+          33,
+          52
+        ],
+        "portrait": "vendor/shiju/papers/bold03_portrait.webp",
+        "landscape": "vendor/shiju/papers/bold03_landscape.webp"
+      },
+      {
+        "key": "bold04",
+        "group": "bold",
+        "en": "sage_green",
+        "cn": "鼠尾草",
+        "mean": [
+          135,
+          173,
+          144
+        ],
+        "portrait": "vendor/shiju/papers/bold04_portrait.webp",
+        "landscape": "vendor/shiju/papers/bold04_landscape.webp"
+      },
+      {
+        "key": "bold05",
+        "group": "bold",
+        "en": "smoked_orange",
+        "cn": "烟橘",
+        "mean": [
+          194,
+          99,
+          63
+        ],
+        "portrait": "vendor/shiju/papers/bold05_portrait.webp",
+        "landscape": "vendor/shiju/papers/bold05_landscape.webp"
+      },
+      {
+        "key": "bold06",
+        "group": "bold",
+        "en": "vintage_mustard",
+        "cn": "陈芥末",
+        "mean": [
+          217,
+          184,
+          70
+        ],
+        "portrait": "vendor/shiju/papers/bold06_portrait.webp",
+        "landscape": "vendor/shiju/papers/bold06_landscape.webp"
+      },
+      {
+        "key": "bold07",
+        "group": "bold",
+        "en": "glacier_cyan",
+        "cn": "冰川青",
+        "mean": [
+          179,
+          209,
+          235
+        ],
+        "portrait": "vendor/shiju/papers/bold07_portrait.webp",
+        "landscape": "vendor/shiju/papers/bold07_landscape.webp"
+      },
+      {
+        "key": "bold08",
+        "group": "bold",
+        "en": "smoky_violet",
+        "cn": "烟紫",
+        "mean": [
+          128,
+          128,
+          144
+        ],
+        "portrait": "vendor/shiju/papers/bold08_portrait.webp",
+        "landscape": "vendor/shiju/papers/bold08_landscape.webp"
+      },
+      {
+        "key": "bold09",
+        "group": "bold",
+        "en": "graphite_blue",
+        "cn": "石墨蓝",
+        "mean": [
+          63,
+          82,
+          97
+        ],
+        "portrait": "vendor/shiju/papers/bold09_portrait.webp",
+        "landscape": "vendor/shiju/papers/bold09_landscape.webp"
+      },
+      {
+        "key": "bold10",
+        "group": "bold",
+        "en": "ink_green",
+        "cn": "墨绿",
+        "mean": [
+          26,
+          67,
+          62
+        ],
+        "portrait": "vendor/shiju/papers/bold10_portrait.webp",
+        "landscape": "vendor/shiju/papers/bold10_landscape.webp"
+      }
+    ]
   },
   "fontReuse": {
     "Huiwen Mincho": "reuse Our Dialogues bundle",
