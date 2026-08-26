@@ -11,6 +11,9 @@
   --od-shadow-paper:0 18px 48px rgba(52,42,31,.14), 0 2px 8px rgba(52,42,31,.08);
   --od-shadow-float:0 12px 36px rgba(52,42,31,.20);
   --od-paper-tile:url("assets/reader/textures/paper-day-texture-tile.webp");
+  --memorial-frame:url("assets/reader/memorial/card-frames/memorial-card-paper-border-image.svg");
+  --memorial-grain:url("assets/reader/memorial/memorial-paper-grain-paper-tile.png");
+  --memorial-plate:url("assets/reader/memorial/ornaments/memorial-archive-bookplate.svg");
   --od-paper-large:url("assets/reader/textures/paper-day-texture.webp");
   --od-ink-grain:url("assets/reader/textures/ink-grain-overlay.png");
   --od-grain-opacity:.022; --od-grain-blend:multiply;
@@ -54,6 +57,8 @@
   --od-shadow-paper:0 22px 56px rgba(0,0,0,.48), 0 2px 10px rgba(0,0,0,.30);
   --od-shadow-float:0 16px 44px rgba(0,0,0,.58);
   --od-paper-tile:url("assets/reader/textures/paper-night-texture-tile.webp");
+  --memorial-frame:url("assets/reader/memorial/card-frames/memorial-card-night-border-image.svg");
+  --memorial-grain:url("assets/reader/memorial/memorial-paper-grain-night-tile.png");
   --od-paper-large:url("assets/reader/textures/paper-night-texture.webp");
   --od-grain-opacity:.024; --od-grain-blend:soft-light;
 }
@@ -65,6 +70,8 @@
   --od-shadow-paper:0 18px 48px rgba(35,49,36,.14), 0 2px 8px rgba(35,49,36,.07);
   --od-shadow-float:0 12px 36px rgba(35,49,36,.20);
   --od-paper-tile:url("assets/reader/textures/paper-eye-texture-tile.webp");
+  --memorial-frame:url("assets/reader/memorial/card-frames/memorial-card-mist-border-image.svg");
+  --memorial-grain:url("assets/reader/memorial/memorial-paper-grain-mist-tile.png");
   --od-paper-large:url("assets/reader/textures/paper-eye-texture.webp");
   --od-grain-opacity:.018; --od-grain-blend:multiply;
 }
@@ -198,6 +205,43 @@ body.toolbar-hidden .toolbar{transform:translateY(-53px);pointer-events:none}
 .continue-progress{flex:1;height:2px;background:var(--line);overflow:hidden}
 .continue-progress span{display:block;height:100%;background:var(--accent)}
 .continue-cta{flex:none;font:12px/1 var(--font-ui);color:var(--muted)}
+/* ── Memorial card ─────────────────────────────────────────────────────
+   An archival note tipped in between pages, not a dashboard tile: one
+   frame treatment, one ornament, and a shadow flatter than Continue
+   Reading's so the card recedes behind it in the reading order. The frame
+   is a single border-image per theme rather than nine positioned slices. */
+.memorial-card{position:relative;margin-top:24px;min-height:172px;padding:28px 32px;
+  background:var(--od-paper-bg);border:1px solid var(--od-line);border-radius:var(--radius-paper);
+  box-shadow:0 3px 11px rgba(52,42,31,.09)}
+.memorial-card::before{content:"";position:absolute;inset:0;border:24px solid transparent;
+  border-image-source:var(--memorial-frame);border-image-slice:24 fill;border-image-width:24px;
+  border-image-repeat:stretch;border-radius:inherit;pointer-events:none}
+/* Grain sits under the content but over the frame fill, at print-dust opacity. */
+.memorial-card::after{content:"";position:absolute;inset:0;border-radius:inherit;
+  background:var(--memorial-grain) top left/128px 128px repeat;opacity:var(--od-grain-opacity);
+  mix-blend-mode:var(--od-grain-blend);pointer-events:none}
+.memorial-card>*{position:relative}
+.memorial-head{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.memorial-eyebrow{font:11px/16px var(--font-ui);letter-spacing:.18em;text-transform:uppercase;color:var(--od-muted)}
+.memorial-name{margin-top:14px;font:600 24px/34px var(--reader-font-family);color:var(--od-ink);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.memorial-date-label{margin-top:16px;font:11px/16px var(--font-ui);letter-spacing:.08em;color:var(--od-muted)}
+.memorial-date{margin-top:4px;font:20px/30px var(--reader-font-family);color:var(--od-ink)}
+.memorial-days{margin-top:12px;font:14px/22px var(--font-ui);color:var(--od-ink)}
+.memorial-days strong{font-weight:600;color:var(--od-accent)}
+.memorial-foot{display:flex;align-items:baseline;justify-content:space-between;gap:16px;margin-top:18px}
+.memorial-provenance,.memorial-recent{font:11px/16px var(--font-ui);color:var(--od-muted)}
+.memorial-details{margin-top:6px;font:11px/16px var(--font-ui);color:var(--od-muted)}
+/* The bookplate is the card's only ornament; it must never outweigh the name. */
+.memorial-plate{flex:none;width:30px;height:30px;background:currentColor;color:var(--od-accent);
+  opacity:.5;-webkit-mask:var(--memorial-plate) center/contain no-repeat;mask:var(--memorial-plate) center/contain no-repeat}
+.memorial-empty{font:14px/22px var(--font-ui);color:var(--od-muted);margin-top:14px}
+@media (max-width: 760px){
+  .memorial-card{padding:22px}
+  .memorial-name{font-size:21px;line-height:30px}
+  .memorial-date{font-size:18px;line-height:28px}
+  .memorial-foot{flex-direction:column;align-items:flex-start;gap:4px}
+}
 .library-home-lower{display:grid;grid-template-columns:minmax(0,1fr) 320px;gap:24px;margin-top:40px}
 .home-recent h3,.home-summary h3{margin:0 0 12px;font:600 14px/1.3 var(--font-ui);color:var(--ink)}
 .home-addition{box-sizing:border-box;min-height:88px;padding:18px 8px;border-bottom:1px solid var(--line);cursor:pointer}

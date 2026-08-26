@@ -257,6 +257,18 @@ window.OD = window.OD || {};
   "home.highlightsUnit": { "one": "highlight", "other": "highlights" },
   "home.note": "All text stays on this machine · attachments connect on demand",
 
+  /* ── memorial card ── */
+  "memorial.eyebrow": "Archive note",
+  "memorial.with": "With {name}",
+  "memorial.firstRecorded": "First recorded on",
+  "memorial.daysInArchive": "{days} days in this archive",
+  "memorial.archiveEarliest": "Earliest record in this archive",
+  "memorial.setByYou": "Set by you",
+  "memorial.recent": "Most recent · {time}",
+  "memorial.noConfirmedDate": "No confirmed first date",
+  "memorial.setDate": "Set date",
+  "memorial.details": "{conversations} conversations · {messages} messages",
+
   /* ── welcome & demo ── */
   "welcome.intro": "Choose a ChatGPT official export folder, a folder of Mufy ZIPs, or load an existing AI-conversation JSON / ZIP. The Reader recognizes it locally and converts it into one reading structure.",
   "welcome.privacy": "Files are never uploaded. Official-export shards merge automatically, and images, audio, video, and other attachments only get temporary local URLs when you scroll near them.",

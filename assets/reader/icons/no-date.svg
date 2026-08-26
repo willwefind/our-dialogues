@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" role="img" aria-labelledby="title desc">
+  <title id="title">no date</title>
+  <desc id="desc">Quiet 24px Reader icon; transparent background; use currentColor.</desc>
+  <g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.7"><rect x="4.5" y="6.2" width="15" height="13" rx="1.5"/><path d="M8 4.3v3.5M16 4.3v3.5M4.5 10h15M8.5 14.8h7" stroke-dasharray="2 2"/></g>
+</svg>

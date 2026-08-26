@@ -40,6 +40,11 @@ window.OD = window.OD || {};
     organization: { favorites: {}, tags: {} },
     favoritesOnly: false,
     tagFilter: "",
+    // Memorial card: which companions the reader keeps at hand, which it last
+    // looked at, and the meeting dates the reader wrote down by hand.
+    companionshipPinned: [],
+    companionshipRecent: [],
+    companionshipOverrides: {},
     importOpen: null,
     readingProgress: {},
     readingOrder: [],
@@ -60,6 +65,7 @@ window.OD = window.OD || {};
   const dateFormatters = {};
   const dateOnlyFormatters = {};
   const relativeFormatters = {};
+  const timeOnlyFormatters = {};
   function uiLocaleTag() {
     return OD.i18n?.currentLocale?.() || "zh-CN";
   }
@@ -89,6 +95,22 @@ window.OD = window.OD || {};
       return formatter.format(d);
     } catch (_) {
       return d.toLocaleString();
+    }
+  }
+
+  // The memorial card prints a clock only when the archive carries one, so
+  // this stays separate from fmtDate's date+time pairing.
+  function fmtTimeOnly(value) {
+    if (!value) return "";
+    const d = new Date(value);
+    if (Number.isNaN(d.getTime())) return "";
+    const locale = uiLocaleTag();
+    try {
+      const formatter = timeOnlyFormatters[locale] ||
+        (timeOnlyFormatters[locale] = new Intl.DateTimeFormat(locale, { timeStyle: "short" }));
+      return formatter.format(d);
+    } catch (_) {
+      return "";
     }
   }
 
@@ -237,6 +259,9 @@ window.OD = window.OD || {};
       searchSourceId: state.searchSourceId,
       toolTab: state.toolTab,
       organization: OD.organization.normalize(state.organization),
+      companionshipPinned: [...state.companionshipPinned],
+      companionshipRecent: [...state.companionshipRecent],
+      companionshipOverrides: OD.companionship.normalizeOverrides(state.companionshipOverrides),
       favoritesOnly: !!state.favoritesOnly,
       tagFilter: state.tagFilter || "",
       updatedAt: new Date().toISOString()
@@ -527,6 +552,129 @@ window.OD = window.OD || {};
 
   function isGreetingConversation(conversation) {
     return conversation.context?.sourceMetadata?.isGreeting === true;
+  }
+
+  /* ── Memorial card ──────────────────────────────────────────────────
+     A companion is whatever the sidebar already groups by: one Mufy
+     character, or a whole source. First dates are never computed here —
+     that lives in OD.companionship, together with its honesty rules. */
+  // Marks where the day count goes so only the number can be emphasized.
+  // A control character can never collide with dictionary text.
+  const MEMORIAL_DAYS_SLOT = String.fromCharCode(1);
+
+  function companionKeyList(value) {
+    const seen = new Set();
+    const list = [];
+    for (const item of Array.isArray(value) ? value : []) {
+      const key = String(item ?? "").trim();
+      if (!key || seen.has(key)) continue;
+      seen.add(key);
+      list.push(key);
+    }
+    return list;
+  }
+
+  function companionEntries() {
+    const entries = [];
+    for (const source of state.library?.sources?.() || []) {
+      const conversations = source.conversations || [];
+      if (source.source?.platform === "mufy") {
+        const characters = new Map();
+        for (const conversation of conversations) {
+          const character = mufyCharacter(conversation);
+          const group = characters.get(character.key) || { ...character, conversations: [] };
+          group.conversations.push(conversation);
+          characters.set(character.key, group);
+        }
+        for (const character of characters.values()) {
+          entries.push({
+            key: OD.companionship.companionKey(source.id, character.key),
+            name: character.name,
+            sourceLabel: source.label || "",
+            conversations: character.conversations
+          });
+        }
+      } else if (conversations.length) {
+        entries.push({
+          key: OD.companionship.companionKey(source.id, null),
+          name: source.label || "",
+          sourceLabel: "",
+          conversations
+        });
+      }
+    }
+    return entries;
+  }
+
+  function companionSummary(entry) {
+    return OD.companionship.resolve(entry.conversations, {
+      key: entry.key,
+      overrides: state.companionshipOverrides
+    });
+  }
+
+  /* Which companion the card shows. An explicit pick wins, then a pinned
+     companion, then whichever dated companion spoke most recently. A
+     companion with no confirmed date never enters the rotation on its own;
+     only choosing it by hand brings it here. */
+  function memorialCompanion(entries) {
+    const byKey = new Map(entries.map(entry => [entry.key, entry]));
+    for (const key of state.companionshipRecent) {
+      const entry = byKey.get(key);
+      if (entry) return entry;
+    }
+    const dated = entries
+      .map(entry => ({ entry, summary: companionSummary(entry) }))
+      .filter(item => item.summary.firstAt);
+    const pinned = dated.filter(item => state.companionshipPinned.includes(item.entry.key));
+    const pool = pinned.length ? pinned : dated;
+    pool.sort((a, b) => String(b.summary.lastAt || "").localeCompare(String(a.summary.lastAt || "")));
+    return pool[0]?.entry || null;
+  }
+
+  function memorialDatedMarkup(summary) {
+    const locale = uiLocaleTag();
+    const time = summary.firstAtHasTime ? fmtTimeOnly(summary.firstAt) : "";
+    const dateText = [fmtDateOnly(summary.firstAt), time].filter(Boolean).join(" · ");
+    const days = Number(summary.days);
+    const daysHtml = Number.isFinite(days)
+      ? esc(t("memorial.daysInArchive", { days: MEMORIAL_DAYS_SLOT }))
+          .replace(MEMORIAL_DAYS_SLOT, `<strong>${esc(days.toLocaleString(locale))}</strong>`)
+      : "";
+    const provenance = summary.firstAtSource === "manual"
+      ? t("memorial.setByYou")
+      : t("memorial.archiveEarliest");
+    const recent = summary.lastAt ? t("memorial.recent", { time: fmtRelative(summary.lastAt) }) : "";
+    return `<div class="memorial-date-label">${esc(t("memorial.firstRecorded"))}</div>
+      <div class="memorial-date">${esc(dateText)}</div>
+      ${daysHtml ? `<div class="memorial-days">${daysHtml}</div>` : ""}
+      <div class="memorial-foot">
+        <span class="memorial-provenance">${esc(provenance)}</span>
+        ${recent ? `<span class="memorial-recent">${esc(recent)}</span>` : ""}
+      </div>
+      <div class="memorial-details">${esc(t("memorial.details", {
+        conversations: summary.conversationCount.toLocaleString(locale),
+        messages: summary.messageCount.toLocaleString(locale)
+      }))}</div>`;
+  }
+
+  function renderMemorialCard() {
+    const host = $("memorialCard");
+    if (!host) return;
+    const entry = memorialCompanion(companionEntries());
+    if (!entry) { host.innerHTML = ""; return; }
+    const summary = companionSummary(entry);
+    host.innerHTML = `<section class="memorial-card" data-companion-key="${esc(entry.key)}"
+      aria-label="${esc(t("memorial.with", { name: entry.name }))}">
+      <div class="memorial-head">
+        <span class="memorial-eyebrow">${esc(t("memorial.eyebrow"))}</span>
+        <span class="memorial-plate" aria-hidden="true"></span>
+      </div>
+      <div class="memorial-name">${esc(t("memorial.with", { name: entry.name }))}</div>
+      ${summary.firstAt
+        ? memorialDatedMarkup(summary)
+        : `<div class="memorial-empty">${esc(t("memorial.noConfirmedDate"))}</div>`}
+    </section>`;
   }
 
   /* Optional year headings (display-only): shown only when one character or
@@ -1064,6 +1212,8 @@ window.OD = window.OD || {};
         </div>`;
       }
     }
+
+    renderMemorialCard();
 
     const additions = $("recentAdditions");
     if (additions) {
@@ -2443,6 +2593,15 @@ window.OD = window.OD || {};
     if (typeof settings.searchSourceId === "string" && settings.searchSourceId) state.searchSourceId = settings.searchSourceId;
     if (settings.organization && typeof settings.organization === "object") {
       state.organization = OD.organization.normalize(settings.organization);
+    }
+    if (Array.isArray(settings.companionshipPinned)) {
+      state.companionshipPinned = companionKeyList(settings.companionshipPinned);
+    }
+    if (Array.isArray(settings.companionshipRecent)) {
+      state.companionshipRecent = companionKeyList(settings.companionshipRecent);
+    }
+    if (settings.companionshipOverrides && typeof settings.companionshipOverrides === "object") {
+      state.companionshipOverrides = OD.companionship.normalizeOverrides(settings.companionshipOverrides);
     }
     if (typeof settings.favoritesOnly === "boolean") state.favoritesOnly = settings.favoritesOnly;
     if (typeof settings.tagFilter === "string") state.tagFilter = settings.tagFilter;

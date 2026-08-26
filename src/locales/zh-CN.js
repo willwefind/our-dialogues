@@ -256,6 +256,18 @@ window.OD = window.OD || {};
   "home.highlightsUnit": "处划线",
   "home.note": "全部文字保存在本机 · 附件按需连接",
 
+  /* ── memorial card ── */
+  "memorial.eyebrow": "纪念",
+  "memorial.with": "与 {name}",
+  "memorial.firstRecorded": "相识于",
+  "memorial.daysInArchive": "相伴 {days} 天",
+  "memorial.archiveEarliest": "档案中最早留下的记录",
+  "memorial.setByYou": "由你记下",
+  "memorial.recent": "最近一次 · {time}",
+  "memorial.noConfirmedDate": "暂无可确认的相识日期",
+  "memorial.setDate": "设置日期",
+  "memorial.details": "{conversations} 段对话 · {messages} 条消息",
+
   /* ── welcome & demo ── */
   "welcome.intro": "选择 ChatGPT 官方 Export 文件夹、包含多个 Mufy ZIP 的文件夹，或载入已有的 AI 对话 JSON / ZIP。Reader 会在本地识别并转换为统一阅读结构。",
   "welcome.privacy": "文件不会上传。官方导出的对话分片会自动合并，图片、音频、视频和其他附件只在滚动到附近时才从本地文件创建临时地址。",
