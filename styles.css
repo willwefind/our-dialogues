@@ -128,7 +128,15 @@ body.has-custom-background[data-bg-target="paper"] .reader::before{
   .bg-segment button{min-height:44px}
   .bg-choose,.bg-actions button{min-height:44px}
 }
-.od-custom-stage-bg{position:fixed;inset:0;z-index:-1;pointer-events:none;background-color:var(--od-outer-bg)}
+.od-custom-stage-bg{position:fixed;inset:0;z-index:-2;pointer-events:none;background-color:var(--od-outer-bg)}
+/* Night compensation belongs to the theme, not to the reader: one set of
+   sliders serves every theme, and Night lays its own scrim over the image
+   instead of asking for a second brightness profile. The scrim sits above the
+   picture and below everything drawn on top of it. */
+body.has-custom-background[data-bg-target="outer"]::before{content:"";position:fixed;inset:0;z-index:-1;
+  pointer-events:none;background:var(--od-stage-scrim,transparent)}
+:root{--od-stage-scrim:transparent}
+:root[data-theme="night"]{--od-stage-scrim:rgba(16,14,12,.42)}
 button,input,select{font:inherit}
 #sidebar{--od-sidebar-w:312px;width:var(--od-sidebar-w);flex:none;height:100%;display:flex;flex-direction:column;overflow-y:auto;background:var(--panel);border-right:1px solid var(--line);transition:margin-left var(--motion-drawer) var(--motion-ease)}
 #sidebar.closed{margin-left:calc(-1 * var(--od-sidebar-w))}
