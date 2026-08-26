@@ -32,13 +32,21 @@ window.OD = window.OD || {};
     focusY: 50,
     // Percent. Below 100 the image recedes so text keeps the foreground.
     brightness: 78,
-    // Pixels of blur. Softness only ever reduces detail — it cannot add any,
-    // which is why this is not called sharpness.
-    softness: 4
+    // Percent, where 100 is the image exactly as sharp as it arrived. The
+    // slider can only take detail away — it never promises to add any, which
+    // is why 100 is the ceiling rather than the middle.
+    clarity: 75,
+    // Percent. How much of the reading paper still veils the image when the
+    // image is on the paper: 100 keeps the sheet as it always was, 0 lets the
+    // words sit straight on the picture.
+    paperOpacity: 74
   };
 
   const BRIGHTNESS_RANGE = [40, 120];
-  const SOFTNESS_RANGE = [0, 16];
+  const CLARITY_RANGE = [0, 100];
+  const PAPER_OPACITY_RANGE = [0, 100];
+  // Clarity 0 blurs by this much; every step in between is proportional.
+  const MAX_BLUR = 16;
 
   function clamp(value, min, max, fallback) {
     // Number(null) is 0 and Number("") is 0, but neither is someone asking
@@ -47,6 +55,15 @@ window.OD = window.OD || {};
     const number = Number(value);
     if (!Number.isFinite(number)) return fallback;
     return Math.min(max, Math.max(min, Math.round(number)));
+  }
+
+  // Earlier builds stored blur pixels under `softness`; the same intent reads
+  // as clarity from the other end, so old settings convert instead of resetting.
+  function clarityFrom(input) {
+    if (input.clarity !== undefined && input.clarity !== null && input.clarity !== "") return input.clarity;
+    const softness = Number(input.softness);
+    if (Number.isFinite(softness)) return Math.round(100 - (softness / MAX_BLUR) * 100);
+    return DEFAULTS.clarity;
   }
 
   function normalize(value) {
@@ -62,7 +79,8 @@ window.OD = window.OD || {};
       focusX: clamp(input.focusX, 0, 100, DEFAULTS.focusX),
       focusY: clamp(input.focusY, 0, 100, DEFAULTS.focusY),
       brightness: clamp(input.brightness, BRIGHTNESS_RANGE[0], BRIGHTNESS_RANGE[1], DEFAULTS.brightness),
-      softness: clamp(input.softness, SOFTNESS_RANGE[0], SOFTNESS_RANGE[1], DEFAULTS.softness)
+      clarity: clamp(clarityFrom(input), CLARITY_RANGE[0], CLARITY_RANGE[1], DEFAULTS.clarity),
+      paperOpacity: clamp(input.paperOpacity, PAPER_OPACITY_RANGE[0], PAPER_OPACITY_RANGE[1], DEFAULTS.paperOpacity)
     };
   }
 
@@ -78,11 +96,16 @@ window.OD = window.OD || {};
     to that layer alone — it holds no Reader descendants, so the reading paper
     can never be dimmed by accident.
   */
+  function blurFor(clarity) {
+    return Math.round(((100 - clarity) / 100) * MAX_BLUR);
+  }
+
   function layerStyle(settings) {
     const normalized = normalize(settings);
     const size = normalized.fit === "fill" ? "cover" : normalized.fit === "contain" ? "contain" : "auto";
+    const blur = blurFor(normalized.clarity);
     const filters = [`brightness(${normalized.brightness}%)`];
-    if (normalized.softness > 0) filters.push(`blur(${normalized.softness}px)`);
+    if (blur > 0) filters.push(`blur(${blur}px)`);
     return {
       backgroundSize: size,
       backgroundRepeat: normalized.fit === "tile" ? "repeat" : "no-repeat",
@@ -91,7 +114,7 @@ window.OD = window.OD || {};
       filter: filters.join(" "),
       // Blur samples past the edge, so the layer overscans rather than
       // fading to transparent along the sides.
-      overscan: normalized.softness > 0 ? Math.ceil(normalized.softness * 3) : 0
+      overscan: blur > 0 ? Math.ceil(blur * 3) : 0
     };
   }
 
@@ -117,7 +140,10 @@ window.OD = window.OD || {};
     MAX_EDGE,
     QUALITY,
     BRIGHTNESS_RANGE,
-    SOFTNESS_RANGE,
+    CLARITY_RANGE,
+    PAPER_OPACITY_RANGE,
+    MAX_BLUR,
+    blurFor,
     normalize,
     isActive,
     layerStyle,

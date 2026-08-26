@@ -361,9 +361,13 @@
           <input id="backgroundBrightness" type="range" min="40" max="120" step="1" aria-label="背景亮度" data-i18n-aria-label="background.brightness">
           <span id="backgroundBrightnessValue" class="bg-value"></span>
         </div>
-        <div class="pref-row"><span class="pref-label" data-i18n="background.softness">柔化</span>
-          <input id="backgroundSoftness" type="range" min="0" max="16" step="1" aria-label="柔化" data-i18n-aria-label="background.softness">
-          <span id="backgroundSoftnessValue" class="bg-value"></span>
+        <div class="pref-row"><span class="pref-label" data-i18n="background.clarity">清晰度</span>
+          <input id="backgroundClarity" type="range" min="0" max="100" step="1" aria-label="清晰度" data-i18n-aria-label="background.clarity">
+          <span id="backgroundClarityValue" class="bg-value"></span>
+        </div>
+        <div class="pref-row" id="backgroundPaperOpacityRow" hidden><span class="pref-label" data-i18n="background.paperOpacity">纸面浓度</span>
+          <input id="backgroundPaperOpacity" type="range" min="0" max="100" step="1" aria-label="纸面浓度" data-i18n-aria-label="background.paperOpacity">
+          <span id="backgroundPaperOpacityValue" class="bg-value"></span>
         </div>
       </details>
 

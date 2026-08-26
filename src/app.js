@@ -610,6 +610,8 @@ window.OD = window.OD || {};
       root?.setProperty?.("--od-reader-bg-pos", style.backgroundPosition);
       root?.setProperty?.("--od-reader-bg-repeat", style.backgroundRepeat);
       root?.setProperty?.("--od-reader-bg-filter", style.filter);
+      root?.setProperty?.("--od-reader-wash",
+        `color-mix(in srgb, var(--od-paper-bg) ${settings.paperOpacity}%, transparent)`);
       layer.hidden = true;
       layer.style.backgroundImage = "";
       return;
@@ -749,10 +751,17 @@ window.OD = window.OD || {};
     if (brightness) brightness.value = String(settings.brightness);
     const brightnessValue = $("backgroundBrightnessValue");
     if (brightnessValue) brightnessValue.textContent = `${settings.brightness}%`;
-    const softness = $("backgroundSoftness");
-    if (softness) softness.value = String(settings.softness);
-    const softnessValue = $("backgroundSoftnessValue");
-    if (softnessValue) softnessValue.textContent = `${settings.softness}px`;
+    const clarity = $("backgroundClarity");
+    if (clarity) clarity.value = String(settings.clarity);
+    const clarityValue = $("backgroundClarityValue");
+    if (clarityValue) clarityValue.textContent = `${settings.clarity}%`;
+    // The paper veil only means anything when the image is on the paper.
+    const veilRow = $("backgroundPaperOpacityRow");
+    if (veilRow) veilRow.hidden = settings.target !== "paper";
+    const veil = $("backgroundPaperOpacity");
+    if (veil) veil.value = String(settings.paperOpacity);
+    const veilValue = $("backgroundPaperOpacityValue");
+    if (veilValue) veilValue.textContent = `${settings.paperOpacity}%`;
 
     void renderBackgroundPreview();
   }
@@ -777,7 +786,8 @@ window.OD = window.OD || {};
     preview.style.backgroundRepeat = style.backgroundRepeat;
     preview.style.backgroundPosition = style.backgroundPosition;
     // The preview is a fraction of the stage, so blur scales down with it.
-    const previewBlur = settings.softness > 0 ? Math.max(1, Math.round(settings.softness / 3)) : 0;
+    const fullBlur = OD.readerBackground.blurFor(settings.clarity);
+    const previewBlur = fullBlur > 0 ? Math.max(1, Math.round(fullBlur / 3)) : 0;
     preview.style.filter = previewBlur
       ? `brightness(${settings.brightness}%) blur(${previewBlur}px)`
       : `brightness(${settings.brightness}%)`;
@@ -3944,8 +3954,11 @@ window.OD = window.OD || {};
   $("backgroundBrightness")?.addEventListener?.("input", event => {
     updateBackground({ brightness: Number(event?.target?.value) });
   });
-  $("backgroundSoftness")?.addEventListener?.("input", event => {
-    updateBackground({ softness: Number(event?.target?.value) });
+  $("backgroundClarity")?.addEventListener?.("input", event => {
+    updateBackground({ clarity: Number(event?.target?.value) });
+  });
+  $("backgroundPaperOpacity")?.addEventListener?.("input", event => {
+    updateBackground({ paperOpacity: Number(event?.target?.value) });
   });
   $("backgroundAccordion")?.addEventListener?.("click", event => {
     // Match buttons only, never an ancestor that happens to carry the same
