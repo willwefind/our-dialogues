@@ -589,6 +589,8 @@ window.OD = window.OD || {};
     if (!OD.readerBackground.isActive(settings)) {
       layer.hidden = true;
       layer.style.backgroundImage = "";
+      document.documentElement?.style?.removeProperty?.("--od-reader-bg-image");
+      if (document.body?.dataset) delete document.body.dataset.bgTarget;
       return;
     }
     const url = await backgroundObjectUrl();
@@ -598,6 +600,21 @@ window.OD = window.OD || {};
       return;
     }
     const style = OD.readerBackground.layerStyle(settings);
+    if (document.body?.dataset) document.body.dataset.bgTarget = settings.target;
+    // One target at a time: on the paper the image rides inside the sheet
+    // through root variables, and the outer stage goes back to plain.
+    const root = document.documentElement?.style;
+    if (settings.target === "paper") {
+      root?.setProperty?.("--od-reader-bg-image", `url("${url}")`);
+      root?.setProperty?.("--od-reader-bg-size", style.backgroundSize);
+      root?.setProperty?.("--od-reader-bg-pos", style.backgroundPosition);
+      root?.setProperty?.("--od-reader-bg-repeat", style.backgroundRepeat);
+      root?.setProperty?.("--od-reader-bg-filter", style.filter);
+      layer.hidden = true;
+      layer.style.backgroundImage = "";
+      return;
+    }
+    root?.removeProperty?.("--od-reader-bg-image");
     layer.style.backgroundImage = `url("${url}")`;
     layer.style.backgroundSize = style.backgroundSize;
     layer.style.backgroundRepeat = style.backgroundRepeat;

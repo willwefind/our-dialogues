@@ -82,6 +82,19 @@ body{display:flex;overflow:hidden;background:var(--bg);color:var(--ink);font-fam
 /* Negative z-index keeps the custom image above the page canvas and below
    every element the Reader draws, so the sidebar and the reading paper stay
    opaque over it and only the outer stage shows through. */
+/* The reading-paper target is the advanced path: the image goes inside the
+   sheet, above the theme's own paper texture and below the words, with a
+   theme-coloured wash between them so the text keeps its contrast. The
+   theme texture is never replaced — it still paints underneath. */
+body.has-custom-background[data-bg-target="paper"] .reader{isolation:isolate}
+body.has-custom-background[data-bg-target="paper"] .reader::before{
+  content:"";position:absolute;inset:0;z-index:-1;border-radius:inherit;pointer-events:none;
+  background-image:linear-gradient(var(--od-reader-wash),var(--od-reader-wash)),var(--od-reader-bg-image,none);
+  background-size:auto,var(--od-reader-bg-size,cover);
+  background-position:0 0,var(--od-reader-bg-pos,50% 50%);
+  background-repeat:repeat,var(--od-reader-bg-repeat,no-repeat);
+  filter:var(--od-reader-bg-filter,none)}
+:root{--od-reader-wash:color-mix(in srgb, var(--od-paper-bg) 74%, transparent)}
 /* ── Aa · Background ─────────────────────────────────────────────────── */
 .bg-preview{margin:8px 0 6px;height:150px;border:1px solid var(--line);border-radius:8px;overflow:hidden;
   background:var(--paper)}
