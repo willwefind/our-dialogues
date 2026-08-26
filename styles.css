@@ -79,6 +79,10 @@
 }
 *{box-sizing:border-box} html,body{margin:0;height:100%}
 body{display:flex;overflow:hidden;background:var(--bg);color:var(--ink);font-family:var(--reader-font-family)}
+/* Negative z-index keeps the custom image above the page canvas and below
+   every element the Reader draws, so the sidebar and the reading paper stay
+   opaque over it and only the outer stage shows through. */
+.od-custom-stage-bg{position:fixed;inset:0;z-index:-1;pointer-events:none;background-color:var(--od-outer-bg)}
 button,input,select{font:inherit}
 #sidebar{--od-sidebar-w:312px;width:var(--od-sidebar-w);flex:none;height:100%;display:flex;flex-direction:column;overflow-y:auto;background:var(--panel);border-right:1px solid var(--line);transition:margin-left var(--motion-drawer) var(--motion-ease)}
 #sidebar.closed{margin-left:calc(-1 * var(--od-sidebar-w))}

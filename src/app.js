@@ -45,6 +45,8 @@ window.OD = window.OD || {};
     companionshipPinned: [],
     companionshipRecent: [],
     companionshipOverrides: {},
+    background: {},
+    backgroundUrl: null,
     importOpen: null,
     readingProgress: {},
     readingOrder: [],
@@ -262,6 +264,7 @@ window.OD = window.OD || {};
       companionshipPinned: [...state.companionshipPinned],
       companionshipRecent: [...state.companionshipRecent],
       companionshipOverrides: OD.companionship.normalizeOverrides(state.companionshipOverrides),
+      background: OD.readerBackground.normalize(state.background),
       favoritesOnly: !!state.favoritesOnly,
       tagFilter: state.tagFilter || "",
       updatedAt: new Date().toISOString()
@@ -552,6 +555,119 @@ window.OD = window.OD || {};
 
   function isGreetingConversation(conversation) {
     return conversation.context?.sourceMetadata?.isGreeting === true;
+  }
+
+  /* ── Custom background ──────────────────────────────────────────────
+     One isolated layer behind everything the Reader draws. It holds no
+     Reader descendants, so brightness and blur can be applied to it
+     directly without ever dimming the reading paper. */
+  function backgroundSettings() {
+    return OD.readerBackground.normalize(state.background);
+  }
+
+  function releaseBackgroundUrl() {
+    if (!state.backgroundUrl) return;
+    try { URL.revokeObjectURL(state.backgroundUrl); } catch (_) {}
+    state.backgroundUrl = null;
+  }
+
+  async function backgroundObjectUrl() {
+    // One live URL per asset: created when the image is first needed and
+    // revoked whenever it is replaced or removed, never per render.
+    if (state.backgroundUrl) return state.backgroundUrl;
+    const record = await state.persistence?.loadAsset?.(OD.readerBackground.ASSET_KEY);
+    if (!record?.blob) return null;
+    state.backgroundUrl = URL.createObjectURL(record.blob);
+    return state.backgroundUrl;
+  }
+
+  async function applyBackground() {
+    const layer = $("customBackground");
+    if (!layer) return;
+    const settings = backgroundSettings();
+    document.body?.classList?.toggle?.("has-custom-background", OD.readerBackground.isActive(settings));
+    if (!OD.readerBackground.isActive(settings)) {
+      layer.hidden = true;
+      layer.style.backgroundImage = "";
+      return;
+    }
+    const url = await backgroundObjectUrl();
+    if (!url) {
+      // The settings remember an image the database no longer holds.
+      layer.hidden = true;
+      return;
+    }
+    const style = OD.readerBackground.layerStyle(settings);
+    layer.style.backgroundImage = `url("${url}")`;
+    layer.style.backgroundSize = style.backgroundSize;
+    layer.style.backgroundRepeat = style.backgroundRepeat;
+    layer.style.backgroundPosition = style.backgroundPosition;
+    layer.style.filter = style.filter;
+    const overscan = style.overscan ? `-${style.overscan}px` : "0px";
+    layer.style.inset = overscan;
+    layer.hidden = false;
+  }
+
+  function updateBackground(patch) {
+    state.background = OD.readerBackground.normalize({ ...backgroundSettings(), ...patch });
+    void applyBackground();
+    void saveReaderState();
+  }
+
+  /*
+    Decode locally, respect the camera's orientation, cap the longest edge,
+    and keep only the processed image — a 12MP phone photo has no business
+    living in the database at full size.
+  */
+  async function processBackgroundImage(file) {
+    const bitmap = typeof createImageBitmap === "function"
+      ? await createImageBitmap(file, { imageOrientation: "from-image" }).catch(() => createImageBitmap(file))
+      : null;
+    if (!bitmap) throw new Error("This browser cannot decode the image locally.");
+    const target = OD.readerBackground.scaleToFit(bitmap.width, bitmap.height);
+    const canvas = document.createElement("canvas");
+    canvas.width = target.width;
+    canvas.height = target.height;
+    const context = canvas.getContext("2d");
+    context.imageSmoothingQuality = "high";
+    context.drawImage(bitmap, 0, 0, target.width, target.height);
+    bitmap.close?.();
+    const encode = type => new Promise(resolve => canvas.toBlob(resolve, type, OD.readerBackground.QUALITY));
+    // WebP where it exists, JPEG where it does not; a browser that silently
+    // ignores the type hands back PNG, which is still valid.
+    let blob = await encode("image/webp");
+    if (!blob || blob.type !== "image/webp") blob = (await encode("image/jpeg")) || blob;
+    if (!blob) throw new Error("This browser could not encode the processed image.");
+    return {
+      blob,
+      mime: blob.type,
+      width: target.width,
+      height: target.height,
+      createdAt: new Date().toISOString()
+    };
+  }
+
+  async function setBackgroundImage(file) {
+    const record = await processBackgroundImage(file);
+    await state.persistence?.saveAsset?.(OD.readerBackground.ASSET_KEY, record);
+    releaseBackgroundUrl();
+    state.background = OD.readerBackground.normalize({
+      ...backgroundSettings(),
+      assetId: OD.readerBackground.ASSET_KEY,
+      enabled: true
+    });
+    await applyBackground();
+    void saveReaderState();
+    return record;
+  }
+
+  // Removing deletes the bytes; disabling only stops showing them.
+  async function removeBackgroundImage() {
+    await state.persistence?.removeAsset?.(OD.readerBackground.ASSET_KEY);
+    releaseBackgroundUrl();
+    state.background = OD.readerBackground.normalize({});
+    await applyBackground();
+    void saveReaderState();
   }
 
   /* ── Memorial card ──────────────────────────────────────────────────
@@ -2861,6 +2977,9 @@ window.OD = window.OD || {};
     if (Array.isArray(settings.companionshipRecent)) {
       state.companionshipRecent = companionKeyList(settings.companionshipRecent);
     }
+    if (settings.background && typeof settings.background === "object") {
+      state.background = OD.readerBackground.normalize(settings.background);
+    }
     if (settings.companionshipOverrides && typeof settings.companionshipOverrides === "object") {
       state.companionshipOverrides = OD.companionship.normalizeOverrides(settings.companionshipOverrides);
     }
@@ -2870,6 +2989,8 @@ window.OD = window.OD || {};
       state.toolTab = settings.toolTab ?? null;
     }
     syncToolTabs();
+    // The image lives in its own record, so it is fetched once settings name it.
+    void applyBackground();
   }
 
   async function bootPersistentLibrary() {

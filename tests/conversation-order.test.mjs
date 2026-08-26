@@ -83,6 +83,7 @@ async function loadAppRuntime(savedSortMode="asc", options={}) {
     "filterMenu", "filterMenuToggle", "sourceAddToggle", "sourceAddMenu",
     "sourceManageToggle", "sourceManagePanel", "sourceManageList", "sourceManageClose",
     "libraryHome", "continueCard",
+    "customBackground",
     "memorialCard",
     "companionPicker",
     "companionSearch",
