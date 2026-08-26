@@ -181,6 +181,29 @@
       <div id="companionList" class="companion-list"></div>
     </div>
 
+    <div id="memorialMenu" class="memorial-menu" hidden role="menu">
+      <button id="memorialEditDate" type="button" role="menuitem" data-i18n="memorial.editDate">修改相识日期</button>
+      <button id="memorialManagePinned" type="button" role="menuitem" data-i18n="memorial.managePinned">管理置顶</button>
+    </div>
+
+    <div id="memorialDateEditor" class="companion-picker memorial-date-editor" hidden role="dialog" aria-labelledby="memorialDateTitle">
+      <div class="companion-picker-head">
+        <span id="memorialDateTitle" class="pref-label" data-i18n="memorial.editTitle">修改相识日期</span>
+        <button id="memorialDateClose" type="button" aria-label="关闭" data-i18n-aria-label="memorial.close">✕</button>
+      </div>
+      <div class="memorial-field-label" data-i18n="memorial.yourDate">你记下的日期</div>
+      <div class="memorial-date-fields">
+        <input id="memorialDateInput" type="date" aria-label="相识日期" data-i18n-aria-label="memorial.yourDate">
+        <input id="memorialTimeInput" type="time" aria-label="时间（可留空）" data-i18n-aria-label="memorial.timeOptional">
+      </div>
+      <div id="memorialArchiveLine" class="memorial-archive-line"></div>
+      <div class="memorial-editor-actions">
+        <button id="memorialRestore" type="button" data-i18n="memorial.restoreArchiveDate">恢复档案日期</button>
+        <button id="memorialCancel" type="button" data-i18n="memorial.cancel">取消</button>
+        <button id="memorialSave" type="button" class="memorial-save" data-i18n="memorial.save">保存</button>
+      </div>
+    </div>
+
     <div id="tagEditor" class="reader-prefs-panel tag-editor" hidden>
       <div class="pref-label tag-editor-title" data-i18n="organize.tagEditorTitle">当前对话的标签</div>
       <div id="tagChips" class="tag-chips"></div>

@@ -280,6 +280,17 @@ window.OD = window.OD || {};
   "memorial.pin": "Pin",
   "memorial.unpin": "Unpin",
   "memorial.noMatches": "No matching companions",
+  "memorial.more": "More",
+  "memorial.editDate": "Edit first date",
+  "memorial.managePinned": "Manage pinned",
+  "memorial.editTitle": "Edit first date",
+  "memorial.yourDate": "The date you remember",
+  "memorial.timeOptional": "Time (optional)",
+  "memorial.archiveRecord": "Earliest record in this archive · {date}",
+  "memorial.archiveNone": "This archive has no confirmed date",
+  "memorial.restoreArchiveDate": "Restore archive date",
+  "memorial.cancel": "Cancel",
+  "memorial.save": "Save",
 
   /* ── welcome & demo ── */
   "welcome.intro": "Choose a ChatGPT official export folder, a folder of Mufy ZIPs, or load an existing AI-conversation JSON / ZIP. The Reader recognizes it locally and converts it into one reading structure.",

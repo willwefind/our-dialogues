@@ -57,6 +57,23 @@ window.OD = window.OD || {};
   }
 
   /*
+    A date with no clock means a calendar day, not an instant. Date.parse reads
+    "2014-11-02" as UTC midnight, which lands on the previous day west of
+    Greenwich — so a bare date is read as local midnight instead, and the day
+    count says what the calendar says wherever the reader is sitting.
+  */
+  const DATE_ONLY = /^(\d{4})-(\d{2})-(\d{2})$/;
+  function startOfDay(value) {
+    const text = String(value ?? "").trim();
+    const parts = DATE_ONLY.exec(text);
+    if (parts) {
+      return new Date(Number(parts[1]), Number(parts[2]) - 1, Number(parts[3])).getTime();
+    }
+    const time = Date.parse(text);
+    return Number.isNaN(time) ? NaN : localMidnight(time);
+  }
+
+  /*
     Calendar days between two instants, counted in the reader's timezone.
     Rounding absorbs the 23- and 25-hour days that daylight saving creates,
     so a day never silently goes missing in spring.
@@ -64,7 +81,8 @@ window.OD = window.OD || {};
   function daysBetween(fromISO, nowMs = Date.now()) {
     const from = isoOrNull(fromISO);
     if (!from) return null;
-    const start = localMidnight(Date.parse(from));
+    const start = startOfDay(from);
+    if (Number.isNaN(start)) return null;
     const end = localMidnight(nowMs);
     return Math.round((end - start) / 86400000);
   }

@@ -127,6 +127,16 @@ test("days are counted as local calendar days, so today is 0 and midnight turns 
   assert.equal(companionship.daysBetween(lastYear, now), 365);
 });
 
+test("a bare date counts as a local calendar day, not UTC midnight", async () => {
+  const companionship = await loadCompanionship();
+  // Date.parse reads "2026-08-24" as UTC midnight, which is still the 23rd in
+  // the Americas; the day count must follow the reader's own calendar.
+  const now = new Date(2026, 7, 26, 10, 0).getTime();
+  assert.equal(companionship.daysBetween("2026-08-26", now), 0);
+  assert.equal(companionship.daysBetween("2026-08-25", now), 1);
+  assert.equal(companionship.daysBetween("2025-08-26", now), 365);
+});
+
 test("a manual date wins over the derived one and says so", async () => {
   const companionship = await loadCompanionship();
   const key = "src-1::id:char-9";

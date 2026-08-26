@@ -788,6 +788,123 @@ window.OD = window.OD || {};
       + section("memorial.all", rest);
   }
 
+  /* Anchors a small memorial layer under its trigger, flipping above when it
+     would run past the fold. Phones let the stylesheet make it a sheet. */
+  function placeMemorialPopover(element, trigger, width) {
+    if (!element) return;
+    if (isPhoneScreen()) { element.style.left = ""; element.style.top = ""; return; }
+    const rect = trigger?.getBoundingClientRect?.();
+    if (!rect) return;
+    const viewportWidth = window.innerWidth || 1024;
+    const viewportHeight = window.innerHeight || 768;
+    const left = Math.max(12, Math.min(viewportWidth - width - 12, rect.left));
+    const height = Math.min(element.offsetHeight || 320, viewportHeight - 24);
+    const below = rect.bottom + 8;
+    const top = below + height > viewportHeight - 12 ? Math.max(12, rect.top - 8 - height) : below;
+    element.style.left = `${left}px`;
+    element.style.top = `${top}px`;
+  }
+
+  /* The date the reader wrote down beats the one the archive can prove, and
+     the editor keeps both visible so the difference stays legible. */
+  let memorialEditorKey = null;
+
+  function memorialLocalParts(value) {
+    const text = String(value ?? "");
+    // A stored date-only value stays date-only: no invented midnight.
+    if (/^\d{4}-\d{2}-\d{2}$/.test(text)) return { date: text, time: "" };
+    const at = new Date(text);
+    if (Number.isNaN(at.getTime())) return { date: "", time: "" };
+    const pad = number => String(number).padStart(2, "0");
+    return {
+      date: `${at.getFullYear()}-${pad(at.getMonth() + 1)}-${pad(at.getDate())}`,
+      time: /\d{2}:\d{2}/.test(text) ? `${pad(at.getHours())}:${pad(at.getMinutes())}` : ""
+    };
+  }
+
+  function openMemorialMenu(trigger) {
+    const menu = $("memorialMenu");
+    if (!menu) return;
+    closeMemorialMenu();
+    menu.hidden = false;
+    placeMemorialPopover(menu, trigger, 180);
+    state.memorialMenuReturn = trigger || null;
+  }
+
+  function closeMemorialMenu() {
+    const menu = $("memorialMenu");
+    if (!menu || menu.hidden) return;
+    menu.hidden = true;
+    const trigger = state.memorialMenuReturn;
+    state.memorialMenuReturn = null;
+    trigger?.focus?.({ preventScroll: true });
+  }
+
+  function openMemorialDateEditor(key, trigger) {
+    const editor = $("memorialDateEditor");
+    const entry = companionEntries().find(item => item.key === key);
+    if (!editor || !entry) return;
+    memorialEditorKey = key;
+    state.memorialEditorReturn = trigger || null;
+    const summary = companionSummary(entry);
+    const parts = memorialLocalParts(summary.firstAtSource === "manual" ? summary.firstAt : "");
+    const dateInput = $("memorialDateInput");
+    const timeInput = $("memorialTimeInput");
+    if (dateInput) dateInput.value = parts.date;
+    if (timeInput) timeInput.value = parts.time;
+    const archive = $("memorialArchiveLine");
+    if (archive) {
+      const derived = summary.derivedFirstAt;
+      const shown = derived
+        ? [fmtDateOnly(derived), hasArchiveClock(derived) ? fmtTimeOnly(derived) : ""].filter(Boolean).join(" · ")
+        : "";
+      archive.textContent = derived ? t("memorial.archiveRecord", { date: shown }) : t("memorial.archiveNone");
+    }
+    const restore = $("memorialRestore");
+    // Nothing to restore to when the archive never knew a date.
+    if (restore) restore.disabled = !summary.derivedFirstAt || summary.firstAtSource !== "manual";
+    editor.hidden = false;
+    placeMemorialPopover(editor, trigger, 344);
+    dateInput?.focus?.({ preventScroll: true });
+  }
+
+  function hasArchiveClock(value) {
+    return /\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}/.test(String(value ?? ""));
+  }
+
+  function closeMemorialDateEditor() {
+    const editor = $("memorialDateEditor");
+    if (!editor || editor.hidden) return;
+    editor.hidden = true;
+    memorialEditorKey = null;
+    const trigger = state.memorialEditorReturn;
+    state.memorialEditorReturn = null;
+    trigger?.focus?.({ preventScroll: true });
+  }
+
+  function saveMemorialDate() {
+    const key = memorialEditorKey;
+    const date = String($("memorialDateInput")?.value || "").trim();
+    if (!key) return;
+    if (!date) { clearMemorialDate(); return; }
+    const time = String($("memorialTimeInput")?.value || "").trim();
+    // Local wall-clock when a time is given; a bare calendar day otherwise.
+    const value = time ? `${date}T${time}` : date;
+    state.companionshipOverrides = OD.companionship.setOverride(state.companionshipOverrides, key, value);
+    closeMemorialDateEditor();
+    renderMemorialCard();
+    void saveReaderState();
+  }
+
+  function clearMemorialDate() {
+    const key = memorialEditorKey;
+    if (!key) return;
+    state.companionshipOverrides = OD.companionship.clearOverride(state.companionshipOverrides, key);
+    closeMemorialDateEditor();
+    renderMemorialCard();
+    void saveReaderState();
+  }
+
   function renderMemorialCard() {
     const host = $("memorialCard");
     if (!host) return;
@@ -808,12 +925,16 @@ window.OD = window.OD || {};
             aria-label="${esc(t("memorial.choose"))}" title="${esc(t("memorial.choose"))}">&#9662;</button>
           <button type="button" data-memorial-step="1"${stepper ? "" : " disabled"}
             aria-label="${esc(t("memorial.next"))}" title="${esc(t("memorial.next"))}">&rsaquo;</button>
+          <button type="button" data-memorial-menu="1" aria-haspopup="menu"
+            aria-label="${esc(t("memorial.more"))}" title="${esc(t("memorial.more"))}">&#183;&#183;&#183;</button>
         </div>
       </div>
       <button type="button" class="memorial-name-button" data-memorial-open="1" aria-haspopup="dialog">${esc(title)}</button>
       ${summary.firstAt
         ? memorialDatedMarkup(summary)
-        : `<div class="memorial-empty">${esc(t("memorial.noConfirmedDate"))}</div>`}
+        : `<div class="memorial-empty">${esc(t("memorial.noConfirmedDate"))}
+             <button type="button" class="memorial-set-date" data-memorial-set-date="1">${esc(t("memorial.setDate"))}</button>
+           </div>`}
     </section>`;
   }
 
@@ -3253,6 +3374,11 @@ window.OD = window.OD || {};
     if (prefs && !prefs.hidden && !event?.target?.closest?.("#readerPrefsPanel, #readerPrefsToggle")) {
       prefs.hidden = true;
     }
+    const memorialMenu = $("memorialMenu");
+    if (memorialMenu && !memorialMenu.hidden
+      && !event?.target?.closest?.("#memorialMenu, [data-memorial-menu]")) {
+      closeMemorialMenu();
+    }
     const companionPicker = $("companionPicker");
     if (companionPicker && !companionPicker.hidden
       && !event?.target?.closest?.("#companionPicker, [data-memorial-open]")) {
@@ -3529,6 +3655,14 @@ window.OD = window.OD || {};
   $("memorialCard")?.addEventListener?.("click", event => {
     const step = event?.target?.closest?.("[data-memorial-step]");
     if (step) { stepCompanion(Number(step.dataset.memorialStep) || 0); return; }
+    const menu = event?.target?.closest?.("[data-memorial-menu]");
+    if (menu) { openMemorialMenu(menu); return; }
+    const setDate = event?.target?.closest?.("[data-memorial-set-date]");
+    if (setDate) {
+      const key = event.target.closest(".memorial-card")?.dataset?.companionKey;
+      if (key) openMemorialDateEditor(key, setDate);
+      return;
+    }
     const open = event?.target?.closest?.("[data-memorial-open]");
     if (open) openCompanionPicker(open);
   });
@@ -3539,6 +3673,21 @@ window.OD = window.OD || {};
     if (pick) { selectCompanion(pick.dataset.companionPick); closeCompanionPicker(); }
   });
   $("companionSearch")?.addEventListener?.("input", () => renderCompanionPicker());
+  $("memorialEditDate")?.addEventListener?.("click", () => {
+    const key = document.querySelector?.(".memorial-card")?.dataset?.companionKey;
+    const trigger = state.memorialMenuReturn;
+    closeMemorialMenu();
+    if (key) openMemorialDateEditor(key, trigger);
+  });
+  $("memorialManagePinned")?.addEventListener?.("click", () => {
+    const trigger = state.memorialMenuReturn;
+    closeMemorialMenu();
+    openCompanionPicker(trigger);
+  });
+  $("memorialDateClose")?.addEventListener?.("click", () => closeMemorialDateEditor());
+  $("memorialCancel")?.addEventListener?.("click", () => closeMemorialDateEditor());
+  $("memorialSave")?.addEventListener?.("click", () => saveMemorialDate());
+  $("memorialRestore")?.addEventListener?.("click", () => clearMemorialDate());
   $("companionPickerClose")?.addEventListener?.("click", () => closeCompanionPicker());
 
   $("messages").addEventListener("click", event => {
@@ -3602,6 +3751,10 @@ window.OD = window.OD || {};
     if (event.key === "Escape") {
       // 拾句 Studio 开着时它自己的 Esc 收面板，阅读器这层按兵不动
       if (OD.shijuStudio?.isOpen?.()) return;
+      const dateEditor = $("memorialDateEditor");
+      if (dateEditor && !dateEditor.hidden) { closeMemorialDateEditor(); return; }
+      const memorialMenuOpen = $("memorialMenu");
+      if (memorialMenuOpen && !memorialMenuOpen.hidden) { closeMemorialMenu(); return; }
       const openPicker = $("companionPicker");
       if (openPicker && !openPicker.hidden) { closeCompanionPicker(); return; }
       // Close the topmost transient layer first; never silently discard an

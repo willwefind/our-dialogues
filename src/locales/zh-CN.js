@@ -279,6 +279,17 @@ window.OD = window.OD || {};
   "memorial.pin": "置顶",
   "memorial.unpin": "取消置顶",
   "memorial.noMatches": "没有匹配的伴侣",
+  "memorial.more": "更多",
+  "memorial.editDate": "修改相识日期",
+  "memorial.managePinned": "管理置顶",
+  "memorial.editTitle": "修改相识日期",
+  "memorial.yourDate": "你记下的日期",
+  "memorial.timeOptional": "时间（可留空）",
+  "memorial.archiveRecord": "档案中最早记录 · {date}",
+  "memorial.archiveNone": "档案里没有可确认的日期",
+  "memorial.restoreArchiveDate": "恢复档案日期",
+  "memorial.cancel": "取消",
+  "memorial.save": "保存",
 
   /* ── welcome & demo ── */
   "welcome.intro": "选择 ChatGPT 官方 Export 文件夹、包含多个 Mufy ZIP 的文件夹，或载入已有的 AI 对话 JSON / ZIP。Reader 会在本地识别并转换为统一阅读结构。",
