@@ -14,6 +14,8 @@
   --memorial-frame:url("assets/reader/memorial/card-frames/memorial-card-paper-border-image.svg");
   --memorial-grain:url("assets/reader/memorial/memorial-paper-grain-paper-tile.png");
   --memorial-plate:url("assets/reader/memorial/ornaments/memorial-archive-bookplate.svg");
+  --pin-icon:url("assets/reader/icons/pin.svg");
+  --pinned-icon:url("assets/reader/icons/pinned.svg");
   --od-paper-large:url("assets/reader/textures/paper-day-texture.webp");
   --od-ink-grain:url("assets/reader/textures/ink-grain-overlay.png");
   --od-grain-opacity:.022; --od-grain-blend:multiply;
@@ -222,7 +224,7 @@ body.toolbar-hidden .toolbar{transform:translateY(-53px);pointer-events:none}
   mix-blend-mode:var(--od-grain-blend);pointer-events:none}
 .memorial-card>*{position:relative}
 .memorial-head{display:flex;align-items:center;justify-content:space-between;gap:12px}
-.memorial-eyebrow{font:11px/16px var(--font-ui);letter-spacing:.18em;text-transform:uppercase;color:var(--od-muted)}
+.memorial-eyebrow{display:flex;align-items:center;gap:8px;font:11px/16px var(--font-ui);letter-spacing:.18em;text-transform:uppercase;color:var(--od-muted)}
 .memorial-name{margin-top:14px;font:600 24px/34px var(--reader-font-family);color:var(--od-ink);
   overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .memorial-date-label{margin-top:16px;font:11px/16px var(--font-ui);letter-spacing:.08em;color:var(--od-muted)}
@@ -235,6 +237,46 @@ body.toolbar-hidden .toolbar{transform:translateY(-53px);pointer-events:none}
 /* The bookplate is the card's only ornament; it must never outweigh the name. */
 .memorial-plate{flex:none;width:30px;height:30px;background:currentColor;color:var(--od-accent);
   opacity:.5;-webkit-mask:var(--memorial-plate) center/contain no-repeat;mask:var(--memorial-plate) center/contain no-repeat}
+/* Switcher: arrows step through pinned companions, the chevron and the
+   name both open the picker. */
+.memorial-switch{display:flex;align-items:center;gap:2px}
+.memorial-switch button{min-width:32px;height:32px;padding:0 6px;border:1px solid transparent;border-radius:4px;
+  background:transparent;color:var(--od-muted);font:14px/1 var(--font-ui);cursor:pointer}
+.memorial-switch button:hover:not(:disabled){color:var(--od-ink);border-color:var(--od-line)}
+.memorial-switch button:disabled{opacity:.3;cursor:default}
+.memorial-name-button{display:block;margin-top:14px;padding:0;border:0;background:transparent;text-align:left;
+  font:600 24px/34px var(--reader-font-family);color:var(--od-ink);cursor:pointer;max-width:100%;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.memorial-name-button:hover{color:var(--od-accent)}
+/* The picker is its own popover rather than a reader-prefs panel, so it
+   owns its positioning outright instead of overriding a top/right the
+   panel class prescribes for the toolbar corner. */
+.companion-picker{position:fixed;top:0;left:0;z-index:31;box-sizing:border-box;width:344px;max-height:520px;display:flex;flex-direction:column;gap:8px;padding:14px;border:1px solid var(--line);border-radius:12px;background:var(--panel);box-shadow:var(--shadow-popover);font:12px/1.4 var(--font-ui)}
+.companion-picker-head{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.companion-picker-head button{border:0;background:transparent;color:var(--muted);font-size:14px;cursor:pointer;
+  min-width:32px;min-height:32px}
+.companion-picker input[type=search]{width:100%;box-sizing:border-box;padding:8px 10px;border:1px solid var(--line);
+  border-radius:6px;background:var(--paper);color:var(--ink);font:13px var(--font-ui)}
+.companion-list{overflow-y:auto;display:flex;flex-direction:column;gap:1px}
+.companion-section{margin-top:8px;font:10px/1.4 var(--font-ui);letter-spacing:.16em;text-transform:uppercase;
+  color:var(--muted);padding:0 4px}
+.companion-row{display:flex;align-items:center;gap:8px;min-height:44px;padding:6px 4px 6px 8px;border-radius:6px}
+.companion-row:hover{background:var(--paper)}
+.companion-row[aria-current=true]{background:var(--paper);box-shadow:inset 2px 0 0 var(--accent)}
+.companion-pick{flex:1;min-width:0;border:0;background:transparent;text-align:left;cursor:pointer;padding:0;color:var(--ink)}
+.companion-pick-name{display:block;font:13px/18px var(--font-ui);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.companion-pick-meta{display:block;font:11px/16px var(--font-ui);color:var(--muted);overflow:hidden;
+  text-overflow:ellipsis;white-space:nowrap}
+.companion-pin{flex:none;width:32px;height:32px;border:0;border-radius:6px;background:transparent;cursor:pointer;
+  color:var(--muted);-webkit-mask:none;display:grid;place-items:center}
+.companion-pin span{width:16px;height:16px;background:currentColor;
+  -webkit-mask:var(--pin-icon) center/contain no-repeat;mask:var(--pin-icon) center/contain no-repeat}
+.companion-pin[aria-pressed=true]{color:var(--accent)}
+.companion-pin[aria-pressed=true] span{-webkit-mask-image:var(--pinned-icon);mask-image:var(--pinned-icon)}
+.companion-empty{padding:16px 4px;font:12px/1.6 var(--font-ui);color:var(--muted)}
+@media (max-width: 760px){
+  .companion-picker{top:auto;bottom:0;left:0;width:100%;max-height:76dvh;border-radius:16px 16px 0 0;border-bottom:0;box-shadow:var(--shadow-sheet);padding:20px 22px calc(20px + env(safe-area-inset-bottom))}
+}
 .memorial-empty{font:14px/22px var(--font-ui);color:var(--od-muted);margin-top:14px}
 @media (max-width: 760px){
   .memorial-card{padding:22px}

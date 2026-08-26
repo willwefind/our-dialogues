@@ -658,19 +658,159 @@ window.OD = window.OD || {};
       }))}</div>`;
   }
 
+  /* Arrows step through pinned companions only, so a library with 200+
+     characters never turns the header into a treadmill. */
+  function memorialRotation(entries) {
+    const byKey = new Map(entries.map(entry => [entry.key, entry]));
+    return state.companionshipPinned.map(key => byKey.get(key)).filter(Boolean);
+  }
+
+  function selectCompanion(key) {
+    state.companionshipRecent = companionKeyList([key, ...state.companionshipRecent]).slice(0, 8);
+    renderMemorialCard();
+    renderCompanionPicker();
+    void saveReaderState();
+  }
+
+  function toggleCompanionPin(key) {
+    const pinned = state.companionshipPinned.includes(key)
+      ? state.companionshipPinned.filter(item => item !== key)
+      : [...state.companionshipPinned, key];
+    state.companionshipPinned = companionKeyList(pinned).slice(0, 24);
+    renderMemorialCard();
+    renderCompanionPicker();
+    void saveReaderState();
+  }
+
+  function stepCompanion(delta) {
+    const entries = companionEntries();
+    const rotation = memorialRotation(entries);
+    if (rotation.length < 2) return;
+    const current = memorialCompanion(entries);
+    const index = rotation.findIndex(entry => entry.key === current?.key);
+    const next = rotation[((index < 0 ? 0 : index) + delta + rotation.length) % rotation.length];
+    if (next) selectCompanion(next.key);
+  }
+
+  function placeCompanionPicker(trigger) {
+    const picker = $("companionPicker");
+    if (!picker) return;
+    // Phones get the bottom sheet the stylesheet already provides.
+    if (isPhoneScreen()) {
+      // The stylesheet turns the picker into a bottom sheet on phones.
+      picker.style.left = "";
+      picker.style.top = "";
+      return;
+    }
+    const rect = trigger?.getBoundingClientRect?.();
+    if (!rect) return;
+    const width = 344;
+    const left = Math.max(12, Math.min((window.innerWidth || 1024) - width - 12, rect.left));
+    // Keep the whole popover on screen: if it would run past the bottom, sit
+    // it above the trigger instead of hanging off the fold.
+    const height = Math.min(520, (window.innerHeight || 768) - 24);
+    const below = rect.bottom + 8;
+    const top = below + height > (window.innerHeight || 768) - 12
+      ? Math.max(12, rect.top - 8 - height)
+      : below;
+    picker.style.left = `${left}px`;
+    picker.style.top = `${top}px`;
+  }
+
+  function openCompanionPicker(trigger) {
+    const picker = $("companionPicker");
+    if (!picker) return;
+    state.companionPickerReturn = trigger || null;
+    picker.hidden = false;
+    placeCompanionPicker(trigger);
+    renderCompanionPicker();
+    $("companionSearch")?.focus?.({ preventScroll: true });
+  }
+
+  function closeCompanionPicker() {
+    const picker = $("companionPicker");
+    if (!picker || picker.hidden) return;
+    picker.hidden = true;
+    const search = $("companionSearch");
+    if (search) search.value = "";
+    const trigger = state.companionPickerReturn;
+    state.companionPickerReturn = null;
+    trigger?.focus?.();
+  }
+
+  function companionRowMarkup(item, currentKey, pinnedSet) {
+    const pinned = pinnedSet.has(item.entry.key);
+    const meta = [item.entry.sourceLabel, item.summary.firstAt ? fmtDateOnly(item.summary.firstAt) : ""]
+      .filter(Boolean).join(" · ");
+    return `<div class="companion-row"${item.entry.key === currentKey ? ' aria-current="true"' : ""}>
+      <button type="button" class="companion-pick" data-companion-pick="${esc(item.entry.key)}">
+        <span class="companion-pick-name">${esc(item.entry.name)}</span>
+        ${meta ? `<span class="companion-pick-meta">${esc(meta)}</span>` : ""}
+      </button>
+      <button type="button" class="companion-pin" data-companion-pin="${esc(item.entry.key)}"
+        aria-pressed="${pinned}" title="${esc(t(pinned ? "memorial.unpin" : "memorial.pin"))}"
+        aria-label="${esc(t(pinned ? "memorial.unpin" : "memorial.pin"))}"><span aria-hidden="true"></span></button>
+    </div>`;
+  }
+
+  function renderCompanionPicker() {
+    const list = $("companionList");
+    if (!list) return;
+    const query = String($("companionSearch")?.value || "").trim().toLowerCase();
+    const entries = companionEntries();
+    const currentKey = memorialCompanion(entries)?.key || null;
+    const matches = entries
+      .filter(entry => !query
+        || entry.name.toLowerCase().includes(query)
+        || String(entry.sourceLabel || "").toLowerCase().includes(query))
+      .map(entry => ({ entry, summary: companionSummary(entry) }));
+    const byKey = new Map(matches.map(item => [item.entry.key, item]));
+    const pinnedSet = new Set(state.companionshipPinned);
+    const recentSet = new Set(state.companionshipRecent);
+    const pinned = state.companionshipPinned.map(key => byKey.get(key)).filter(Boolean);
+    const recent = state.companionshipRecent
+      .filter(key => !pinnedSet.has(key)).map(key => byKey.get(key)).filter(Boolean);
+    // Everything else, most recently active first — no sort control in v1.
+    const rest = matches
+      .filter(item => !pinnedSet.has(item.entry.key) && !recentSet.has(item.entry.key))
+      .sort((a, b) => String(b.summary.lastAt || "").localeCompare(String(a.summary.lastAt || "")));
+
+    if (!matches.length) {
+      list.innerHTML = `<div class="companion-empty">${esc(t("memorial.noMatches"))}</div>`;
+      return;
+    }
+    const section = (labelKey, items) => items.length
+      ? `<div class="companion-section">${esc(t(labelKey))}</div>` +
+        items.map(item => companionRowMarkup(item, currentKey, pinnedSet)).join("")
+      : "";
+    list.innerHTML = section("memorial.pinned", pinned)
+      + section("memorial.recentlyViewed", recent)
+      + section("memorial.all", rest);
+  }
+
   function renderMemorialCard() {
     const host = $("memorialCard");
     if (!host) return;
-    const entry = memorialCompanion(companionEntries());
+    const entries = companionEntries();
+    const entry = memorialCompanion(entries);
     if (!entry) { host.innerHTML = ""; return; }
     const summary = companionSummary(entry);
-    host.innerHTML = `<section class="memorial-card" data-companion-key="${esc(entry.key)}"
-      aria-label="${esc(t("memorial.with", { name: entry.name }))}">
+    const rotation = memorialRotation(entries);
+    const stepper = rotation.length > 1;
+    const title = t("memorial.with", { name: entry.name });
+    host.innerHTML = `<section class="memorial-card" data-companion-key="${esc(entry.key)}" aria-label="${esc(title)}">
       <div class="memorial-head">
-        <span class="memorial-eyebrow">${esc(t("memorial.eyebrow"))}</span>
-        <span class="memorial-plate" aria-hidden="true"></span>
+        <span class="memorial-eyebrow"><span class="memorial-plate" aria-hidden="true"></span>${esc(t("memorial.eyebrow"))}</span>
+        <div class="memorial-switch">
+          <button type="button" data-memorial-step="-1"${stepper ? "" : " disabled"}
+            aria-label="${esc(t("memorial.previous"))}" title="${esc(t("memorial.previous"))}">&lsaquo;</button>
+          <button type="button" data-memorial-open="1" aria-haspopup="dialog"
+            aria-label="${esc(t("memorial.choose"))}" title="${esc(t("memorial.choose"))}">&#9662;</button>
+          <button type="button" data-memorial-step="1"${stepper ? "" : " disabled"}
+            aria-label="${esc(t("memorial.next"))}" title="${esc(t("memorial.next"))}">&rsaquo;</button>
+        </div>
       </div>
-      <div class="memorial-name">${esc(t("memorial.with", { name: entry.name }))}</div>
+      <button type="button" class="memorial-name-button" data-memorial-open="1" aria-haspopup="dialog">${esc(title)}</button>
       ${summary.firstAt
         ? memorialDatedMarkup(summary)
         : `<div class="memorial-empty">${esc(t("memorial.noConfirmedDate"))}</div>`}
@@ -3113,6 +3253,11 @@ window.OD = window.OD || {};
     if (prefs && !prefs.hidden && !event?.target?.closest?.("#readerPrefsPanel, #readerPrefsToggle")) {
       prefs.hidden = true;
     }
+    const companionPicker = $("companionPicker");
+    if (companionPicker && !companionPicker.hidden
+      && !event?.target?.closest?.("#companionPicker, [data-memorial-open]")) {
+      closeCompanionPicker();
+    }
     const tagEditor = $("tagEditor");
     if (tagEditor && !tagEditor.hidden && !event?.target?.closest?.("#tagEditor, #tagToggle")) {
       tagEditor.hidden = true;
@@ -3381,6 +3526,21 @@ window.OD = window.OD || {};
     }).catch(() => setArchiveStatus("shiju.loadFailed", undefined, true));
   }
 
+  $("memorialCard")?.addEventListener?.("click", event => {
+    const step = event?.target?.closest?.("[data-memorial-step]");
+    if (step) { stepCompanion(Number(step.dataset.memorialStep) || 0); return; }
+    const open = event?.target?.closest?.("[data-memorial-open]");
+    if (open) openCompanionPicker(open);
+  });
+  $("companionList")?.addEventListener?.("click", event => {
+    const pin = event?.target?.closest?.("[data-companion-pin]");
+    if (pin) { toggleCompanionPin(pin.dataset.companionPin); return; }
+    const pick = event?.target?.closest?.("[data-companion-pick]");
+    if (pick) { selectCompanion(pick.dataset.companionPick); closeCompanionPicker(); }
+  });
+  $("companionSearch")?.addEventListener?.("input", () => renderCompanionPicker());
+  $("companionPickerClose")?.addEventListener?.("click", () => closeCompanionPicker());
+
   $("messages").addEventListener("click", event => {
     const mark = event?.target?.closest?.("mark.annotation");
     if (!mark) return;
@@ -3442,6 +3602,8 @@ window.OD = window.OD || {};
     if (event.key === "Escape") {
       // 拾句 Studio 开着时它自己的 Esc 收面板，阅读器这层按兵不动
       if (OD.shijuStudio?.isOpen?.()) return;
+      const openPicker = $("companionPicker");
+      if (openPicker && !openPicker.hidden) { closeCompanionPicker(); return; }
       // Close the topmost transient layer first; never silently discard an
       // unsaved note — an edited annotation ignores Esc until saved/cancelled.
       const editor = $("annotationEditor");

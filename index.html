@@ -172,6 +172,15 @@
       <p class="small export-note" data-i18n="export.note">「当前列表」= 左侧目录此刻筛出的对话（搜索、来源、收藏、标签过滤都会生效）。</p>
     </div>
 
+    <div id="companionPicker" class="companion-picker" hidden role="dialog" aria-labelledby="companionPickerTitle">
+      <div class="companion-picker-head">
+        <span id="companionPickerTitle" class="pref-label" data-i18n="memorial.pickerTitle">选择要纪念的一位</span>
+        <button id="companionPickerClose" type="button" aria-label="关闭" data-i18n-aria-label="memorial.close">✕</button>
+      </div>
+      <input id="companionSearch" type="search" placeholder="搜索" aria-label="搜索伴侣" data-i18n-placeholder="memorial.search" data-i18n-aria-label="memorial.search">
+      <div id="companionList" class="companion-list"></div>
+    </div>
+
     <div id="tagEditor" class="reader-prefs-panel tag-editor" hidden>
       <div class="pref-label tag-editor-title" data-i18n="organize.tagEditorTitle">当前对话的标签</div>
       <div id="tagChips" class="tag-chips"></div>
