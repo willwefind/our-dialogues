@@ -611,6 +611,7 @@ window.OD = window.OD || {};
   function updateBackground(patch) {
     state.background = OD.readerBackground.normalize({ ...backgroundSettings(), ...patch });
     void applyBackground();
+    renderBackgroundControls();
     void saveReaderState();
   }
 
@@ -668,6 +669,117 @@ window.OD = window.OD || {};
     state.background = OD.readerBackground.normalize({});
     await applyBackground();
     void saveReaderState();
+  }
+
+  // The 3×3 focus grid maps to the 0/50/100 percent positions the layer uses.
+  const BACKGROUND_FOCUS_CELLS = [
+    { x: 0, y: 0, key: "background.focusTopLeft" },
+    { x: 50, y: 0, key: "background.focusTop" },
+    { x: 100, y: 0, key: "background.focusTopRight" },
+    { x: 0, y: 50, key: "background.focusLeft" },
+    { x: 50, y: 50, key: "background.focusCenter" },
+    { x: 100, y: 50, key: "background.focusRight" },
+    { x: 0, y: 100, key: "background.focusBottomLeft" },
+    { x: 50, y: 100, key: "background.focusBottom" },
+    { x: 100, y: 100, key: "background.focusBottomRight" }
+  ];
+
+  function formatBytes(bytes) {
+    const size = Number(bytes) || 0;
+    if (size >= 1048576) return `${(size / 1048576).toFixed(1)} MB`;
+    return `${Math.max(1, Math.round(size / 1024))} KB`;
+  }
+
+  function setBackgroundStatus(key, params) {
+    const element = $("backgroundStatus");
+    if (element) element.textContent = key ? t(key, params) : "";
+  }
+
+  function renderBackgroundControls() {
+    const settings = backgroundSettings();
+    const hasImage = !!settings.assetId;
+
+    const empty = $("backgroundEmpty");
+    if (empty) empty.hidden = hasImage;
+    const chooseLabel = $("backgroundChooseLabel");
+    if (chooseLabel) chooseLabel.textContent = t(hasImage ? "background.replace" : "background.choose");
+    const remove = $("backgroundRemove");
+    if (remove) remove.disabled = !hasImage;
+    const enabled = $("backgroundEnabled");
+    if (enabled) { enabled.checked = settings.enabled; enabled.disabled = !hasImage; }
+
+    for (const button of document.querySelectorAll?.("[data-bg-target]") || []) {
+      button.setAttribute("aria-pressed", String(button.dataset.bgTarget === settings.target));
+    }
+    for (const button of document.querySelectorAll?.("[data-bg-fit]") || []) {
+      button.setAttribute("aria-pressed", String(button.dataset.bgFit === settings.fit));
+    }
+    const warning = $("backgroundPaperWarning");
+    if (warning) warning.hidden = settings.target !== "paper";
+
+    const focus = $("backgroundFocus");
+    if (focus) {
+      // Tiling has no focal point to choose.
+      const tiled = settings.fit === "tile";
+      focus.innerHTML = BACKGROUND_FOCUS_CELLS.map(cell => {
+        const active = cell.x === settings.focusX && cell.y === settings.focusY;
+        return `<button type="button" data-bg-focus="${cell.x},${cell.y}" aria-pressed="${active}"
+          ${tiled ? "disabled" : ""} title="${esc(t(cell.key))}" aria-label="${esc(t(cell.key))}"></button>`;
+      }).join("");
+    }
+
+    const brightness = $("backgroundBrightness");
+    if (brightness) brightness.value = String(settings.brightness);
+    const brightnessValue = $("backgroundBrightnessValue");
+    if (brightnessValue) brightnessValue.textContent = `${settings.brightness}%`;
+    const softness = $("backgroundSoftness");
+    if (softness) softness.value = String(settings.softness);
+    const softnessValue = $("backgroundSoftnessValue");
+    if (softnessValue) softnessValue.textContent = `${settings.softness}px`;
+
+    void renderBackgroundPreview();
+  }
+
+  /* The preview is a small stand-in for the room, not the Reader DOM: when the
+     image goes on the outer stage it shows a mock paper rectangle so the
+     relationship between picture and page is legible. */
+  async function renderBackgroundPreview() {
+    const preview = $("backgroundPreview");
+    if (!preview) return;
+    const settings = backgroundSettings();
+    const url = settings.assetId ? await backgroundObjectUrl() : null;
+    if (!url) {
+      preview.style.backgroundImage = "";
+      preview.style.filter = "";
+      preview.classList?.remove?.("has-image");
+      return;
+    }
+    const style = OD.readerBackground.layerStyle(settings);
+    preview.style.backgroundImage = `url("${url}")`;
+    preview.style.backgroundSize = style.backgroundSize;
+    preview.style.backgroundRepeat = style.backgroundRepeat;
+    preview.style.backgroundPosition = style.backgroundPosition;
+    // The preview is a fraction of the stage, so blur scales down with it.
+    const previewBlur = settings.softness > 0 ? Math.max(1, Math.round(settings.softness / 3)) : 0;
+    preview.style.filter = previewBlur
+      ? `brightness(${settings.brightness}%) blur(${previewBlur}px)`
+      : `brightness(${settings.brightness}%)`;
+    preview.classList?.add?.("has-image");
+    preview.dataset.target = settings.target;
+  }
+
+  async function chooseBackgroundImage(file) {
+    if (!file) return;
+    setBackgroundStatus("background.processing");
+    try {
+      const record = await setBackgroundImage(file);
+      setBackgroundStatus("background.ready", {
+        width: record.width, height: record.height, size: formatBytes(record.blob.size)
+      });
+    } catch (error) {
+      setBackgroundStatus("background.uploadFailed", { message: error?.message || String(error) });
+    }
+    renderBackgroundControls();
   }
 
   /* ── Memorial card ──────────────────────────────────────────────────
@@ -2991,6 +3103,7 @@ window.OD = window.OD || {};
     syncToolTabs();
     // The image lives in its own record, so it is fetched once settings name it.
     void applyBackground();
+    renderBackgroundControls();
   }
 
   async function bootPersistentLibrary() {
@@ -3794,6 +3907,35 @@ window.OD = window.OD || {};
     if (pick) { selectCompanion(pick.dataset.companionPick); closeCompanionPicker(); }
   });
   $("companionSearch")?.addEventListener?.("input", () => renderCompanionPicker());
+  $("backgroundInput")?.addEventListener?.("change", event => {
+    const file = event?.target?.files?.[0];
+    if (file) void chooseBackgroundImage(file);
+    if (event?.target) event.target.value = "";
+  });
+  $("backgroundRemove")?.addEventListener?.("click", () => {
+    void removeBackgroundImage().then(() => { setBackgroundStatus(null); renderBackgroundControls(); });
+  });
+  $("backgroundEnabled")?.addEventListener?.("change", event => {
+    updateBackground({ enabled: !!event?.target?.checked });
+  });
+  $("backgroundFocus")?.addEventListener?.("click", event => {
+    const cell = event?.target?.closest?.("[data-bg-focus]");
+    if (!cell) return;
+    const [x, y] = String(cell.dataset.bgFocus).split(",").map(Number);
+    updateBackground({ focusX: x, focusY: y });
+  });
+  $("backgroundBrightness")?.addEventListener?.("input", event => {
+    updateBackground({ brightness: Number(event?.target?.value) });
+  });
+  $("backgroundSoftness")?.addEventListener?.("input", event => {
+    updateBackground({ softness: Number(event?.target?.value) });
+  });
+  $("backgroundAccordion")?.addEventListener?.("click", event => {
+    const target = event?.target?.closest?.("[data-bg-target]");
+    if (target) { updateBackground({ target: target.dataset.bgTarget }); return; }
+    const fit = event?.target?.closest?.("[data-bg-fit]");
+    if (fit) updateBackground({ fit: fit.dataset.bgFit });
+  });
   $("memorialEditDate")?.addEventListener?.("click", () => {
     const key = document.querySelector?.(".memorial-card")?.dataset?.companionKey;
     const trigger = state.memorialMenuReturn;

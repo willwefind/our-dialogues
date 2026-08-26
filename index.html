@@ -327,6 +327,46 @@
         </div>
       </details>
 
+      <details class="aa-accordion" id="backgroundAccordion">
+        <summary data-i18n="background.title">背景</summary>
+        <div class="bg-preview" aria-hidden="true"><div id="backgroundPreview" class="bg-preview-image"><span class="bg-preview-paper"></span></div></div>
+        <div id="backgroundEmpty" class="bg-empty" data-i18n="background.none">还没有选图片</div>
+        <div class="pref-row bg-actions">
+          <label class="bg-choose">
+            <input id="backgroundInput" type="file" accept="image/png,image/jpeg,image/webp" hidden>
+            <span id="backgroundChooseLabel" data-i18n="background.choose">选择图片</span>
+          </label>
+          <button id="backgroundRemove" type="button" data-i18n="background.remove">移除</button>
+        </div>
+        <div class="pref-row pref-row-toggle"><label><input id="backgroundEnabled" type="checkbox"> <span data-i18n="background.show">显示背景</span></label></div>
+        <div id="backgroundStatus" class="bg-status" role="status"></div>
+        <div class="pref-row"><span class="pref-label" data-i18n="background.target">应用到</span>
+          <div class="bg-segment" role="group" aria-label="应用到" data-i18n-aria-label="background.target">
+            <button type="button" data-bg-target="outer" data-i18n="background.targetOuter">外层舞台</button>
+            <button type="button" data-bg-target="paper" data-i18n="background.targetPaper">阅读纸面</button>
+          </div>
+        </div>
+        <div id="backgroundPaperWarning" class="bg-warning" hidden data-i18n="background.paperWarning">图片可能降低正文可读性</div>
+        <div class="pref-row"><span class="pref-label" data-i18n="background.fit">铺放方式</span>
+          <div class="bg-segment" role="group" aria-label="铺放方式" data-i18n-aria-label="background.fit">
+            <button type="button" data-bg-fit="fill" data-i18n="background.fitFill">填满</button>
+            <button type="button" data-bg-fit="contain" data-i18n="background.fitContain">完整显示</button>
+            <button type="button" data-bg-fit="tile" data-i18n="background.fitTile">平铺</button>
+          </div>
+        </div>
+        <div class="pref-row bg-focus-row"><span class="pref-label" data-i18n="background.focus">焦点位置</span>
+          <div id="backgroundFocus" class="bg-focus" role="group" aria-label="焦点位置" data-i18n-aria-label="background.focus"></div>
+        </div>
+        <div class="pref-row"><span class="pref-label" data-i18n="background.brightness">背景亮度</span>
+          <input id="backgroundBrightness" type="range" min="40" max="120" step="1" aria-label="背景亮度" data-i18n-aria-label="background.brightness">
+          <span id="backgroundBrightnessValue" class="bg-value"></span>
+        </div>
+        <div class="pref-row"><span class="pref-label" data-i18n="background.softness">柔化</span>
+          <input id="backgroundSoftness" type="range" min="0" max="16" step="1" aria-label="柔化" data-i18n-aria-label="background.softness">
+          <span id="backgroundSoftnessValue" class="bg-value"></span>
+        </div>
+      </details>
+
       <details class="aa-accordion">
         <summary data-i18n="settings.display">显示</summary>
         <div class="pref-row pref-row-toggle"><label><input id="hideUser" type="checkbox"> <span data-i18n="display.hideUser">隐藏我的发言</span></label></div>

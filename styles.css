@@ -82,6 +82,39 @@ body{display:flex;overflow:hidden;background:var(--bg);color:var(--ink);font-fam
 /* Negative z-index keeps the custom image above the page canvas and below
    every element the Reader draws, so the sidebar and the reading paper stay
    opaque over it and only the outer stage shows through. */
+/* ── Aa · Background ─────────────────────────────────────────────────── */
+.bg-preview{margin:8px 0 6px;height:150px;border:1px solid var(--line);border-radius:8px;overflow:hidden;
+  background:var(--paper)}
+.bg-preview-image{width:100%;height:100%;display:grid;place-items:center;background-color:var(--od-outer-bg)}
+/* A mock sheet so the relationship between picture and page stays legible. */
+.bg-preview-paper{width:44%;height:74%;border-radius:2px;background:var(--od-paper-bg);
+  box-shadow:0 2px 8px rgba(0,0,0,.18)}
+.bg-preview-image[data-target="paper"] .bg-preview-paper{display:none}
+.bg-empty{font:11px/1.6 var(--font-ui);color:var(--muted);margin-bottom:6px}
+.bg-actions{display:flex;gap:8px}
+.bg-choose,.bg-actions button{flex:1;min-height:34px;display:grid;place-items:center;border:1px solid var(--line);
+  border-radius:6px;background:var(--btn,transparent);color:var(--ink);font:12px var(--font-ui);cursor:pointer}
+.bg-actions button:disabled{opacity:.4;cursor:default}
+.bg-status{font:11px/1.6 var(--font-ui);color:var(--muted);min-height:18px}
+.bg-warning{font:11px/1.6 var(--font-ui);color:var(--accent);margin:2px 0 6px}
+.bg-segment{display:flex;gap:4px;flex:1;justify-content:flex-end}
+.bg-segment button{min-height:30px;padding:0 10px;border:1px solid var(--line);border-radius:6px;
+  background:transparent;color:var(--muted);font:11px var(--font-ui);cursor:pointer}
+.bg-segment button[aria-pressed=true]{background:var(--ink);border-color:var(--ink);color:var(--paper)}
+.bg-focus-row{align-items:flex-start}
+.bg-focus{display:grid;grid-template-columns:repeat(3,1fr);gap:3px;width:96px;margin-left:auto}
+.bg-focus button{width:30px;height:30px;border:1px solid var(--line);border-radius:4px;background:transparent;cursor:pointer}
+.bg-focus button[aria-pressed=true]{background:var(--accent);border-color:var(--accent)}
+.bg-focus button:disabled{opacity:.35;cursor:default}
+.bg-value{width:44px;text-align:right;font:11px var(--font-ui);color:var(--muted)}
+@media (max-width: 760px){
+  .bg-preview{height:140px}
+  /* Thumbs need the whole cell, not a 30px dot. */
+  .bg-focus{width:144px}
+  .bg-focus button{width:46px;height:46px}
+  .bg-segment button{min-height:44px}
+  .bg-choose,.bg-actions button{min-height:44px}
+}
 .od-custom-stage-bg{position:fixed;inset:0;z-index:-1;pointer-events:none;background-color:var(--od-outer-bg)}
 button,input,select{font:inherit}
 #sidebar{--od-sidebar-w:312px;width:var(--od-sidebar-w);flex:none;height:100%;display:flex;flex-direction:column;overflow-y:auto;background:var(--panel);border-right:1px solid var(--line);transition:margin-left var(--motion-drawer) var(--motion-ease)}
