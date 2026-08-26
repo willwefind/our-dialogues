@@ -13,6 +13,9 @@ window.OD = window.OD || {};
   const CONVERSATION_STORE = "conversations";
   const SETTINGS_STORE = "settings";
   const READER_SETTINGS_KEY = "reader";
+  // Binary assets keep their own records beside the reader-settings record.
+  const ASSET_KEY_PREFIX = "asset:";
+  const assetRecordId = assetKey => ASSET_KEY_PREFIX + String(assetKey ?? "");
   const BATCH_SIZE = 24;
 
   function requestResult(request) {
@@ -216,6 +219,28 @@ window.OD = window.OD || {};
         transaction.objectStore(SETTINGS_STORE).put({ id: READER_SETTINGS_KEY, value: lightweightClone(value) });
         await transactionDone(transaction);
       },
+      // Asset records deliberately skip lightweightClone: it drops Blobs so
+      // that reader settings stay small enough to mirror into localStorage.
+      async getAsset(assetKey) {
+        const db = await database();
+        const transaction = db.transaction(SETTINGS_STORE, "readonly");
+        const done = transactionDone(transaction);
+        const result = await requestResult(transaction.objectStore(SETTINGS_STORE).get(assetRecordId(assetKey)));
+        await done;
+        return result?.value || null;
+      },
+      async setAsset(assetKey, record) {
+        const db = await database();
+        const transaction = db.transaction(SETTINGS_STORE, "readwrite");
+        transaction.objectStore(SETTINGS_STORE).put({ id: assetRecordId(assetKey), value: record });
+        await transactionDone(transaction);
+      },
+      async deleteAsset(assetKey) {
+        const db = await database();
+        const transaction = db.transaction(SETTINGS_STORE, "readwrite");
+        transaction.objectStore(SETTINGS_STORE).delete(assetRecordId(assetKey));
+        await transactionDone(transaction);
+      },
       async audit() {
         const db = await database();
         const transaction = db.transaction([SOURCE_STORE, CONVERSATION_STORE, SETTINGS_STORE], "readonly");
@@ -243,6 +268,7 @@ window.OD = window.OD || {};
     const sourceMap = new Map(sources.map(record => [record.id, lightweightClone(record)]));
     const conversationMap = new Map(conversations.map(record => [record.key, lightweightClone(record)]));
     let storedSettings = lightweightClone(settings);
+    const storedAssets = new Map();
     let currentVersion = version;
     return {
       async open() { currentVersion = DB_VERSION; return { name: DB_NAME, version: currentVersion }; },
@@ -262,6 +288,9 @@ window.OD = window.OD || {};
       async clearSources() { sourceMap.clear(); conversationMap.clear(); },
       async getSettings() { return lightweightClone(storedSettings); },
       async setSettings(value) { storedSettings = lightweightClone(value); },
+      async getAsset(assetKey) { return storedAssets.get(assetRecordId(assetKey)) || null; },
+      async setAsset(assetKey, record) { storedAssets.set(assetRecordId(assetKey), record); },
+      async deleteAsset(assetKey) { storedAssets.delete(assetRecordId(assetKey)); },
       async audit() {
         return {
           name: DB_NAME,
@@ -325,6 +354,9 @@ window.OD = window.OD || {};
       async clearSources() { if (selectedDriver) await selectedDriver.clearSources(); },
       async loadSettings() { return selectedDriver ? selectedDriver.getSettings() : null; },
       async saveSettings(value) { if (selectedDriver) await selectedDriver.setSettings(value); },
+      async loadAsset(assetKey) { return selectedDriver?.getAsset ? selectedDriver.getAsset(assetKey) : null; },
+      async saveAsset(assetKey, record) { if (selectedDriver?.setAsset) await selectedDriver.setAsset(assetKey, record); },
+      async removeAsset(assetKey) { if (selectedDriver?.deleteAsset) await selectedDriver.deleteAsset(assetKey); },
       async audit() { return selectedDriver?.audit ? selectedDriver.audit() : null; },
       async reset() { if (selectedDriver) await selectedDriver.reset(); }
     };

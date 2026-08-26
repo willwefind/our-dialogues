@@ -169,6 +169,7 @@ async function loadAppRuntime(savedSortMode="asc", options={}) {
     "src/core/solvoice-sidecar.js",
     "src/core/organization.js",
     "src/core/companionship.js",
+    "src/core/reader-background.js",
     "src/core/export.js",
     "src/core/zip-writer.js",
     "src/core/epub.js",
