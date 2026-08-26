@@ -86,8 +86,8 @@ body{display:flex;overflow:hidden;background:var(--bg);color:var(--ink);font-fam
    sheet, above the theme's own paper texture and below the words, with a
    theme-coloured wash between them so the text keeps its contrast. The
    theme texture is never replaced — it still paints underneath. */
-body.has-custom-background[data-bg-target="paper"] .reader{isolation:isolate}
-body.has-custom-background[data-bg-target="paper"] .reader::before{
+body.has-custom-background[data-background-target="paper"] .reader{isolation:isolate}
+body.has-custom-background[data-background-target="paper"] .reader::before{
   content:"";position:absolute;inset:0;z-index:-1;border-radius:inherit;pointer-events:none;
   background-image:linear-gradient(var(--od-reader-wash),var(--od-reader-wash)),var(--od-reader-bg-image,none);
   background-size:auto,var(--od-reader-bg-size,cover);
@@ -133,7 +133,7 @@ body.has-custom-background[data-bg-target="paper"] .reader::before{
    sliders serves every theme, and Night lays its own scrim over the image
    instead of asking for a second brightness profile. The scrim sits above the
    picture and below everything drawn on top of it. */
-body.has-custom-background[data-bg-target="outer"]::before{content:"";position:fixed;inset:0;z-index:-1;
+body.has-custom-background[data-background-target="outer"]::before{content:"";position:fixed;inset:0;z-index:-1;
   pointer-events:none;background:var(--od-stage-scrim,transparent)}
 :root{--od-stage-scrim:transparent}
 :root[data-theme="night"]{--od-stage-scrim:rgba(16,14,12,.42)}

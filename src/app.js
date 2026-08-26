@@ -590,7 +590,7 @@ window.OD = window.OD || {};
       layer.hidden = true;
       layer.style.backgroundImage = "";
       document.documentElement?.style?.removeProperty?.("--od-reader-bg-image");
-      if (document.body?.dataset) delete document.body.dataset.bgTarget;
+      if (document.body?.dataset) delete document.body.dataset.backgroundTarget;
       return;
     }
     const url = await backgroundObjectUrl();
@@ -600,7 +600,7 @@ window.OD = window.OD || {};
       return;
     }
     const style = OD.readerBackground.layerStyle(settings);
-    if (document.body?.dataset) document.body.dataset.bgTarget = settings.target;
+    if (document.body?.dataset) document.body.dataset.backgroundTarget = settings.target;
     // One target at a time: on the paper the image rides inside the sheet
     // through root variables, and the outer stage goes back to plain.
     const root = document.documentElement?.style;
@@ -725,10 +725,10 @@ window.OD = window.OD || {};
     const enabled = $("backgroundEnabled");
     if (enabled) { enabled.checked = settings.enabled; enabled.disabled = !hasImage; }
 
-    for (const button of document.querySelectorAll?.("[data-bg-target]") || []) {
+    for (const button of document.querySelectorAll?.("button[data-bg-target]") || []) {
       button.setAttribute("aria-pressed", String(button.dataset.bgTarget === settings.target));
     }
-    for (const button of document.querySelectorAll?.("[data-bg-fit]") || []) {
+    for (const button of document.querySelectorAll?.("button[data-bg-fit]") || []) {
       button.setAttribute("aria-pressed", String(button.dataset.bgFit === settings.fit));
     }
     const warning = $("backgroundPaperWarning");
@@ -3948,10 +3948,12 @@ window.OD = window.OD || {};
     updateBackground({ softness: Number(event?.target?.value) });
   });
   $("backgroundAccordion")?.addEventListener?.("click", event => {
-    const target = event?.target?.closest?.("[data-bg-target]");
-    if (target) { updateBackground({ target: target.dataset.bgTarget }); return; }
-    const fit = event?.target?.closest?.("[data-bg-fit]");
-    if (fit) updateBackground({ fit: fit.dataset.bgFit });
+    // Match buttons only, never an ancestor that happens to carry the same
+    // data attribute — the body wears the active target for the stylesheet.
+    const button = event?.target?.closest?.("button[data-bg-target], button[data-bg-fit]");
+    if (!button) return;
+    if (button.dataset.bgTarget) { updateBackground({ target: button.dataset.bgTarget }); return; }
+    updateBackground({ fit: button.dataset.bgFit });
   });
   $("memorialEditDate")?.addEventListener?.("click", () => {
     const key = document.querySelector?.(".memorial-card")?.dataset?.companionKey;
