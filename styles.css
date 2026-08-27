@@ -86,19 +86,19 @@ body{display:flex;overflow:hidden;background:var(--bg);color:var(--ink);font-fam
 /* Negative z-index keeps the custom image above the page canvas and below
    every element the Reader draws, so the sidebar and the reading paper stay
    opaque over it and only the outer stage shows through. */
-/* The reading-paper target is the advanced path: the image goes inside the
-   sheet, above the theme's own paper texture and below the words, with a
-   theme-coloured wash between them so the text keeps its contrast. The
-   theme texture is never replaced — it still paints underneath. */
-body.has-custom-background[data-background-target="paper"] .reader{isolation:isolate}
+/* The reading-paper target is the advanced path, and it moves the sheet
+   rather than the picture: the fixed stage layer keeps drawing the image, and
+   the paper — theme colour plus the theme's own texture, which is opaque and
+   would otherwise block everything — is lifted onto its own layer inside the
+   sheet and thinned to 纸面浓度. At 100 it is the ordinary opaque page; at 0
+   the picture comes through whole. The sheet keeps its border, shadow and
+   ink grain either way, and isolation keeps that negative layer its own. */
+body.has-custom-background[data-background-target="paper"] .reader{
+  isolation:isolate;background:transparent}
 body.has-custom-background[data-background-target="paper"] .reader::before{
   content:"";position:absolute;inset:0;z-index:-1;border-radius:inherit;pointer-events:none;
-  background-image:linear-gradient(var(--od-reader-wash),var(--od-reader-wash)),var(--od-reader-bg-image,none);
-  background-size:auto,var(--od-reader-bg-size,cover);
-  background-position:0 0,var(--od-reader-bg-pos,50% 50%);
-  background-repeat:repeat,var(--od-reader-bg-repeat,no-repeat);
-  filter:var(--od-reader-bg-filter,none)}
-:root{--od-reader-wash:color-mix(in srgb, var(--od-paper-bg) 74%, transparent)}
+  background:var(--od-paper-bg) var(--od-paper-tile) top left/512px 512px repeat;
+  opacity:var(--od-reader-paper-alpha,.74)}
 /* ── Aa · Background ─────────────────────────────────────────────────── */
 .bg-preview{margin:8px 0 6px;height:150px;border:1px solid var(--line);border-radius:8px;overflow:hidden;
   background:var(--paper)}
@@ -106,7 +106,9 @@ body.has-custom-background[data-background-target="paper"] .reader::before{
 /* A mock sheet so the relationship between picture and page stays legible. */
 .bg-preview-paper{width:44%;height:74%;border-radius:2px;background:var(--od-paper-bg);
   box-shadow:0 2px 8px rgba(0,0,0,.18)}
-.bg-preview-image[data-target="paper"] .bg-preview-paper{display:none}
+/* The mock sheet thins with the real one, so the preview shows the reader
+   what 纸面浓度 is about to do rather than hiding the page entirely. */
+.bg-preview-image[data-target="paper"] .bg-preview-paper{opacity:var(--od-reader-paper-alpha,.74)}
 .bg-empty{font:11px/1.6 var(--font-ui);color:var(--muted);margin-bottom:6px}
 .bg-actions{display:flex;gap:8px}
 .bg-choose,.bg-actions button{flex:1;min-height:34px;display:grid;place-items:center;border:1px solid var(--line);
@@ -137,7 +139,7 @@ body.has-custom-background[data-background-target="paper"] .reader::before{
    sliders serves every theme, and Night lays its own scrim over the image
    instead of asking for a second brightness profile. The scrim sits above the
    picture and below everything drawn on top of it. */
-body.has-custom-background[data-background-target="outer"]::before{content:"";position:fixed;inset:0;z-index:-1;
+body.has-custom-background::before{content:"";position:fixed;inset:0;z-index:-1;
   pointer-events:none;background:var(--od-stage-scrim,transparent)}
 :root{--od-stage-scrim:transparent}
 :root[data-theme="night"]{--od-stage-scrim:rgba(16,14,12,.42)}

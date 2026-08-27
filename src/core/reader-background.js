@@ -96,13 +96,19 @@ window.OD = window.OD || {};
     to that layer alone — it holds no Reader descendants, so the reading paper
     can never be dimmed by accident.
   */
+  const TILE_WIDTH_PERCENT = 33.333;
+
   function blurFor(clarity) {
     return Math.round(((100 - clarity) / 100) * MAX_BLUR);
   }
 
   function layerStyle(settings) {
     const normalized = normalize(settings);
-    const size = normalized.fit === "fill" ? "cover" : normalized.fit === "contain" ? "contain" : "auto";
+    // Tiling at the picture's own size never tiles: the upload pipeline caps
+    // the long edge at 2560, which is wider than any reading surface. A third
+    // of the layer keeps the repeat visible and identical on every screen.
+    const size = normalized.fit === "fill" ? "cover"
+      : normalized.fit === "contain" ? "contain" : `${TILE_WIDTH_PERCENT}% auto`;
     const blur = blurFor(normalized.clarity);
     const filters = [`brightness(${normalized.brightness}%)`];
     if (blur > 0) filters.push(`blur(${blur}px)`);

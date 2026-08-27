@@ -68,9 +68,11 @@ test("fit maps to the three approved behaviours", async () => {
   assert.equal(contain.backgroundSize, "contain");
   assert.equal(contain.backgroundRepeat, "no-repeat");
 
-  // A tiled pattern has no focal point to honour.
+  // A tiled pattern has no focal point to honour, and it must be small
+  // enough to repeat: the upload cap of 2560px is wider than any surface,
+  // so tiling at the picture's own size never showed a second tile.
   const tile = background.layerStyle({ fit: "tile", focusX: 0, focusY: 100 });
-  assert.equal(tile.backgroundSize, "auto");
+  assert.equal(tile.backgroundSize, "33.333% auto");
   assert.equal(tile.backgroundRepeat, "repeat");
   assert.equal(tile.backgroundPosition, "0% 0%");
 });

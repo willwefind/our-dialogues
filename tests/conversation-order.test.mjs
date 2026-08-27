@@ -31,6 +31,9 @@ function fakeElement(id="") {
     checked: false,
     hidden: false,
     dataset: {},
+    // Real elements always have a style object; without one the Reader's
+    // background code threw asynchronously in every test run.
+    style: {},
     attributes: new Map(),
     classList: {
       add(...names) { names.forEach(name => classes.add(name)); },
@@ -140,6 +143,14 @@ async function loadAppRuntime(savedSortMode="asc", options={}) {
   const stored = options.stored || new Map([["our-dialogues.conversation-sort", savedSortMode]]);
   if (!stored.has("our-dialogues.conversation-sort")) stored.set("our-dialogues.conversation-sort", savedSortMode);
   const documentListeners = new Map();
+  // A recording stand-in for the root element's inline style, so custom
+  // properties the Reader sets can be read back.
+  const rootStyle = {
+    props: new Map(),
+    setProperty(name, value) { this.props.set(name, String(value)); },
+    removeProperty(name) { this.props.delete(name); },
+    getPropertyValue(name) { return this.props.get(name) ?? ""; }
+  };
   const runtime = {
     console,
     Blob,
@@ -153,13 +164,15 @@ async function loadAppRuntime(savedSortMode="asc", options={}) {
     // "auto" locale resolves to zh-CN and existing Chinese-text assertions
     // keep describing the default UI.
     navigator: { language: "zh-CN", languages: ["zh-CN"] },
+    // The picture reaches a layer as an object URL; one stand-in is enough.
+    URL: { createObjectURL: () => "blob:probe", revokeObjectURL() {} },
     localStorage: {
       getItem(key) { return stored.get(key) ?? null; },
       setItem(key, value) { stored.set(key, value); }
     },
     document: {
       body: fakeElement("body"),
-      documentElement: { dataset: {}, style: { setProperty() {} } },
+      documentElement: { dataset: {}, style: rootStyle },
       visibilityState: "visible",
       getElementById(id) { return elements.get(id); },
       addEventListener(type, listener) { documentListeners.set(type, listener); },
@@ -216,6 +229,7 @@ async function loadAppRuntime(savedSortMode="asc", options={}) {
     stored,
     sortAscending,
     sortDescending,
+    rootStyle,
     dispatchDocument(type, target) {
       return documentListeners.get(type)?.({ target: target || runtime.document });
     }
@@ -226,7 +240,7 @@ function ids(conversations) {
   return [...conversations.map(conversation => conversation.id)];
 }
 
-async function createMemoryPersistenceDriver() {
+async function createMemoryPersistenceDriver(options={}) {
   const runtime = { console, Blob, File, Date, setTimeout, clearTimeout };
   runtime.window = runtime;
   vm.createContext(runtime);
@@ -235,7 +249,7 @@ async function createMemoryPersistenceDriver() {
     runtime,
     { filename: "src/core/persistent-library.js" }
   );
-  return runtime.OD.persistentLibrary._internals.createMemoryDriver();
+  return runtime.OD.persistentLibrary._internals.createMemoryDriver(options);
 }
 
 test("conversation sort uses normalized createdAt in both directions", async () => {
@@ -474,6 +488,41 @@ test("app renders Mufy rich families with Reader-owned markup and escaped values
   assert.match(markup, /source-rich-items/);
   assert.match(markup, /Synthetic &lt;script&gt; title/);
   assert.doesNotMatch(markup, /<script>/i);
+});
+
+async function bootWithBackground(background) {
+  const driver = await createMemoryPersistenceDriver({ settings: { background } });
+  await driver.setAsset("background-image", { blob: { size: 1 } });
+  const harness = await loadAppRuntime("asc", { driver });
+  await harness.runtime.OD.app.ready;
+  // The picture is fetched from its own record after settings name it, and
+  // that lookup is not part of the boot promise.
+  await new Promise(resolve => setTimeout(resolve, 0));
+  return harness;
+}
+
+test("both background targets ride one viewport-sized layer, and only the sheet differs", async () => {
+  const base = { enabled: true, assetId: "probe", fit: "fill", paperOpacity: 40 };
+
+  // The reading-paper target used to paint the picture inside the sheet, which
+  // is as tall as its conversation — the same image came out 0.37x in a
+  // one-line entry and 7.4x in an 82-message chat. It thins the paper now and
+  // leaves the picture on the fixed layer, so every conversation matches.
+  const paper = await bootWithBackground({ ...base, target: "paper" });
+  assert.equal(paper.elements.get("customBackground").hidden, false,
+    "the fixed layer carries the picture for the paper target too");
+  assert.equal(paper.rootStyle.getPropertyValue("--od-reader-paper-alpha"), "0.4",
+    "paper density reaches the sheet");
+  assert.equal(paper.rootStyle.getPropertyValue("--od-reader-bg-image"), "",
+    "the sheet never carries a picture of its own again");
+  assert.equal(paper.runtime.document.body.dataset.backgroundTarget, "paper");
+
+  // The outer stage leaves the sheet alone.
+  const outer = await bootWithBackground({ ...base, target: "outer" });
+  assert.equal(outer.elements.get("customBackground").hidden, false);
+  assert.equal(outer.rootStyle.getPropertyValue("--od-reader-paper-alpha"), "",
+    "an opaque sheet needs no density");
+  assert.equal(outer.runtime.document.body.dataset.backgroundTarget, "outer");
 });
 
 test("app boot restores the persistent source, prefs, recent conversation, and scroll position", async () => {

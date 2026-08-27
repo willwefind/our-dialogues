@@ -592,7 +592,7 @@ window.OD = window.OD || {};
     if (!OD.readerBackground.isActive(settings)) {
       layer.hidden = true;
       layer.style.backgroundImage = "";
-      document.documentElement?.style?.removeProperty?.("--od-reader-bg-image");
+      document.documentElement?.style?.removeProperty?.("--od-reader-paper-alpha");
       if (document.body?.dataset) delete document.body.dataset.backgroundTarget;
       return;
     }
@@ -604,22 +604,21 @@ window.OD = window.OD || {};
     }
     const style = OD.readerBackground.layerStyle(settings);
     if (document.body?.dataset) document.body.dataset.backgroundTarget = settings.target;
-    // One target at a time: on the paper the image rides inside the sheet
-    // through root variables, and the outer stage goes back to plain.
+    /* One fixed layer serves both targets, so the picture is pinned to the
+       viewport and only the words travel over it. Sizing it against the sheet
+       was the old bug: a sheet is as tall as its conversation, so the same
+       picture was drawn at 0.37x in a one-line entry and 7.4x in an 82-message
+       chat — "fit" put it thousands of pixels below the fold.
+
+       The two targets now differ in the paper, not in the picture: 阅读舞台
+       leaves the sheet opaque so the image stays in the margins, and 阅读纸面
+       thins the sheet so it comes through behind the words. */
     const root = document.documentElement?.style;
     if (settings.target === "paper") {
-      root?.setProperty?.("--od-reader-bg-image", `url("${url}")`);
-      root?.setProperty?.("--od-reader-bg-size", style.backgroundSize);
-      root?.setProperty?.("--od-reader-bg-pos", style.backgroundPosition);
-      root?.setProperty?.("--od-reader-bg-repeat", style.backgroundRepeat);
-      root?.setProperty?.("--od-reader-bg-filter", style.filter);
-      root?.setProperty?.("--od-reader-wash",
-        `color-mix(in srgb, var(--od-paper-bg) ${settings.paperOpacity}%, transparent)`);
-      layer.hidden = true;
-      layer.style.backgroundImage = "";
-      return;
+      root?.setProperty?.("--od-reader-paper-alpha", String(settings.paperOpacity / 100));
+    } else {
+      root?.removeProperty?.("--od-reader-paper-alpha");
     }
-    root?.removeProperty?.("--od-reader-bg-image");
     layer.style.backgroundImage = `url("${url}")`;
     layer.style.backgroundSize = style.backgroundSize;
     layer.style.backgroundRepeat = style.backgroundRepeat;
