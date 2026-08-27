@@ -53,6 +53,7 @@ function fakeElement(id="") {
     click() { return listeners.get("click")?.({ target: this }); },
     setAttribute(name, value) { this.attributes.set(name, String(value)); },
     getAttribute(name) { return this.attributes.get(name) ?? null; },
+    removeAttribute(name) { this.attributes.delete(name); },
     querySelectorAll(selector) {
       if (selector === "[data-message-id]") {
         return [...this.innerHTML.matchAll(/data-message-id="([^"]+)"/g)].map((match, index) => ({
@@ -98,6 +99,7 @@ async function loadAppRuntime(savedSortMode="asc", options={}) {
     "backgroundEnabled",
     "backgroundStatus",
     "backgroundPaperWarning",
+    "backgroundScaleNote",
     "backgroundFocus",
     "backgroundBrightness",
     "backgroundBrightnessValue",

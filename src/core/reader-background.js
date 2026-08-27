@@ -124,6 +124,35 @@ window.OD = window.OD || {};
     };
   }
 
+  /* What this picture will actually do on this screen. The layer is the
+     viewport, so a picture smaller than the screen is magnified — and one
+     shaped unlike the screen has only a single axis left to move along, which
+     is why a portrait photo ignores the focus grid's left and right on a desk
+     and its top and bottom on a phone. Both facts belong on screen instead of
+     waiting to be discovered by clicking. */
+  function projection({ fit, pictureWidth, pictureHeight, boxWidth, boxHeight } = {}) {
+    const pictureW = Number(pictureWidth) || 0;
+    const pictureH = Number(pictureHeight) || 0;
+    const boxW = Number(boxWidth) || 0;
+    const boxH = Number(boxHeight) || 0;
+    if (pictureW <= 0 || pictureH <= 0 || boxW <= 0 || boxH <= 0) return null;
+    const normalized = FITS.includes(fit) ? fit : DEFAULTS.fit;
+    const ratio = normalized === "fill" ? Math.max(boxW / pictureW, boxH / pictureH)
+      : normalized === "contain" ? Math.min(boxW / pictureW, boxH / pictureH)
+      : (boxW * (TILE_WIDTH_PERCENT / 100)) / pictureW;
+    const drawnWidth = pictureW * ratio;
+    const drawnHeight = pictureH * ratio;
+    // A tile repeats both ways, so no focal point applies to it at all.
+    const tiled = normalized === "tile";
+    return {
+      ratio,
+      drawnWidth: Math.round(drawnWidth),
+      drawnHeight: Math.round(drawnHeight),
+      liveX: !tiled && Math.abs(drawnWidth - boxW) > 1,
+      liveY: !tiled && Math.abs(drawnHeight - boxH) > 1
+    };
+  }
+
   // Longest edge capped, aspect ratio kept. Returns the size to draw at.
   function scaleToFit(width, height, maxEdge = MAX_EDGE) {
     const w = Math.max(1, Math.round(Number(width) || 0));
@@ -140,6 +169,7 @@ window.OD = window.OD || {};
 
   OD.readerBackground = {
     ASSET_KEY,
+    projection,
     DEFAULTS,
     FITS,
     TARGETS,

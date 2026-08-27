@@ -50,6 +50,7 @@ window.OD = window.OD || {};
     companionshipOverrides: {},
     background: {},
     backgroundUrl: null,
+    backgroundPixels: null,
     importOpen: null,
     readingProgress: {},
     readingOrder: [],
@@ -580,6 +581,9 @@ window.OD = window.OD || {};
     if (state.backgroundUrl) return state.backgroundUrl;
     const record = await state.persistence?.loadAsset?.(OD.readerBackground.ASSET_KEY);
     if (!record?.blob) return null;
+    // The picture's own pixels travel with the URL: the panel needs them to
+    // say how far this screen is stretching it.
+    state.backgroundPixels = { width: record.width, height: record.height };
     state.backgroundUrl = URL.createObjectURL(record.blob);
     return state.backgroundUrl;
   }
@@ -716,6 +720,18 @@ window.OD = window.OD || {};
     if (element) element.textContent = key ? t(key, params) : "";
   }
 
+  function backgroundProjection(settings) {
+    const pixels = state.backgroundPixels;
+    if (!pixels) return null;
+    return OD.readerBackground.projection({
+      fit: settings.fit,
+      pictureWidth: pixels.width,
+      pictureHeight: pixels.height,
+      boxWidth: window.innerWidth || 0,
+      boxHeight: window.innerHeight || 0
+    });
+  }
+
   function renderBackgroundControls() {
     const settings = backgroundSettings();
     const hasImage = !!settings.assetId;
@@ -738,15 +754,44 @@ window.OD = window.OD || {};
     const warning = $("backgroundPaperWarning");
     if (warning) warning.hidden = settings.target !== "paper";
 
+    const view = backgroundProjection(settings);
     const focus = $("backgroundFocus");
     if (focus) {
-      // Tiling has no focal point to choose.
+      // Tiling has no focal point to choose, and an axis with no slack on this
+      // screen has nothing to offer either: those cells are all the same
+      // picture, so they go quiet rather than pretending to do something.
       const tiled = settings.fit === "tile";
+      const liveX = !view || view.liveX;
+      const liveY = !view || view.liveY;
+      const activeX = liveX ? settings.focusX : 50;
+      const activeY = liveY ? settings.focusY : 50;
       focus.innerHTML = BACKGROUND_FOCUS_CELLS.map(cell => {
-        const active = cell.x === settings.focusX && cell.y === settings.focusY;
+        const dead = tiled || (!liveX && cell.x !== 50) || (!liveY && cell.y !== 50);
+        const active = cell.x === activeX && cell.y === activeY;
         return `<button type="button" data-bg-focus="${cell.x},${cell.y}" aria-pressed="${active}"
-          ${tiled ? "disabled" : ""} title="${esc(t(cell.key))}" aria-label="${esc(t(cell.key))}"></button>`;
+          ${dead ? "disabled" : ""} title="${esc(t(cell.key))}" aria-label="${esc(t(cell.key))}"></button>`;
       }).join("");
+      // A disabled button never shows a tooltip, so the reason rides the group.
+      const axisKey = tiled || (liveX && liveY) ? null
+        : liveY ? "background.focusVerticalOnly"
+        : liveX ? "background.focusHorizontalOnly" : null;
+      if (axisKey) focus.setAttribute("title", t(axisKey));
+      else focus.removeAttribute("title");
+    }
+    /* Filling a screen from a picture smaller than it is magnification, and
+       magnification never grows detail. Say the number rather than let the
+       reader wonder why 填满 went soft. */
+    const scaleNote = $("backgroundScaleNote");
+    if (scaleNote) {
+      const magnified = hasImage && view && view.ratio >= 1.25 && state.backgroundPixels;
+      scaleNote.hidden = !magnified;
+      if (magnified) {
+        scaleNote.textContent = t("background.magnified", {
+          times: view.ratio.toFixed(1),
+          width: state.backgroundPixels.width,
+          height: state.backgroundPixels.height
+        });
+      }
     }
 
     const brightness = $("backgroundBrightness");
@@ -1525,6 +1570,7 @@ window.OD = window.OD || {};
     syncOrganizeControls();
     if ($("tagEditor")?.hidden === false) renderTagEditor();
     if ($("companionPicker")?.hidden === false) renderCompanionPicker();
+    renderBackgroundControls();
     performSearch();
     state.statusText = archiveStatusText();
     renderStatus();
@@ -3594,6 +3640,9 @@ window.OD = window.OD || {};
     if (narrow && !wasNarrowScreen) $("sidebar").classList.add("closed");
     wasNarrowScreen = narrow;
     syncSidebarBackdrop();
+    // Magnification and the live focus axes are read off the viewport, so they
+    // are restated whenever it changes — but only while they are on screen.
+    if ($("readerPrefsPanel")?.hidden === false) renderBackgroundControls();
   };
   window.matchMedia?.("(max-width: 1359px)")?.addEventListener?.("change", onViewportChange);
   addEventListener("resize", onViewportChange);
@@ -3650,6 +3699,9 @@ window.OD = window.OD || {};
   $("readerPrefsToggle").addEventListener("click", event => {
     event.stopPropagation?.();
     $("readerPrefsPanel").hidden = !$("readerPrefsPanel").hidden;
+    // The background numbers are read off the viewport, which may have moved
+    // while the panel was shut.
+    if (!$("readerPrefsPanel").hidden) renderBackgroundControls();
   });
   // One document-level closer for every popover — the fake-DOM harness keeps
   // a single listener per event type, and real browsers don't need more either.

@@ -77,6 +77,45 @@ test("fit maps to the three approved behaviours", async () => {
   assert.equal(tile.backgroundPosition, "0% 0%");
 });
 
+test("a picture's own shape decides how far it stretches and which way it can move", async () => {
+  const background = await loadBackground();
+  const portrait = { pictureWidth: 430, pictureHeight: 768 };
+  const desk = { boxWidth: 1990, boxHeight: 1160 };
+  const phone = { boxWidth: 375, boxHeight: 812 };
+
+  // A phone screenshot filling a desk is magnified more than four times, and
+  // the focus grid's left and right have nothing left to give: the picture
+  // already fits the width exactly and overflows only downward.
+  const stretched = background.projection({ fit: "fill", ...portrait, ...desk });
+  assert.equal(Math.round(stretched.ratio * 10) / 10, 4.6);
+  assert.equal(stretched.drawnWidth, 1990);
+  assert.equal(stretched.liveX, false, "no horizontal slack to move through");
+  assert.equal(stretched.liveY, true, "up and down is the only real choice");
+
+  // The same picture on the phone it came from is barely touched.
+  const athome = background.projection({ fit: "fill", ...portrait, ...phone });
+  assert.ok(athome.ratio < 1.1, `expected close to life size, got ${athome.ratio}`);
+  assert.equal(athome.liveY, false);
+  assert.equal(athome.liveX, true);
+
+  // A wide picture on the desk is scaled down instead — nothing invented.
+  const wide = background.projection({ fit: "fill", pictureWidth: 2560, pictureHeight: 1439, ...desk });
+  assert.ok(wide.ratio < 1, `expected a reduction, got ${wide.ratio}`);
+  assert.equal(wide.liveY, false);
+  assert.equal(wide.liveX, true);
+
+  // Fit reduces to the smaller scale, and tiles have no focal point at all.
+  const contained = background.projection({ fit: "contain", ...portrait, ...desk });
+  assert.ok(contained.ratio < stretched.ratio);
+  const tiled = background.projection({ fit: "tile", ...portrait, ...desk });
+  assert.equal(tiled.liveX, false);
+  assert.equal(tiled.liveY, false);
+
+  // Nothing to say without both a picture and a screen.
+  assert.equal(background.projection({ fit: "fill", ...desk }), null);
+  assert.equal(background.projection(), null);
+});
+
 test("brightness and softness compose into one filter on the isolated layer", async () => {
   const background = await loadBackground();
   assert.equal(background.layerStyle({ brightness: 78, clarity: 75 }).filter, "brightness(78%) blur(4px)");

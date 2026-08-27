@@ -116,6 +116,8 @@ body.has-custom-background[data-background-target="paper"] .reader::before{
 .bg-actions button:disabled{opacity:.4;cursor:default}
 .bg-status{font:11px/1.6 var(--font-ui);color:var(--muted);min-height:18px}
 .bg-warning{font:11px/1.6 var(--font-ui);color:var(--accent);margin:2px 0 6px}
+/* A statement of fact about this picture on this screen, not a warning. */
+.bg-note{font:11px/1.6 var(--font-ui);color:var(--muted);margin:2px 0 6px}
 .bg-segment{display:flex;gap:4px;flex:1;justify-content:flex-end}
 .bg-segment button{min-height:30px;padding:0 10px;border:1px solid var(--line);border-radius:6px;
   background:transparent;color:var(--muted);font:11px var(--font-ui);cursor:pointer}
