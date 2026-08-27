@@ -8,6 +8,9 @@
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
+  <!-- The reader's own image, on its own layer behind everything: no layout
+       impact, no pointer events, and brightness/blur can never reach the paper. -->
+  <div id="customBackground" class="od-custom-stage-bg" aria-hidden="true" hidden></div>
   <aside id="sidebar">
     <button id="sidebarClose" class="sidebar-close" type="button" aria-label="收起侧栏" title="收起侧栏" data-i18n-aria-label="sidebar.collapse" data-i18n-title="sidebar.collapse">✕</button>
     <header class="od-logo">
@@ -172,6 +175,39 @@
       <p class="small export-note" data-i18n="export.note">「当前列表」= 左侧目录此刻筛出的对话（搜索、来源、收藏、标签过滤都会生效）。</p>
     </div>
 
+    <div id="companionPicker" class="companion-picker" hidden role="dialog" aria-labelledby="companionPickerTitle">
+      <div class="companion-picker-head">
+        <span id="companionPickerTitle" class="pref-label" data-i18n="memorial.pickerTitle">选择要纪念的一位</span>
+        <button id="companionPickerClose" type="button" aria-label="关闭" data-i18n-aria-label="memorial.close">✕</button>
+      </div>
+      <input id="companionSearch" type="search" placeholder="搜索" aria-label="搜索伴侣" data-i18n-placeholder="memorial.search" data-i18n-aria-label="memorial.search">
+      <p id="companionPickerHint" class="companion-hint" data-i18n="memorial.pinHint" hidden>置顶两位以上，卡片上的 ‹ › 就能在他们之间来回切换。</p>
+      <div id="companionList" class="companion-list"></div>
+    </div>
+
+    <div id="memorialMenu" class="memorial-menu" hidden role="menu">
+      <button id="memorialEditDate" type="button" role="menuitem" data-i18n="memorial.editDate">修改相识日期</button>
+      <button id="memorialManagePinned" type="button" role="menuitem" data-i18n="memorial.managePinned">管理置顶</button>
+    </div>
+
+    <div id="memorialDateEditor" class="companion-picker memorial-date-editor" hidden role="dialog" aria-labelledby="memorialDateTitle">
+      <div class="companion-picker-head">
+        <span id="memorialDateTitle" class="pref-label" data-i18n="memorial.editTitle">修改相识日期</span>
+        <button id="memorialDateClose" type="button" aria-label="关闭" data-i18n-aria-label="memorial.close">✕</button>
+      </div>
+      <div class="memorial-field-label" data-i18n="memorial.yourDate">你记下的日期</div>
+      <div class="memorial-date-fields">
+        <input id="memorialDateInput" type="date" aria-label="相识日期" data-i18n-aria-label="memorial.yourDate">
+        <input id="memorialTimeInput" type="time" aria-label="时间（可留空）" data-i18n-aria-label="memorial.timeOptional">
+      </div>
+      <div id="memorialArchiveLine" class="memorial-archive-line"></div>
+      <div class="memorial-editor-actions">
+        <button id="memorialRestore" type="button" data-i18n="memorial.restoreArchiveDate">恢复档案日期</button>
+        <button id="memorialCancel" type="button" data-i18n="memorial.cancel">取消</button>
+        <button id="memorialSave" type="button" class="memorial-save" data-i18n="memorial.save">保存</button>
+      </div>
+    </div>
+
     <div id="tagEditor" class="reader-prefs-panel tag-editor" hidden>
       <div class="pref-label tag-editor-title" data-i18n="organize.tagEditorTitle">当前对话的标签</div>
       <div id="tagChips" class="tag-chips"></div>
@@ -292,6 +328,51 @@
         </div>
       </details>
 
+      <details class="aa-accordion" id="backgroundAccordion">
+        <summary data-i18n="background.title">背景</summary>
+        <div class="bg-preview" aria-hidden="true"><div id="backgroundPreview" class="bg-preview-image"><span class="bg-preview-paper"></span></div></div>
+        <div id="backgroundEmpty" class="bg-empty" data-i18n="background.none">还没有选图片</div>
+        <div class="pref-row bg-actions">
+          <label class="bg-choose">
+            <input id="backgroundInput" type="file" accept="image/png,image/jpeg,image/webp" hidden>
+            <span id="backgroundChooseLabel" data-i18n="background.choose">选择图片</span>
+          </label>
+          <button id="backgroundRemove" type="button" data-i18n="background.remove">移除</button>
+        </div>
+        <div class="pref-row pref-row-toggle"><label><input id="backgroundEnabled" type="checkbox"> <span data-i18n="background.show">显示背景</span></label></div>
+        <div id="backgroundStatus" class="bg-status" role="status"></div>
+        <div class="pref-row"><span class="pref-label" data-i18n="background.target">应用到</span>
+          <div class="bg-segment" role="group" aria-label="应用到" data-i18n-aria-label="background.target">
+            <button type="button" data-bg-target="outer" data-i18n="background.targetOuter">外层舞台</button>
+            <button type="button" data-bg-target="paper" data-i18n="background.targetPaper">阅读纸面</button>
+          </div>
+        </div>
+        <div id="backgroundPaperWarning" class="bg-warning" hidden data-i18n="background.paperWarning">图片可能降低正文可读性</div>
+        <div class="pref-row"><span class="pref-label" data-i18n="background.fit">铺放方式</span>
+          <div class="bg-segment" role="group" aria-label="铺放方式" data-i18n-aria-label="background.fit">
+            <button type="button" data-bg-fit="fill" data-i18n="background.fitFill">填满</button>
+            <button type="button" data-bg-fit="contain" data-i18n="background.fitContain">完整显示</button>
+            <button type="button" data-bg-fit="tile" data-i18n="background.fitTile">平铺</button>
+          </div>
+        </div>
+        <div id="backgroundScaleNote" class="bg-note" hidden></div>
+        <div class="pref-row bg-focus-row"><span class="pref-label" data-i18n="background.focus">焦点位置</span>
+          <div id="backgroundFocus" class="bg-focus" role="group" aria-label="焦点位置" data-i18n-aria-label="background.focus"></div>
+        </div>
+        <div class="pref-row"><span class="pref-label" data-i18n="background.brightness">背景亮度</span>
+          <input id="backgroundBrightness" type="range" min="40" max="120" step="1" aria-label="背景亮度" data-i18n-aria-label="background.brightness">
+          <span id="backgroundBrightnessValue" class="bg-value"></span>
+        </div>
+        <div class="pref-row"><span class="pref-label" data-i18n="background.clarity">清晰度</span>
+          <input id="backgroundClarity" type="range" min="0" max="100" step="1" aria-label="清晰度" data-i18n-aria-label="background.clarity">
+          <span id="backgroundClarityValue" class="bg-value"></span>
+        </div>
+        <div class="pref-row" id="backgroundPaperOpacityRow" hidden><span class="pref-label" data-i18n="background.paperOpacity">纸面浓度</span>
+          <input id="backgroundPaperOpacity" type="range" min="0" max="100" step="1" aria-label="纸面浓度" data-i18n-aria-label="background.paperOpacity">
+          <span id="backgroundPaperOpacityValue" class="bg-value"></span>
+        </div>
+      </details>
+
       <details class="aa-accordion">
         <summary data-i18n="settings.display">显示</summary>
         <div class="pref-row pref-row-toggle"><label><input id="hideUser" type="checkbox"> <span data-i18n="display.hideUser">隐藏我的发言</span></label></div>
@@ -315,6 +396,7 @@
           <p data-i18n="home.subtitle">把散落的对话收回一间安静、只属于你的房间。</p>
         </header>
         <div id="continueCard"></div>
+        <div id="memorialCard"></div>
         <div class="library-home-lower">
           <section class="home-recent">
             <h3 data-i18n="home.recentAdditions">最近加入</h3>
@@ -377,6 +459,8 @@
   <script src="src/core/reading-progress.js"></script>
   <script src="src/core/message-search.js"></script>
   <script src="src/core/organization.js"></script>
+  <script src="src/core/companionship.js"></script>
+  <script src="src/core/reader-background.js"></script>
   <script src="src/core/export.js"></script>
   <script src="src/core/zip-writer.js"></script>
   <script src="src/core/epub.js"></script>

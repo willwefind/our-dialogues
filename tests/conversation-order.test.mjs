@@ -31,6 +31,9 @@ function fakeElement(id="") {
     checked: false,
     hidden: false,
     dataset: {},
+    // Real elements always have a style object; without one the Reader's
+    // background code threw asynchronously in every test run.
+    style: {},
     attributes: new Map(),
     classList: {
       add(...names) { names.forEach(name => classes.add(name)); },
@@ -44,10 +47,13 @@ function fakeElement(id="") {
       contains(name) { return classes.has(name); }
     },
     addEventListener(type, listener) { listeners.set(type, listener); },
-    dispatch(type) { return listeners.get(type)?.({ target: this }); },
+    // A real click carries the deepest element as its target, not the element
+    // the listener sits on — delegation tests need to say which one.
+    dispatch(type, target) { return listeners.get(type)?.({ target: target || this }); },
     click() { return listeners.get("click")?.({ target: this }); },
     setAttribute(name, value) { this.attributes.set(name, String(value)); },
     getAttribute(name) { return this.attributes.get(name) ?? null; },
+    removeAttribute(name) { this.attributes.delete(name); },
     querySelectorAll(selector) {
       if (selector === "[data-message-id]") {
         return [...this.innerHTML.matchAll(/data-message-id="([^"]+)"/g)].map((match, index) => ({
@@ -82,7 +88,45 @@ async function loadAppRuntime(savedSortMode="asc", options={}) {
     "navLibrary", "navTraces", "libraryPane", "tracesPane",
     "filterMenu", "filterMenuToggle", "sourceAddToggle", "sourceAddMenu",
     "sourceManageToggle", "sourceManagePanel", "sourceManageList", "sourceManageClose",
-    "libraryHome", "continueCard", "recentAdditions", "librarySummary",
+    "libraryHome", "continueCard",
+    "customBackground",
+    "backgroundAccordion",
+    "backgroundPreview",
+    "backgroundEmpty",
+    "backgroundInput",
+    "backgroundChooseLabel",
+    "backgroundRemove",
+    "backgroundEnabled",
+    "backgroundStatus",
+    "backgroundPaperWarning",
+    "backgroundScaleNote",
+    "backgroundFocus",
+    "backgroundBrightness",
+    "backgroundBrightnessValue",
+    "backgroundClarity",
+    "backgroundClarityValue",
+    "backgroundPaperOpacityRow",
+    "backgroundPaperOpacity",
+    "backgroundPaperOpacityValue",
+    "memorialCard",
+    "companionPicker",
+    "companionPickerTitle",
+    "companionSearch",
+    "companionPickerHint",
+    "companionList",
+    "companionPickerClose",
+    "memorialMenu",
+    "memorialEditDate",
+    "memorialManagePinned",
+    "memorialDateEditor",
+    "memorialDateTitle",
+    "memorialDateClose",
+    "memorialDateInput",
+    "memorialTimeInput",
+    "memorialArchiveLine",
+    "memorialRestore",
+    "memorialCancel",
+    "memorialSave", "recentAdditions", "librarySummary",
     "aaDone", "themeCards", "presetCards", "resetPrefs",
     "readerPrefsToggle", "readerPrefsPanel", "sidebarClose", "sidebarBackdrop", "mobileHint",
     "favoriteToggle", "tagToggle", "tagEditor", "tagChips", "tagInput", "tagSuggestions",
@@ -101,6 +145,14 @@ async function loadAppRuntime(savedSortMode="asc", options={}) {
   const stored = options.stored || new Map([["our-dialogues.conversation-sort", savedSortMode]]);
   if (!stored.has("our-dialogues.conversation-sort")) stored.set("our-dialogues.conversation-sort", savedSortMode);
   const documentListeners = new Map();
+  // A recording stand-in for the root element's inline style, so custom
+  // properties the Reader sets can be read back.
+  const rootStyle = {
+    props: new Map(),
+    setProperty(name, value) { this.props.set(name, String(value)); },
+    removeProperty(name) { this.props.delete(name); },
+    getPropertyValue(name) { return this.props.get(name) ?? ""; }
+  };
   const runtime = {
     console,
     Blob,
@@ -114,13 +166,15 @@ async function loadAppRuntime(savedSortMode="asc", options={}) {
     // "auto" locale resolves to zh-CN and existing Chinese-text assertions
     // keep describing the default UI.
     navigator: { language: "zh-CN", languages: ["zh-CN"] },
+    // The picture reaches a layer as an object URL; one stand-in is enough.
+    URL: { createObjectURL: () => "blob:probe", revokeObjectURL() {} },
     localStorage: {
       getItem(key) { return stored.get(key) ?? null; },
       setItem(key, value) { stored.set(key, value); }
     },
     document: {
       body: fakeElement("body"),
-      documentElement: { dataset: {}, style: { setProperty() {} } },
+      documentElement: { dataset: {}, style: rootStyle },
       visibilityState: "visible",
       getElementById(id) { return elements.get(id); },
       addEventListener(type, listener) { documentListeners.set(type, listener); },
@@ -151,6 +205,8 @@ async function loadAppRuntime(savedSortMode="asc", options={}) {
     "src/core/message-search.js",
     "src/core/solvoice-sidecar.js",
     "src/core/organization.js",
+    "src/core/companionship.js",
+    "src/core/reader-background.js",
     "src/core/export.js",
     "src/core/zip-writer.js",
     "src/core/epub.js",
@@ -175,7 +231,10 @@ async function loadAppRuntime(savedSortMode="asc", options={}) {
     stored,
     sortAscending,
     sortDescending,
-    dispatchDocument(type) { return documentListeners.get(type)?.({ target: runtime.document }); }
+    rootStyle,
+    dispatchDocument(type, target) {
+      return documentListeners.get(type)?.({ target: target || runtime.document });
+    }
   };
 }
 
@@ -183,7 +242,7 @@ function ids(conversations) {
   return [...conversations.map(conversation => conversation.id)];
 }
 
-async function createMemoryPersistenceDriver() {
+async function createMemoryPersistenceDriver(options={}) {
   const runtime = { console, Blob, File, Date, setTimeout, clearTimeout };
   runtime.window = runtime;
   vm.createContext(runtime);
@@ -192,7 +251,7 @@ async function createMemoryPersistenceDriver() {
     runtime,
     { filename: "src/core/persistent-library.js" }
   );
-  return runtime.OD.persistentLibrary._internals.createMemoryDriver();
+  return runtime.OD.persistentLibrary._internals.createMemoryDriver(options);
 }
 
 test("conversation sort uses normalized createdAt in both directions", async () => {
@@ -431,6 +490,41 @@ test("app renders Mufy rich families with Reader-owned markup and escaped values
   assert.match(markup, /source-rich-items/);
   assert.match(markup, /Synthetic &lt;script&gt; title/);
   assert.doesNotMatch(markup, /<script>/i);
+});
+
+async function bootWithBackground(background) {
+  const driver = await createMemoryPersistenceDriver({ settings: { background } });
+  await driver.setAsset("background-image", { blob: { size: 1 } });
+  const harness = await loadAppRuntime("asc", { driver });
+  await harness.runtime.OD.app.ready;
+  // The picture is fetched from its own record after settings name it, and
+  // that lookup is not part of the boot promise.
+  await new Promise(resolve => setTimeout(resolve, 0));
+  return harness;
+}
+
+test("both background targets ride one viewport-sized layer, and only the sheet differs", async () => {
+  const base = { enabled: true, assetId: "probe", fit: "fill", paperOpacity: 40 };
+
+  // The reading-paper target used to paint the picture inside the sheet, which
+  // is as tall as its conversation — the same image came out 0.37x in a
+  // one-line entry and 7.4x in an 82-message chat. It thins the paper now and
+  // leaves the picture on the fixed layer, so every conversation matches.
+  const paper = await bootWithBackground({ ...base, target: "paper" });
+  assert.equal(paper.elements.get("customBackground").hidden, false,
+    "the fixed layer carries the picture for the paper target too");
+  assert.equal(paper.rootStyle.getPropertyValue("--od-reader-paper-alpha"), "0.4",
+    "paper density reaches the sheet");
+  assert.equal(paper.rootStyle.getPropertyValue("--od-reader-bg-image"), "",
+    "the sheet never carries a picture of its own again");
+  assert.equal(paper.runtime.document.body.dataset.backgroundTarget, "paper");
+
+  // The outer stage leaves the sheet alone.
+  const outer = await bootWithBackground({ ...base, target: "outer" });
+  assert.equal(outer.elements.get("customBackground").hidden, false);
+  assert.equal(outer.rootStyle.getPropertyValue("--od-reader-paper-alpha"), "",
+    "an opaque sheet needs no density");
+  assert.equal(outer.runtime.document.body.dataset.backgroundTarget, "outer");
 });
 
 test("app boot restores the persistent source, prefs, recent conversation, and scroll position", async () => {
@@ -1134,6 +1228,143 @@ test("the Aa popover toggles and an outside click closes it", async () => {
   assert.equal(panel.hidden, false);
   dispatchDocument("click");
   assert.equal(panel.hidden, true, "clicking elsewhere closes the popover");
+});
+
+/* A target that models a real click: the deepest element, which answers
+   closest() for its own selector and nothing else. */
+function clickTarget(dataKey, value="1") {
+  const element = fakeElement("");
+  element.dataset[dataKey] = value;
+  const marker = dataKey.replace(/[A-Z]/g, letter => `-${letter.toLowerCase()}`);
+  element.closest = selector => (selector.includes(`data-${marker}`) ? element : null);
+  return element;
+}
+
+async function loadTwoCompanions() {
+  const harness = await loadAppRuntime("asc");
+  harness.runtime.OD.app.loadArchive({
+    conversations: [{
+      id: "sol-1", title: "\u4e00", createdAt: "2026-03-22T12:00:00.000Z",
+      messages: [{ id: "sol-1-m1", role: "assistant", content: "\u5728" }]
+    }]
+  }, "Sol");
+  harness.runtime.OD.app.loadArchive({
+    conversations: [{
+      id: "ciel-1", title: "\u4e8c", createdAt: "2026-04-01T12:00:00.000Z",
+      messages: [{ id: "ciel-1-m1", role: "assistant", content: "\u5728" }]
+    }]
+  }, "Ciel");
+  return harness;
+}
+
+function companionKeyOnCard(card) {
+  return /data-companion-key="([^"]+)"/.exec(card.innerHTML)?.[1] || null;
+}
+
+test("\u6362\u4e00\u4f4d and \u7ba1\u7406\u7f6e\u9876 open the same list in two different modes", async () => {
+  const { elements } = await loadTwoCompanions();
+  const heading = elements.get("companionPickerTitle");
+  const hint = elements.get("companionPickerHint");
+  const list = elements.get("companionList");
+  elements.get("companionPicker").hidden = true;
+
+  // The chevron on the card picks who is remembered; it says nothing about pins.
+  elements.get("memorialCard").dispatch("click", clickTarget("memorialOpen"));
+  assert.equal(elements.get("companionPicker").hidden, false);
+  assert.equal(heading.textContent, "\u9009\u62e9\u8981\u7eaa\u5ff5\u7684\u4e00\u4f4d");
+  assert.equal(hint.hidden, true, "picking mode keeps the pin hint out of the way");
+  assert.doesNotMatch(list.innerHTML, /companion-pin-label/, "the pin stays a quiet icon");
+  elements.get("companionPickerClose").click();
+
+  // \u7ba1\u7406\u7f6e\u9876 opens the same list to work on the pins, and says so.
+  elements.get("memorialCard").dispatch("click", clickTarget("memorialMenu"));
+  elements.get("memorialManagePinned").click();
+  assert.equal(heading.textContent, "\u7ba1\u7406\u7f6e\u9876", "the heading names the job");
+  assert.equal(hint.hidden, false, "managing pins explains what pinning buys");
+  assert.match(list.innerHTML, /companion-pin-label/, "the pin action is spelled out");
+
+  // Closing drops back to picking, so the next chevron click is not in manage mode.
+  elements.get("companionPickerClose").click();
+  elements.get("memorialCard").dispatch("click", clickTarget("memorialOpen"));
+  assert.equal(hint.hidden, true);
+});
+
+test("pinning from inside the picker does not read as a click from outside it", async () => {
+  const { runtime, elements, dispatchDocument } = await loadTwoCompanions();
+  const picker = elements.get("companionPicker");
+  picker.hidden = true;
+  elements.get("memorialCard").dispatch("click", clickTarget("memorialOpen"));
+  assert.equal(picker.hidden, false);
+
+  const key = runtime.OD.companionship
+    .companionKey(runtime.OD.app.getState().sources[0].id, null);
+  const pin = clickTarget("companionPin", key);
+  elements.get("companionList").dispatch("click", pin);
+
+  // Pinning rebuilds the rows, so the button the reader pressed has left the
+  // document by the time the same click reaches the closer, and a detached
+  // node answers closest() with null.
+  pin.isConnected = false;
+  pin.closest = () => null;
+  dispatchDocument("click", pin);
+  assert.equal(picker.hidden, false, "the picker survives its own pin button");
+
+  // A real outside click still closes it.
+  dispatchDocument("click");
+  assert.equal(picker.hidden, true);
+});
+
+test("the card's arrows wake up once two companions are pinned", async () => {
+  const { runtime, elements } = await loadTwoCompanions();
+  const card = elements.get("memorialCard");
+  assert.match(card.innerHTML, /data-memorial-step="-1" disabled/, "nothing to step through yet");
+  assert.match(card.innerHTML, /\u7f6e\u9876\u4e24\u4f4d\u4ee5\u4e0a\u624d\u80fd\u5de6\u53f3\u5207\u6362/,
+    "the dead arrows say why they are dead");
+
+  // Pin both the way the reader does: through the rows in the picker.
+  const keys = runtime.OD.app.getState().sources
+    .map(source => runtime.OD.companionship.companionKey(source.id, null));
+  for (const key of keys) {
+    elements.get("companionList").dispatch("click", clickTarget("companionPin", key));
+  }
+  assert.doesNotMatch(card.innerHTML, /disabled/, "two pins bring the arrows to life");
+
+  const before = companionKeyOnCard(card);
+  card.dispatch("click", clickTarget("memorialStep", "1"));
+  const after = companionKeyOnCard(card);
+  assert.notEqual(after, before, "the arrow moves to the other pinned companion");
+  assert.ok(keys.includes(after), "and it lands on a pinned one");
+});
+
+test("the memorial menu's manage-pinned item opens the picker and it stays open", async () => {
+  const { elements, dispatchDocument } = await loadAppRuntime("asc");
+  const menu = elements.get("memorialMenu");
+  const picker = elements.get("companionPicker");
+  menu.hidden = true;
+  picker.hidden = true;
+
+  // The ··· button inside the card opens the little menu.
+  const menuButton = fakeElement("");
+  menuButton.dataset.memorialMenu = "";
+  menuButton.closest = selector => (selector.includes("[data-memorial-menu]") ? menuButton : null);
+  elements.get("memorialCard").dispatch("click", menuButton);
+  assert.equal(menu.hidden, false, "the ··· button opens the memorial menu");
+
+  // Choosing 管理置顶 closes the menu and opens the picker...
+  elements.get("memorialManagePinned").click();
+  assert.equal(menu.hidden, true);
+  assert.equal(picker.hidden, false, "manage-pinned opens the companion picker");
+
+  // ...and that same click, still bubbling to the document closer, must not
+  // shut the picker it just opened. That was the dead-button bug.
+  const item = elements.get("memorialManagePinned");
+  item.closest = selector => (selector.includes("#memorialManagePinned") ? item : null);
+  dispatchDocument("click", item);
+  assert.equal(picker.hidden, false, "the opener is not an outside click");
+
+  // A genuine click elsewhere still closes it.
+  dispatchDocument("click");
+  assert.equal(picker.hidden, true, "clicking elsewhere closes the picker");
 });
 
 test("library search can target one chosen source, decoupled from the catalog filters", async () => {

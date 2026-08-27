@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none" role="img" aria-labelledby="title desc">
+  <title id="title">Archive bookplate ornament</title>
+  <desc id="desc">Restrained botanical archive-note line art; transparent background; no text.</desc>
+  <g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M16 47c10-7 15-16 16-30M31 25c-6-5-11-5-15-2 4 5 9 6 15 2ZM29 33c6-4 11-4 15 0-5 4-10 4-15 0ZM25 40c-5-3-9-2-12 1 4 3 8 3 12-1Z" stroke-width="1.2"/>
+    <path d="M12 50h40M18 54h28" stroke-width=".9" opacity=".72"/>
+    <path d="M38 17h14v22H39" stroke-width="1" opacity=".62"/>
+  </g>
+</svg>

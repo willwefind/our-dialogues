@@ -40,6 +40,17 @@ window.OD = window.OD || {};
     organization: { favorites: {}, tags: {} },
     favoritesOnly: false,
     tagFilter: "",
+    // Memorial card: which companions the reader keeps at hand, which it last
+    // looked at, and the meeting dates the reader wrote down by hand.
+    companionshipPinned: [],
+    companionshipRecent: [],
+    // "pick" chooses who the card shows; "manage" is the same list opened to
+    // work on the pins themselves, and it says so.
+    companionPickerMode: "pick",
+    companionshipOverrides: {},
+    background: {},
+    backgroundUrl: null,
+    backgroundPixels: null,
     importOpen: null,
     readingProgress: {},
     readingOrder: [],
@@ -60,6 +71,7 @@ window.OD = window.OD || {};
   const dateFormatters = {};
   const dateOnlyFormatters = {};
   const relativeFormatters = {};
+  const timeOnlyFormatters = {};
   function uiLocaleTag() {
     return OD.i18n?.currentLocale?.() || "zh-CN";
   }
@@ -89,6 +101,22 @@ window.OD = window.OD || {};
       return formatter.format(d);
     } catch (_) {
       return d.toLocaleString();
+    }
+  }
+
+  // The memorial card prints a clock only when the archive carries one, so
+  // this stays separate from fmtDate's date+time pairing.
+  function fmtTimeOnly(value) {
+    if (!value) return "";
+    const d = new Date(value);
+    if (Number.isNaN(d.getTime())) return "";
+    const locale = uiLocaleTag();
+    try {
+      const formatter = timeOnlyFormatters[locale] ||
+        (timeOnlyFormatters[locale] = new Intl.DateTimeFormat(locale, { timeStyle: "short" }));
+      return formatter.format(d);
+    } catch (_) {
+      return "";
     }
   }
 
@@ -237,6 +265,10 @@ window.OD = window.OD || {};
       searchSourceId: state.searchSourceId,
       toolTab: state.toolTab,
       organization: OD.organization.normalize(state.organization),
+      companionshipPinned: [...state.companionshipPinned],
+      companionshipRecent: [...state.companionshipRecent],
+      companionshipOverrides: OD.companionship.normalizeOverrides(state.companionshipOverrides),
+      background: OD.readerBackground.normalize(state.background),
       favoritesOnly: !!state.favoritesOnly,
       tagFilter: state.tagFilter || "",
       updatedAt: new Date().toISOString()
@@ -527,6 +559,705 @@ window.OD = window.OD || {};
 
   function isGreetingConversation(conversation) {
     return conversation.context?.sourceMetadata?.isGreeting === true;
+  }
+
+  /* ── Custom background ──────────────────────────────────────────────
+     One isolated layer behind everything the Reader draws. It holds no
+     Reader descendants, so brightness and blur can be applied to it
+     directly without ever dimming the reading paper. */
+  function backgroundSettings() {
+    return OD.readerBackground.normalize(state.background);
+  }
+
+  function releaseBackgroundUrl() {
+    if (!state.backgroundUrl) return;
+    try { URL.revokeObjectURL(state.backgroundUrl); } catch (_) {}
+    state.backgroundUrl = null;
+  }
+
+  async function backgroundObjectUrl() {
+    // One live URL per asset: created when the image is first needed and
+    // revoked whenever it is replaced or removed, never per render.
+    if (state.backgroundUrl) return state.backgroundUrl;
+    const record = await state.persistence?.loadAsset?.(OD.readerBackground.ASSET_KEY);
+    if (!record?.blob) return null;
+    // The picture's own pixels travel with the URL: the panel needs them to
+    // say how far this screen is stretching it.
+    state.backgroundPixels = { width: record.width, height: record.height };
+    state.backgroundUrl = URL.createObjectURL(record.blob);
+    return state.backgroundUrl;
+  }
+
+  async function applyBackground() {
+    const layer = $("customBackground");
+    if (!layer) return;
+    const settings = backgroundSettings();
+    document.body?.classList?.toggle?.("has-custom-background", OD.readerBackground.isActive(settings));
+    if (!OD.readerBackground.isActive(settings)) {
+      layer.hidden = true;
+      layer.style.backgroundImage = "";
+      document.documentElement?.style?.removeProperty?.("--od-reader-paper-alpha");
+      if (document.body?.dataset) delete document.body.dataset.backgroundTarget;
+      return;
+    }
+    const url = await backgroundObjectUrl();
+    if (!url) {
+      // The settings remember an image the database no longer holds.
+      layer.hidden = true;
+      return;
+    }
+    const style = OD.readerBackground.layerStyle(settings);
+    if (document.body?.dataset) document.body.dataset.backgroundTarget = settings.target;
+    /* One fixed layer serves both targets, so the picture is pinned to the
+       viewport and only the words travel over it. Sizing it against the sheet
+       was the old bug: a sheet is as tall as its conversation, so the same
+       picture was drawn at 0.37x in a one-line entry and 7.4x in an 82-message
+       chat — "fit" put it thousands of pixels below the fold.
+
+       The two targets now differ in the paper, not in the picture: 阅读舞台
+       leaves the sheet opaque so the image stays in the margins, and 阅读纸面
+       thins the sheet so it comes through behind the words. */
+    const root = document.documentElement?.style;
+    if (settings.target === "paper") {
+      root?.setProperty?.("--od-reader-paper-alpha", String(settings.paperOpacity / 100));
+    } else {
+      root?.removeProperty?.("--od-reader-paper-alpha");
+    }
+    layer.style.backgroundImage = `url("${url}")`;
+    layer.style.backgroundSize = style.backgroundSize;
+    layer.style.backgroundRepeat = style.backgroundRepeat;
+    layer.style.backgroundPosition = style.backgroundPosition;
+    layer.style.filter = style.filter;
+    const overscan = style.overscan ? `-${style.overscan}px` : "0px";
+    layer.style.inset = overscan;
+    layer.hidden = false;
+  }
+
+  function updateBackground(patch) {
+    state.background = OD.readerBackground.normalize({ ...backgroundSettings(), ...patch });
+    void applyBackground();
+    renderBackgroundControls();
+    void saveReaderState();
+  }
+
+  /*
+    Decode locally, respect the camera's orientation, cap the longest edge,
+    and keep only the processed image — a 12MP phone photo has no business
+    living in the database at full size.
+  */
+  async function processBackgroundImage(file) {
+    const bitmap = typeof createImageBitmap === "function"
+      ? await createImageBitmap(file, { imageOrientation: "from-image" }).catch(() => createImageBitmap(file))
+      : null;
+    if (!bitmap) throw new Error("This browser cannot decode the image locally.");
+    const target = OD.readerBackground.scaleToFit(bitmap.width, bitmap.height);
+    const canvas = document.createElement("canvas");
+    canvas.width = target.width;
+    canvas.height = target.height;
+    const context = canvas.getContext("2d");
+    context.imageSmoothingQuality = "high";
+    context.drawImage(bitmap, 0, 0, target.width, target.height);
+    bitmap.close?.();
+    const encode = type => new Promise(resolve => canvas.toBlob(resolve, type, OD.readerBackground.QUALITY));
+    // WebP where it exists, JPEG where it does not; a browser that silently
+    // ignores the type hands back PNG, which is still valid.
+    let blob = await encode("image/webp");
+    if (!blob || blob.type !== "image/webp") blob = (await encode("image/jpeg")) || blob;
+    if (!blob) throw new Error("This browser could not encode the processed image.");
+    return {
+      blob,
+      mime: blob.type,
+      width: target.width,
+      height: target.height,
+      createdAt: new Date().toISOString()
+    };
+  }
+
+  async function setBackgroundImage(file) {
+    const record = await processBackgroundImage(file);
+    await state.persistence?.saveAsset?.(OD.readerBackground.ASSET_KEY, record);
+    releaseBackgroundUrl();
+    state.background = OD.readerBackground.normalize({
+      ...backgroundSettings(),
+      assetId: OD.readerBackground.ASSET_KEY,
+      enabled: true
+    });
+    await applyBackground();
+    void saveReaderState();
+    return record;
+  }
+
+  // Removing deletes the bytes; disabling only stops showing them.
+  async function removeBackgroundImage() {
+    await state.persistence?.removeAsset?.(OD.readerBackground.ASSET_KEY);
+    releaseBackgroundUrl();
+    state.background = OD.readerBackground.normalize({});
+    await applyBackground();
+    void saveReaderState();
+  }
+
+  // The 3×3 focus grid maps to the 0/50/100 percent positions the layer uses.
+  const BACKGROUND_FOCUS_CELLS = [
+    { x: 0, y: 0, key: "background.focusTopLeft" },
+    { x: 50, y: 0, key: "background.focusTop" },
+    { x: 100, y: 0, key: "background.focusTopRight" },
+    { x: 0, y: 50, key: "background.focusLeft" },
+    { x: 50, y: 50, key: "background.focusCenter" },
+    { x: 100, y: 50, key: "background.focusRight" },
+    { x: 0, y: 100, key: "background.focusBottomLeft" },
+    { x: 50, y: 100, key: "background.focusBottom" },
+    { x: 100, y: 100, key: "background.focusBottomRight" }
+  ];
+
+  function formatBytes(bytes) {
+    const size = Number(bytes) || 0;
+    if (size >= 1048576) return `${(size / 1048576).toFixed(1)} MB`;
+    return `${Math.max(1, Math.round(size / 1024))} KB`;
+  }
+
+  function setBackgroundStatus(key, params) {
+    const element = $("backgroundStatus");
+    if (element) element.textContent = key ? t(key, params) : "";
+  }
+
+  function backgroundProjection(settings) {
+    const pixels = state.backgroundPixels;
+    if (!pixels) return null;
+    return OD.readerBackground.projection({
+      fit: settings.fit,
+      pictureWidth: pixels.width,
+      pictureHeight: pixels.height,
+      boxWidth: window.innerWidth || 0,
+      boxHeight: window.innerHeight || 0
+    });
+  }
+
+  function renderBackgroundControls() {
+    const settings = backgroundSettings();
+    const hasImage = !!settings.assetId;
+
+    const empty = $("backgroundEmpty");
+    if (empty) empty.hidden = hasImage;
+    const chooseLabel = $("backgroundChooseLabel");
+    if (chooseLabel) chooseLabel.textContent = t(hasImage ? "background.replace" : "background.choose");
+    const remove = $("backgroundRemove");
+    if (remove) remove.disabled = !hasImage;
+    const enabled = $("backgroundEnabled");
+    if (enabled) { enabled.checked = settings.enabled; enabled.disabled = !hasImage; }
+
+    for (const button of document.querySelectorAll?.("button[data-bg-target]") || []) {
+      button.setAttribute("aria-pressed", String(button.dataset.bgTarget === settings.target));
+    }
+    for (const button of document.querySelectorAll?.("button[data-bg-fit]") || []) {
+      button.setAttribute("aria-pressed", String(button.dataset.bgFit === settings.fit));
+    }
+    const warning = $("backgroundPaperWarning");
+    if (warning) warning.hidden = settings.target !== "paper";
+
+    const view = backgroundProjection(settings);
+    const focus = $("backgroundFocus");
+    if (focus) {
+      // Tiling has no focal point to choose, and an axis with no slack on this
+      // screen has nothing to offer either: those cells are all the same
+      // picture, so they go quiet rather than pretending to do something.
+      const tiled = settings.fit === "tile";
+      const liveX = !view || view.liveX;
+      const liveY = !view || view.liveY;
+      const activeX = liveX ? settings.focusX : 50;
+      const activeY = liveY ? settings.focusY : 50;
+      focus.innerHTML = BACKGROUND_FOCUS_CELLS.map(cell => {
+        const dead = tiled || (!liveX && cell.x !== 50) || (!liveY && cell.y !== 50);
+        const active = cell.x === activeX && cell.y === activeY;
+        return `<button type="button" data-bg-focus="${cell.x},${cell.y}" aria-pressed="${active}"
+          ${dead ? "disabled" : ""} title="${esc(t(cell.key))}" aria-label="${esc(t(cell.key))}"></button>`;
+      }).join("");
+      // A disabled button never shows a tooltip, so the reason rides the group.
+      const axisKey = tiled || (liveX && liveY) ? null
+        : liveY ? "background.focusVerticalOnly"
+        : liveX ? "background.focusHorizontalOnly" : null;
+      if (axisKey) focus.setAttribute("title", t(axisKey));
+      else focus.removeAttribute("title");
+    }
+    /* Filling a screen from a picture smaller than it is magnification, and
+       magnification never grows detail. Say the number rather than let the
+       reader wonder why 填满 went soft. */
+    const scaleNote = $("backgroundScaleNote");
+    if (scaleNote) {
+      const magnified = hasImage && view && view.ratio >= 1.25 && state.backgroundPixels;
+      scaleNote.hidden = !magnified;
+      if (magnified) {
+        scaleNote.textContent = t("background.magnified", {
+          times: view.ratio.toFixed(1),
+          width: state.backgroundPixels.width,
+          height: state.backgroundPixels.height
+        });
+      }
+    }
+
+    const brightness = $("backgroundBrightness");
+    if (brightness) brightness.value = String(settings.brightness);
+    const brightnessValue = $("backgroundBrightnessValue");
+    if (brightnessValue) brightnessValue.textContent = `${settings.brightness}%`;
+    const clarity = $("backgroundClarity");
+    if (clarity) clarity.value = String(settings.clarity);
+    const clarityValue = $("backgroundClarityValue");
+    if (clarityValue) clarityValue.textContent = `${settings.clarity}%`;
+    // The paper veil only means anything when the image is on the paper.
+    const veilRow = $("backgroundPaperOpacityRow");
+    if (veilRow) veilRow.hidden = settings.target !== "paper";
+    const veil = $("backgroundPaperOpacity");
+    if (veil) veil.value = String(settings.paperOpacity);
+    const veilValue = $("backgroundPaperOpacityValue");
+    if (veilValue) veilValue.textContent = `${settings.paperOpacity}%`;
+
+    void renderBackgroundPreview();
+  }
+
+  /* The preview is a small stand-in for the room, not the Reader DOM: when the
+     image goes on the outer stage it shows a mock paper rectangle so the
+     relationship between picture and page is legible. */
+  async function renderBackgroundPreview() {
+    const preview = $("backgroundPreview");
+    if (!preview) return;
+    const settings = backgroundSettings();
+    const url = settings.assetId ? await backgroundObjectUrl() : null;
+    if (!url) {
+      preview.style.backgroundImage = "";
+      preview.style.filter = "";
+      preview.classList?.remove?.("has-image");
+      return;
+    }
+    const style = OD.readerBackground.layerStyle(settings);
+    preview.style.backgroundImage = `url("${url}")`;
+    preview.style.backgroundSize = style.backgroundSize;
+    preview.style.backgroundRepeat = style.backgroundRepeat;
+    preview.style.backgroundPosition = style.backgroundPosition;
+    // The preview is a fraction of the stage, so blur scales down with it.
+    const fullBlur = OD.readerBackground.blurFor(settings.clarity);
+    const previewBlur = fullBlur > 0 ? Math.max(1, Math.round(fullBlur / 3)) : 0;
+    preview.style.filter = previewBlur
+      ? `brightness(${settings.brightness}%) blur(${previewBlur}px)`
+      : `brightness(${settings.brightness}%)`;
+    preview.classList?.add?.("has-image");
+    preview.dataset.target = settings.target;
+  }
+
+  async function chooseBackgroundImage(file) {
+    if (!file) return;
+    setBackgroundStatus("background.processing");
+    try {
+      const record = await setBackgroundImage(file);
+      setBackgroundStatus("background.ready", {
+        width: record.width, height: record.height, size: formatBytes(record.blob.size)
+      });
+    } catch (error) {
+      setBackgroundStatus("background.uploadFailed", { message: error?.message || String(error) });
+    }
+    renderBackgroundControls();
+  }
+
+  /* ── Memorial card ──────────────────────────────────────────────────
+     A companion is whatever the sidebar already groups by: one Mufy
+     character, or a whole source. First dates are never computed here —
+     that lives in OD.companionship, together with its honesty rules. */
+  // Marks where the day count goes so only the number can be emphasized.
+  // A control character can never collide with dictionary text.
+  const MEMORIAL_DAYS_SLOT = String.fromCharCode(1);
+
+  function companionKeyList(value) {
+    const seen = new Set();
+    const list = [];
+    for (const item of Array.isArray(value) ? value : []) {
+      const key = String(item ?? "").trim();
+      if (!key || seen.has(key)) continue;
+      seen.add(key);
+      list.push(key);
+    }
+    return list;
+  }
+
+  function companionEntries() {
+    const entries = [];
+    for (const source of state.library?.sources?.() || []) {
+      const conversations = source.conversations || [];
+      if (source.source?.platform === "mufy") {
+        const characters = new Map();
+        for (const conversation of conversations) {
+          const character = mufyCharacter(conversation);
+          const group = characters.get(character.key) || { ...character, conversations: [] };
+          group.conversations.push(conversation);
+          characters.set(character.key, group);
+        }
+        for (const character of characters.values()) {
+          entries.push({
+            key: OD.companionship.companionKey(source.id, character.key),
+            name: character.name,
+            sourceLabel: source.label || "",
+            conversations: character.conversations
+          });
+        }
+      } else if (conversations.length) {
+        entries.push({
+          key: OD.companionship.companionKey(source.id, null),
+          name: source.label || "",
+          sourceLabel: "",
+          conversations
+        });
+      }
+    }
+    return entries;
+  }
+
+  function companionSummary(entry) {
+    return OD.companionship.resolve(entry.conversations, {
+      key: entry.key,
+      overrides: state.companionshipOverrides
+    });
+  }
+
+  /* Which companion the card shows. An explicit pick wins, then a pinned
+     companion, then whichever dated companion spoke most recently. A
+     companion with no confirmed date never enters the rotation on its own;
+     only choosing it by hand brings it here. */
+  function memorialCompanion(entries) {
+    const byKey = new Map(entries.map(entry => [entry.key, entry]));
+    for (const key of state.companionshipRecent) {
+      const entry = byKey.get(key);
+      if (entry) return entry;
+    }
+    const dated = entries
+      .map(entry => ({ entry, summary: companionSummary(entry) }))
+      .filter(item => item.summary.firstAt);
+    const pinned = dated.filter(item => state.companionshipPinned.includes(item.entry.key));
+    const pool = pinned.length ? pinned : dated;
+    pool.sort((a, b) => String(b.summary.lastAt || "").localeCompare(String(a.summary.lastAt || "")));
+    return pool[0]?.entry || null;
+  }
+
+  function memorialDatedMarkup(summary) {
+    const locale = uiLocaleTag();
+    const time = summary.firstAtHasTime ? fmtTimeOnly(summary.firstAt) : "";
+    const dateText = [fmtDateOnly(summary.firstAt), time].filter(Boolean).join(" · ");
+    const days = Number(summary.days);
+    const daysHtml = Number.isFinite(days)
+      ? esc(t("memorial.daysInArchive", { days: MEMORIAL_DAYS_SLOT }))
+          .replace(MEMORIAL_DAYS_SLOT, `<strong>${esc(days.toLocaleString(locale))}</strong>`)
+      : "";
+    const provenance = summary.firstAtSource === "manual"
+      ? t("memorial.setByYou")
+      : t("memorial.archiveEarliest");
+    const recent = summary.lastAt ? t("memorial.recent", { time: fmtRelative(summary.lastAt) }) : "";
+    return `<div class="memorial-date-label">${esc(t("memorial.firstRecorded"))}</div>
+      <div class="memorial-date">${esc(dateText)}</div>
+      ${daysHtml ? `<div class="memorial-days">${daysHtml}</div>` : ""}
+      <div class="memorial-foot">
+        <span class="memorial-provenance">${esc(provenance)}</span>
+        ${recent ? `<span class="memorial-recent">${esc(recent)}</span>` : ""}
+      </div>
+      <div class="memorial-details">${esc(t("memorial.details", {
+        conversations: summary.conversationCount.toLocaleString(locale),
+        messages: summary.messageCount.toLocaleString(locale)
+      }))}</div>`;
+  }
+
+  /* Arrows step through pinned companions only, so a library with 200+
+     characters never turns the header into a treadmill. */
+  function memorialRotation(entries) {
+    const byKey = new Map(entries.map(entry => [entry.key, entry]));
+    return state.companionshipPinned.map(key => byKey.get(key)).filter(Boolean);
+  }
+
+  function selectCompanion(key) {
+    state.companionshipRecent = companionKeyList([key, ...state.companionshipRecent]).slice(0, 8);
+    renderMemorialCard();
+    renderCompanionPicker();
+    void saveReaderState();
+  }
+
+  function toggleCompanionPin(key) {
+    const pinned = state.companionshipPinned.includes(key)
+      ? state.companionshipPinned.filter(item => item !== key)
+      : [...state.companionshipPinned, key];
+    state.companionshipPinned = companionKeyList(pinned).slice(0, 24);
+    renderMemorialCard();
+    renderCompanionPicker();
+    void saveReaderState();
+  }
+
+  function stepCompanion(delta) {
+    const entries = companionEntries();
+    const rotation = memorialRotation(entries);
+    if (rotation.length < 2) return;
+    const current = memorialCompanion(entries);
+    const index = rotation.findIndex(entry => entry.key === current?.key);
+    const next = rotation[((index < 0 ? 0 : index) + delta + rotation.length) % rotation.length];
+    if (next) selectCompanion(next.key);
+  }
+
+  function placeCompanionPicker(trigger) {
+    const picker = $("companionPicker");
+    if (!picker) return;
+    // Phones get the bottom sheet the stylesheet already provides.
+    if (isPhoneScreen()) {
+      // The stylesheet turns the picker into a bottom sheet on phones.
+      picker.style.left = "";
+      picker.style.top = "";
+      return;
+    }
+    const rect = trigger?.getBoundingClientRect?.();
+    if (!rect) return;
+    const width = 344;
+    const left = Math.max(12, Math.min((window.innerWidth || 1024) - width - 12, rect.left));
+    // Keep the whole popover on screen: if it would run past the bottom, sit
+    // it above the trigger instead of hanging off the fold.
+    const height = Math.min(520, (window.innerHeight || 768) - 24);
+    const below = rect.bottom + 8;
+    const top = below + height > (window.innerHeight || 768) - 12
+      ? Math.max(12, rect.top - 8 - height)
+      : below;
+    picker.style.left = `${left}px`;
+    picker.style.top = `${top}px`;
+  }
+
+  function openCompanionPicker(trigger, { mode = "pick" } = {}) {
+    const picker = $("companionPicker");
+    if (!picker) return;
+    state.companionPickerMode = mode === "manage" ? "manage" : "pick";
+    state.companionPickerReturn = trigger || null;
+    picker.hidden = false;
+    placeCompanionPicker(trigger);
+    renderCompanionPicker();
+    $("companionSearch")?.focus?.({ preventScroll: true });
+  }
+
+  function closeCompanionPicker() {
+    const picker = $("companionPicker");
+    if (!picker || picker.hidden) return;
+    picker.hidden = true;
+    state.companionPickerMode = "pick";
+    const search = $("companionSearch");
+    if (search) search.value = "";
+    const trigger = state.companionPickerReturn;
+    state.companionPickerReturn = null;
+    trigger?.focus?.();
+  }
+
+  /* While picking, the pin stays the quiet trailing icon the spec asks for.
+     While managing pins it spells the action out — a nameless 16px glyph is
+     not a control anyone finds, and nobody pins without finding it. */
+  function companionRowMarkup(item, currentKey, pinnedSet, manage) {
+    const pinned = pinnedSet.has(item.entry.key);
+    const action = t(pinned ? "memorial.unpin" : "memorial.pin");
+    const meta = [item.entry.sourceLabel, item.summary.firstAt ? fmtDateOnly(item.summary.firstAt) : ""]
+      .filter(Boolean).join(" · ");
+    return `<div class="companion-row"${item.entry.key === currentKey ? ' aria-current="true"' : ""}>
+      <button type="button" class="companion-pick" data-companion-pick="${esc(item.entry.key)}">
+        <span class="companion-pick-name">${esc(item.entry.name)}</span>
+        ${meta ? `<span class="companion-pick-meta">${esc(meta)}</span>` : ""}
+      </button>
+      <button type="button" class="companion-pin${manage ? " companion-pin-labelled" : ""}"
+        data-companion-pin="${esc(item.entry.key)}" aria-pressed="${pinned}"
+        title="${esc(action)}" aria-label="${esc(action)}"><span class="companion-pin-icon" aria-hidden="true"></span>${
+        manage ? `<span class="companion-pin-label">${esc(action)}</span>` : ""}</button>
+    </div>`;
+  }
+
+  function renderCompanionPicker() {
+    const list = $("companionList");
+    if (!list) return;
+    const manage = state.companionPickerMode === "manage";
+    const titleKey = manage ? "memorial.managePinned" : "memorial.pickerTitle";
+    const heading = $("companionPickerTitle");
+    if (heading) {
+      // Move the marker with the text, so a later locale switch re-points the
+      // heading at whichever title this mode is showing.
+      heading.setAttribute?.("data-i18n", titleKey);
+      heading.textContent = t(titleKey);
+    }
+    // Managing pins is also where the reader learns what pinning is for: the
+    // card's arrows stay disabled until two companions are pinned.
+    const hint = $("companionPickerHint");
+    if (hint) hint.hidden = !manage;
+    const query = String($("companionSearch")?.value || "").trim().toLowerCase();
+    const entries = companionEntries();
+    const currentKey = memorialCompanion(entries)?.key || null;
+    const matches = entries
+      .filter(entry => !query
+        || entry.name.toLowerCase().includes(query)
+        || String(entry.sourceLabel || "").toLowerCase().includes(query))
+      .map(entry => ({ entry, summary: companionSummary(entry) }));
+    const byKey = new Map(matches.map(item => [item.entry.key, item]));
+    const pinnedSet = new Set(state.companionshipPinned);
+    const recentSet = new Set(state.companionshipRecent);
+    const pinned = state.companionshipPinned.map(key => byKey.get(key)).filter(Boolean);
+    const recent = state.companionshipRecent
+      .filter(key => !pinnedSet.has(key)).map(key => byKey.get(key)).filter(Boolean);
+    // Everything else, most recently active first — no sort control in v1.
+    const rest = matches
+      .filter(item => !pinnedSet.has(item.entry.key) && !recentSet.has(item.entry.key))
+      .sort((a, b) => String(b.summary.lastAt || "").localeCompare(String(a.summary.lastAt || "")));
+
+    if (!matches.length) {
+      list.innerHTML = `<div class="companion-empty">${esc(t("memorial.noMatches"))}</div>`;
+      return;
+    }
+    const section = (labelKey, items) => items.length
+      ? `<div class="companion-section">${esc(t(labelKey))}</div>` +
+        items.map(item => companionRowMarkup(item, currentKey, pinnedSet, manage)).join("")
+      : "";
+    list.innerHTML = section("memorial.pinned", pinned)
+      + section("memorial.recentlyViewed", recent)
+      + section("memorial.all", rest);
+  }
+
+  /* Anchors a small memorial layer under its trigger, flipping above when it
+     would run past the fold. Phones let the stylesheet make it a sheet. */
+  function placeMemorialPopover(element, trigger, width) {
+    if (!element) return;
+    if (isPhoneScreen()) { element.style.left = ""; element.style.top = ""; return; }
+    const rect = trigger?.getBoundingClientRect?.();
+    if (!rect) return;
+    const viewportWidth = window.innerWidth || 1024;
+    const viewportHeight = window.innerHeight || 768;
+    const left = Math.max(12, Math.min(viewportWidth - width - 12, rect.left));
+    const height = Math.min(element.offsetHeight || 320, viewportHeight - 24);
+    const below = rect.bottom + 8;
+    const top = below + height > viewportHeight - 12 ? Math.max(12, rect.top - 8 - height) : below;
+    element.style.left = `${left}px`;
+    element.style.top = `${top}px`;
+  }
+
+  /* The date the reader wrote down beats the one the archive can prove, and
+     the editor keeps both visible so the difference stays legible. */
+  let memorialEditorKey = null;
+
+  function memorialLocalParts(value) {
+    const text = String(value ?? "");
+    // A stored date-only value stays date-only: no invented midnight.
+    if (/^\d{4}-\d{2}-\d{2}$/.test(text)) return { date: text, time: "" };
+    const at = new Date(text);
+    if (Number.isNaN(at.getTime())) return { date: "", time: "" };
+    const pad = number => String(number).padStart(2, "0");
+    return {
+      date: `${at.getFullYear()}-${pad(at.getMonth() + 1)}-${pad(at.getDate())}`,
+      time: /\d{2}:\d{2}/.test(text) ? `${pad(at.getHours())}:${pad(at.getMinutes())}` : ""
+    };
+  }
+
+  function openMemorialMenu(trigger) {
+    const menu = $("memorialMenu");
+    if (!menu) return;
+    closeMemorialMenu();
+    menu.hidden = false;
+    placeMemorialPopover(menu, trigger, 180);
+    state.memorialMenuReturn = trigger || null;
+  }
+
+  function closeMemorialMenu() {
+    const menu = $("memorialMenu");
+    if (!menu || menu.hidden) return;
+    menu.hidden = true;
+    const trigger = state.memorialMenuReturn;
+    state.memorialMenuReturn = null;
+    trigger?.focus?.({ preventScroll: true });
+  }
+
+  function openMemorialDateEditor(key, trigger) {
+    const editor = $("memorialDateEditor");
+    const entry = companionEntries().find(item => item.key === key);
+    if (!editor || !entry) return;
+    memorialEditorKey = key;
+    state.memorialEditorReturn = trigger || null;
+    const summary = companionSummary(entry);
+    const parts = memorialLocalParts(summary.firstAtSource === "manual" ? summary.firstAt : "");
+    const dateInput = $("memorialDateInput");
+    const timeInput = $("memorialTimeInput");
+    if (dateInput) dateInput.value = parts.date;
+    if (timeInput) timeInput.value = parts.time;
+    const archive = $("memorialArchiveLine");
+    if (archive) {
+      const derived = summary.derivedFirstAt;
+      const shown = derived
+        ? [fmtDateOnly(derived), hasArchiveClock(derived) ? fmtTimeOnly(derived) : ""].filter(Boolean).join(" · ")
+        : "";
+      archive.textContent = derived ? t("memorial.archiveRecord", { date: shown }) : t("memorial.archiveNone");
+    }
+    const restore = $("memorialRestore");
+    // Nothing to restore to when the archive never knew a date.
+    if (restore) restore.disabled = !summary.derivedFirstAt || summary.firstAtSource !== "manual";
+    editor.hidden = false;
+    placeMemorialPopover(editor, trigger, 344);
+    dateInput?.focus?.({ preventScroll: true });
+  }
+
+  function hasArchiveClock(value) {
+    return /\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}/.test(String(value ?? ""));
+  }
+
+  function closeMemorialDateEditor() {
+    const editor = $("memorialDateEditor");
+    if (!editor || editor.hidden) return;
+    editor.hidden = true;
+    memorialEditorKey = null;
+    const trigger = state.memorialEditorReturn;
+    state.memorialEditorReturn = null;
+    trigger?.focus?.({ preventScroll: true });
+  }
+
+  function saveMemorialDate() {
+    const key = memorialEditorKey;
+    const date = String($("memorialDateInput")?.value || "").trim();
+    if (!key) return;
+    if (!date) { clearMemorialDate(); return; }
+    const time = String($("memorialTimeInput")?.value || "").trim();
+    // Local wall-clock when a time is given; a bare calendar day otherwise.
+    const value = time ? `${date}T${time}` : date;
+    state.companionshipOverrides = OD.companionship.setOverride(state.companionshipOverrides, key, value);
+    closeMemorialDateEditor();
+    renderMemorialCard();
+    void saveReaderState();
+  }
+
+  function clearMemorialDate() {
+    const key = memorialEditorKey;
+    if (!key) return;
+    state.companionshipOverrides = OD.companionship.clearOverride(state.companionshipOverrides, key);
+    closeMemorialDateEditor();
+    renderMemorialCard();
+    void saveReaderState();
+  }
+
+  function renderMemorialCard() {
+    const host = $("memorialCard");
+    if (!host) return;
+    const entries = companionEntries();
+    const entry = memorialCompanion(entries);
+    if (!entry) { host.innerHTML = ""; return; }
+    const summary = companionSummary(entry);
+    const rotation = memorialRotation(entries);
+    const stepper = rotation.length > 1;
+    const title = t("memorial.with", { name: entry.name });
+    host.innerHTML = `<section class="memorial-card" data-companion-key="${esc(entry.key)}" aria-label="${esc(title)}">
+      <div class="memorial-head">
+        <span class="memorial-eyebrow"><span class="memorial-plate" aria-hidden="true"></span>${esc(t("memorial.eyebrow"))}</span>
+        <div class="memorial-switch"${stepper ? "" : ` title="${esc(t("memorial.stepNeedsPins"))}"`}>
+          <button type="button" data-memorial-step="-1"${stepper ? "" : " disabled"}
+            aria-label="${esc(t("memorial.previous"))}" title="${esc(t("memorial.previous"))}">&lsaquo;</button>
+          <button type="button" data-memorial-open="1" aria-haspopup="dialog"
+            aria-label="${esc(t("memorial.choose"))}" title="${esc(t("memorial.choose"))}">&#9662;</button>
+          <button type="button" data-memorial-step="1"${stepper ? "" : " disabled"}
+            aria-label="${esc(t("memorial.next"))}" title="${esc(t("memorial.next"))}">&rsaquo;</button>
+          <button type="button" data-memorial-menu="1" aria-haspopup="menu"
+            aria-label="${esc(t("memorial.more"))}" title="${esc(t("memorial.more"))}">&#183;&#183;&#183;</button>
+        </div>
+      </div>
+      <button type="button" class="memorial-name-button" data-memorial-open="1" aria-haspopup="dialog">${esc(title)}</button>
+      ${summary.firstAt
+        ? memorialDatedMarkup(summary)
+        : `<div class="memorial-empty">${esc(t("memorial.noConfirmedDate"))}
+             <button type="button" class="memorial-set-date" data-memorial-set-date="1">${esc(t("memorial.setDate"))}</button>
+           </div>`}
+    </section>`;
   }
 
   /* Optional year headings (display-only): shown only when one character or
@@ -838,6 +1569,8 @@ window.OD = window.OD || {};
     }
     syncOrganizeControls();
     if ($("tagEditor")?.hidden === false) renderTagEditor();
+    if ($("companionPicker")?.hidden === false) renderCompanionPicker();
+    renderBackgroundControls();
     performSearch();
     state.statusText = archiveStatusText();
     renderStatus();
@@ -1064,6 +1797,8 @@ window.OD = window.OD || {};
         </div>`;
       }
     }
+
+    renderMemorialCard();
 
     const additions = $("recentAdditions");
     if (additions) {
@@ -2444,12 +3179,27 @@ window.OD = window.OD || {};
     if (settings.organization && typeof settings.organization === "object") {
       state.organization = OD.organization.normalize(settings.organization);
     }
+    if (Array.isArray(settings.companionshipPinned)) {
+      state.companionshipPinned = companionKeyList(settings.companionshipPinned);
+    }
+    if (Array.isArray(settings.companionshipRecent)) {
+      state.companionshipRecent = companionKeyList(settings.companionshipRecent);
+    }
+    if (settings.background && typeof settings.background === "object") {
+      state.background = OD.readerBackground.normalize(settings.background);
+    }
+    if (settings.companionshipOverrides && typeof settings.companionshipOverrides === "object") {
+      state.companionshipOverrides = OD.companionship.normalizeOverrides(settings.companionshipOverrides);
+    }
     if (typeof settings.favoritesOnly === "boolean") state.favoritesOnly = settings.favoritesOnly;
     if (typeof settings.tagFilter === "string") state.tagFilter = settings.tagFilter;
     if (settings.toolTab === null || ["recent", "bookmarks", "annotations", "search"].includes(settings.toolTab)) {
       state.toolTab = settings.toolTab ?? null;
     }
     syncToolTabs();
+    // The image lives in its own record, so it is fetched once settings name it.
+    void applyBackground();
+    renderBackgroundControls();
   }
 
   async function bootPersistentLibrary() {
@@ -2890,6 +3640,9 @@ window.OD = window.OD || {};
     if (narrow && !wasNarrowScreen) $("sidebar").classList.add("closed");
     wasNarrowScreen = narrow;
     syncSidebarBackdrop();
+    // Magnification and the live focus axes are read off the viewport, so they
+    // are restated whenever it changes — but only while they are on screen.
+    if ($("readerPrefsPanel")?.hidden === false) renderBackgroundControls();
   };
   window.matchMedia?.("(max-width: 1359px)")?.addEventListener?.("change", onViewportChange);
   addEventListener("resize", onViewportChange);
@@ -2946,6 +3699,9 @@ window.OD = window.OD || {};
   $("readerPrefsToggle").addEventListener("click", event => {
     event.stopPropagation?.();
     $("readerPrefsPanel").hidden = !$("readerPrefsPanel").hidden;
+    // The background numbers are read off the viewport, which may have moved
+    // while the panel was shut.
+    if (!$("readerPrefsPanel").hidden) renderBackgroundControls();
   });
   // One document-level closer for every popover — the fake-DOM harness keeps
   // a single listener per event type, and real browsers don't need more either.
@@ -2953,6 +3709,27 @@ window.OD = window.OD || {};
     const prefs = $("readerPrefsPanel");
     if (prefs && !prefs.hidden && !event?.target?.closest?.("#readerPrefsPanel, #readerPrefsToggle")) {
       prefs.hidden = true;
+    }
+    const memorialMenu = $("memorialMenu");
+    if (memorialMenu && !memorialMenu.hidden
+      && !event?.target?.closest?.("#memorialMenu, [data-memorial-menu]")) {
+      closeMemorialMenu();
+    }
+    const companionPicker = $("companionPicker");
+    // Every opener of the picker belongs on this list, including the menu item
+    // that opens it: that click is still bubbling up here, and an opener left
+    // off the list closes the layer it just opened — which reads as a dead button.
+    //
+    // Pinning rebuilds the rows under the pointer, so the clicked button is
+    // already detached by the time this runs and a detached node answers
+    // closest() with null. A node that left the document during its own click
+    // never came from outside. Only the picker rewrites itself on click, so
+    // only the picker gets this pass — elsewhere a re-rendering click (opening
+    // a conversation, say) still closes the layers above it.
+    const detached = event?.target?.isConnected === false;
+    if (companionPicker && !companionPicker.hidden && !detached
+      && !event?.target?.closest?.("#companionPicker, [data-memorial-open], #memorialManagePinned")) {
+      closeCompanionPicker();
     }
     const tagEditor = $("tagEditor");
     if (tagEditor && !tagEditor.hidden && !event?.target?.closest?.("#tagEditor, #tagToggle")) {
@@ -3222,6 +3999,78 @@ window.OD = window.OD || {};
     }).catch(() => setArchiveStatus("shiju.loadFailed", undefined, true));
   }
 
+  $("memorialCard")?.addEventListener?.("click", event => {
+    const step = event?.target?.closest?.("[data-memorial-step]");
+    if (step) { stepCompanion(Number(step.dataset.memorialStep) || 0); return; }
+    const menu = event?.target?.closest?.("[data-memorial-menu]");
+    if (menu) { openMemorialMenu(menu); return; }
+    const setDate = event?.target?.closest?.("[data-memorial-set-date]");
+    if (setDate) {
+      const key = event.target.closest(".memorial-card")?.dataset?.companionKey;
+      if (key) openMemorialDateEditor(key, setDate);
+      return;
+    }
+    const open = event?.target?.closest?.("[data-memorial-open]");
+    if (open) openCompanionPicker(open);
+  });
+  $("companionList")?.addEventListener?.("click", event => {
+    const pin = event?.target?.closest?.("[data-companion-pin]");
+    if (pin) { toggleCompanionPin(pin.dataset.companionPin); return; }
+    const pick = event?.target?.closest?.("[data-companion-pick]");
+    if (pick) { selectCompanion(pick.dataset.companionPick); closeCompanionPicker(); }
+  });
+  $("companionSearch")?.addEventListener?.("input", () => renderCompanionPicker());
+  $("backgroundInput")?.addEventListener?.("change", event => {
+    const file = event?.target?.files?.[0];
+    if (file) void chooseBackgroundImage(file);
+    if (event?.target) event.target.value = "";
+  });
+  $("backgroundRemove")?.addEventListener?.("click", () => {
+    void removeBackgroundImage().then(() => { setBackgroundStatus(null); renderBackgroundControls(); });
+  });
+  $("backgroundEnabled")?.addEventListener?.("change", event => {
+    updateBackground({ enabled: !!event?.target?.checked });
+  });
+  $("backgroundFocus")?.addEventListener?.("click", event => {
+    const cell = event?.target?.closest?.("[data-bg-focus]");
+    if (!cell) return;
+    const [x, y] = String(cell.dataset.bgFocus).split(",").map(Number);
+    updateBackground({ focusX: x, focusY: y });
+  });
+  $("backgroundBrightness")?.addEventListener?.("input", event => {
+    updateBackground({ brightness: Number(event?.target?.value) });
+  });
+  $("backgroundClarity")?.addEventListener?.("input", event => {
+    updateBackground({ clarity: Number(event?.target?.value) });
+  });
+  $("backgroundPaperOpacity")?.addEventListener?.("input", event => {
+    updateBackground({ paperOpacity: Number(event?.target?.value) });
+  });
+  $("backgroundAccordion")?.addEventListener?.("click", event => {
+    // Match buttons only, never an ancestor that happens to carry the same
+    // data attribute — the body wears the active target for the stylesheet.
+    const button = event?.target?.closest?.("button[data-bg-target], button[data-bg-fit]");
+    if (!button) return;
+    if (button.dataset.bgTarget) { updateBackground({ target: button.dataset.bgTarget }); return; }
+    updateBackground({ fit: button.dataset.bgFit });
+  });
+  $("memorialEditDate")?.addEventListener?.("click", () => {
+    const key = document.querySelector?.(".memorial-card")?.dataset?.companionKey;
+    const trigger = state.memorialMenuReturn;
+    closeMemorialMenu();
+    if (key) openMemorialDateEditor(key, trigger);
+  });
+  $("memorialManagePinned")?.addEventListener?.("click", () => {
+    const trigger = state.memorialMenuReturn;
+    closeMemorialMenu();
+    openCompanionPicker(trigger, { mode: "manage" });
+  });
+  $("memorialDateClose")?.addEventListener?.("click", () => closeMemorialDateEditor());
+  $("memorialCancel")?.addEventListener?.("click", () => closeMemorialDateEditor());
+  $("memorialSave")?.addEventListener?.("click", () => saveMemorialDate());
+  $("memorialRestore")?.addEventListener?.("click", () => clearMemorialDate());
+  $("companionPickerClose")?.addEventListener?.("click", () => closeCompanionPicker());
+
   $("messages").addEventListener("click", event => {
     const mark = event?.target?.closest?.("mark.annotation");
     if (!mark) return;
@@ -3283,6 +4132,12 @@ window.OD = window.OD || {};
     if (event.key === "Escape") {
       // 拾句 Studio 开着时它自己的 Esc 收面板，阅读器这层按兵不动
       if (OD.shijuStudio?.isOpen?.()) return;
+      const dateEditor = $("memorialDateEditor");
+      if (dateEditor && !dateEditor.hidden) { closeMemorialDateEditor(); return; }
+      const memorialMenuOpen = $("memorialMenu");
+      if (memorialMenuOpen && !memorialMenuOpen.hidden) { closeMemorialMenu(); return; }
+      const openPicker = $("companionPicker");
+      if (openPicker && !openPicker.hidden) { closeCompanionPicker(); return; }
       // Close the topmost transient layer first; never silently discard an
       // unsaved note — an edited annotation ignores Esc until saved/cancelled.
       const editor = $("annotationEditor");

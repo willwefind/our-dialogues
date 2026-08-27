@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 12" fill="none" role="img" aria-labelledby="title desc">
+  <title id="title">Memorial hairline rule</title>
+  <desc id="desc">Repeat-safe quiet divider for normal, manual, and no-date states.</desc>
+  <path d="M1 6h64M95 6h64" stroke="currentColor" stroke-width="1"/><circle cx="80" cy="6" r="1.4" fill="currentColor"/><path d="m74 6 3-3 3 3-3 3-3-3Zm12 0-3-3-3 3 3 3 3-3Z" fill="none" stroke="currentColor" stroke-width=".8" opacity=".75"/>
+</svg>
