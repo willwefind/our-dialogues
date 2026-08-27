@@ -3641,8 +3641,11 @@ window.OD = window.OD || {};
       closeMemorialMenu();
     }
     const companionPicker = $("companionPicker");
+    // Every opener of the picker belongs on this list, including the menu item
+    // that opens it: that click is still bubbling up here, and an opener left
+    // off the list closes the layer it just opened — which reads as a dead button.
     if (companionPicker && !companionPicker.hidden
-      && !event?.target?.closest?.("#companionPicker, [data-memorial-open]")) {
+      && !event?.target?.closest?.("#companionPicker, [data-memorial-open], #memorialManagePinned")) {
       closeCompanionPicker();
     }
     const tagEditor = $("tagEditor");

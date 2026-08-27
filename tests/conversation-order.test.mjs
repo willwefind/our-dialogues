@@ -44,7 +44,9 @@ function fakeElement(id="") {
       contains(name) { return classes.has(name); }
     },
     addEventListener(type, listener) { listeners.set(type, listener); },
-    dispatch(type) { return listeners.get(type)?.({ target: this }); },
+    // A real click carries the deepest element as its target, not the element
+    // the listener sits on — delegation tests need to say which one.
+    dispatch(type, target) { return listeners.get(type)?.({ target: target || this }); },
     click() { return listeners.get("click")?.({ target: this }); },
     setAttribute(name, value) { this.attributes.set(name, String(value)); },
     getAttribute(name) { return this.attributes.get(name) ?? null; },
@@ -212,7 +214,9 @@ async function loadAppRuntime(savedSortMode="asc", options={}) {
     stored,
     sortAscending,
     sortDescending,
-    dispatchDocument(type) { return documentListeners.get(type)?.({ target: runtime.document }); }
+    dispatchDocument(type, target) {
+      return documentListeners.get(type)?.({ target: target || runtime.document });
+    }
   };
 }
 
@@ -1171,6 +1175,37 @@ test("the Aa popover toggles and an outside click closes it", async () => {
   assert.equal(panel.hidden, false);
   dispatchDocument("click");
   assert.equal(panel.hidden, true, "clicking elsewhere closes the popover");
+});
+
+test("the memorial menu's manage-pinned item opens the picker and it stays open", async () => {
+  const { elements, dispatchDocument } = await loadAppRuntime("asc");
+  const menu = elements.get("memorialMenu");
+  const picker = elements.get("companionPicker");
+  menu.hidden = true;
+  picker.hidden = true;
+
+  // The ··· button inside the card opens the little menu.
+  const menuButton = fakeElement("");
+  menuButton.dataset.memorialMenu = "";
+  menuButton.closest = selector => (selector.includes("[data-memorial-menu]") ? menuButton : null);
+  elements.get("memorialCard").dispatch("click", menuButton);
+  assert.equal(menu.hidden, false, "the ··· button opens the memorial menu");
+
+  // Choosing 管理置顶 closes the menu and opens the picker...
+  elements.get("memorialManagePinned").click();
+  assert.equal(menu.hidden, true);
+  assert.equal(picker.hidden, false, "manage-pinned opens the companion picker");
+
+  // ...and that same click, still bubbling to the document closer, must not
+  // shut the picker it just opened. That was the dead-button bug.
+  const item = elements.get("memorialManagePinned");
+  item.closest = selector => (selector.includes("#memorialManagePinned") ? item : null);
+  dispatchDocument("click", item);
+  assert.equal(picker.hidden, false, "the opener is not an outside click");
+
+  // A genuine click elsewhere still closes it.
+  dispatchDocument("click");
+  assert.equal(picker.hidden, true, "clicking elsewhere closes the picker");
 });
 
 test("library search can target one chosen source, decoupled from the catalog filters", async () => {
