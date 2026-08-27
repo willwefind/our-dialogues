@@ -283,6 +283,8 @@ window.OD = window.OD || {};
   "memorial.more": "More",
   "memorial.editDate": "Edit first date",
   "memorial.managePinned": "Manage pinned",
+  "memorial.pinHint": "Pin two or more, and the ‹ › arrows on the card step between them.",
+  "memorial.stepNeedsPins": "Pin two or more companions to step between them",
   "memorial.editTitle": "Edit first date",
   "memorial.yourDate": "The date you remember",
   "memorial.timeOptional": "Time (optional)",

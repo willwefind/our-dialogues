@@ -282,6 +282,8 @@ window.OD = window.OD || {};
   "memorial.more": "更多",
   "memorial.editDate": "修改相识日期",
   "memorial.managePinned": "管理置顶",
+  "memorial.pinHint": "置顶两位以上，卡片上的 ‹ › 就能在他们之间来回切换。",
+  "memorial.stepNeedsPins": "置顶两位以上才能左右切换",
   "memorial.editTitle": "修改相识日期",
   "memorial.yourDate": "你记下的日期",
   "memorial.timeOptional": "时间（可留空）",

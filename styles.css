@@ -327,10 +327,16 @@ body.toolbar-hidden .toolbar{transform:translateY(-53px);pointer-events:none}
   text-overflow:ellipsis;white-space:nowrap}
 .companion-pin{flex:none;width:32px;height:32px;border:0;border-radius:6px;background:transparent;cursor:pointer;
   color:var(--muted);-webkit-mask:none;display:grid;place-items:center}
-.companion-pin span{width:16px;height:16px;background:currentColor;
+.companion-pin-icon{width:16px;height:16px;background:currentColor;
   -webkit-mask:var(--pin-icon) center/contain no-repeat;mask:var(--pin-icon) center/contain no-repeat}
 .companion-pin[aria-pressed=true]{color:var(--accent)}
-.companion-pin[aria-pressed=true] span{-webkit-mask-image:var(--pinned-icon);mask-image:var(--pinned-icon)}
+.companion-pin[aria-pressed=true] .companion-pin-icon{-webkit-mask-image:var(--pinned-icon);mask-image:var(--pinned-icon)}
+/* Managing pins names the action instead of hinting at it with a glyph. */
+.companion-pin-labelled{width:auto;min-width:44px;height:36px;grid-auto-flow:column;gap:6px;padding:0 10px;
+  border:1px solid var(--line)}
+.companion-pin-labelled[aria-pressed=true]{border-color:var(--accent)}
+.companion-pin-label{font:11px/1 var(--font-ui);white-space:nowrap}
+.companion-hint{margin:0;padding:0 4px;font:11px/1.6 var(--font-ui);color:var(--muted)}
 .memorial-menu{position:fixed;top:0;left:0;z-index:31;min-width:180px;padding:6px;border:1px solid var(--line);
   border-radius:10px;background:var(--panel);box-shadow:var(--shadow-popover);display:flex;flex-direction:column}
 .memorial-menu button{min-height:40px;padding:0 10px;border:0;border-radius:6px;background:transparent;
@@ -365,6 +371,7 @@ body.toolbar-hidden .toolbar{transform:translateY(-53px);pointer-events:none}
   .memorial-foot{flex-direction:column;align-items:flex-start;gap:4px}
   /* Thumbs, not cursors: every control on the card clears 44px. */
   .memorial-switch button{min-width:44px;height:44px}
+  .companion-pin-labelled{height:44px}
   .memorial-name-button{min-height:44px}
   .memorial-set-date{min-height:44px;margin-left:0;margin-top:10px}
 }

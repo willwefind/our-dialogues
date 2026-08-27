@@ -44,6 +44,9 @@ window.OD = window.OD || {};
     // looked at, and the meeting dates the reader wrote down by hand.
     companionshipPinned: [],
     companionshipRecent: [],
+    // "pick" chooses who the card shows; "manage" is the same list opened to
+    // work on the pins themselves, and it says so.
+    companionPickerMode: "pick",
     companionshipOverrides: {},
     background: {},
     backgroundUrl: null,
@@ -972,9 +975,10 @@ window.OD = window.OD || {};
     picker.style.top = `${top}px`;
   }
 
-  function openCompanionPicker(trigger) {
+  function openCompanionPicker(trigger, { mode = "pick" } = {}) {
     const picker = $("companionPicker");
     if (!picker) return;
+    state.companionPickerMode = mode === "manage" ? "manage" : "pick";
     state.companionPickerReturn = trigger || null;
     picker.hidden = false;
     placeCompanionPicker(trigger);
@@ -986,6 +990,7 @@ window.OD = window.OD || {};
     const picker = $("companionPicker");
     if (!picker || picker.hidden) return;
     picker.hidden = true;
+    state.companionPickerMode = "pick";
     const search = $("companionSearch");
     if (search) search.value = "";
     const trigger = state.companionPickerReturn;
@@ -993,8 +998,12 @@ window.OD = window.OD || {};
     trigger?.focus?.();
   }
 
-  function companionRowMarkup(item, currentKey, pinnedSet) {
+  /* While picking, the pin stays the quiet trailing icon the spec asks for.
+     While managing pins it spells the action out — a nameless 16px glyph is
+     not a control anyone finds, and nobody pins without finding it. */
+  function companionRowMarkup(item, currentKey, pinnedSet, manage) {
     const pinned = pinnedSet.has(item.entry.key);
+    const action = t(pinned ? "memorial.unpin" : "memorial.pin");
     const meta = [item.entry.sourceLabel, item.summary.firstAt ? fmtDateOnly(item.summary.firstAt) : ""]
       .filter(Boolean).join(" · ");
     return `<div class="companion-row"${item.entry.key === currentKey ? ' aria-current="true"' : ""}>
@@ -1002,15 +1011,29 @@ window.OD = window.OD || {};
         <span class="companion-pick-name">${esc(item.entry.name)}</span>
         ${meta ? `<span class="companion-pick-meta">${esc(meta)}</span>` : ""}
       </button>
-      <button type="button" class="companion-pin" data-companion-pin="${esc(item.entry.key)}"
-        aria-pressed="${pinned}" title="${esc(t(pinned ? "memorial.unpin" : "memorial.pin"))}"
-        aria-label="${esc(t(pinned ? "memorial.unpin" : "memorial.pin"))}"><span aria-hidden="true"></span></button>
+      <button type="button" class="companion-pin${manage ? " companion-pin-labelled" : ""}"
+        data-companion-pin="${esc(item.entry.key)}" aria-pressed="${pinned}"
+        title="${esc(action)}" aria-label="${esc(action)}"><span class="companion-pin-icon" aria-hidden="true"></span>${
+        manage ? `<span class="companion-pin-label">${esc(action)}</span>` : ""}</button>
     </div>`;
   }
 
   function renderCompanionPicker() {
     const list = $("companionList");
     if (!list) return;
+    const manage = state.companionPickerMode === "manage";
+    const titleKey = manage ? "memorial.managePinned" : "memorial.pickerTitle";
+    const heading = $("companionPickerTitle");
+    if (heading) {
+      // Move the marker with the text, so a later locale switch re-points the
+      // heading at whichever title this mode is showing.
+      heading.setAttribute?.("data-i18n", titleKey);
+      heading.textContent = t(titleKey);
+    }
+    // Managing pins is also where the reader learns what pinning is for: the
+    // card's arrows stay disabled until two companions are pinned.
+    const hint = $("companionPickerHint");
+    if (hint) hint.hidden = !manage;
     const query = String($("companionSearch")?.value || "").trim().toLowerCase();
     const entries = companionEntries();
     const currentKey = memorialCompanion(entries)?.key || null;
@@ -1036,7 +1059,7 @@ window.OD = window.OD || {};
     }
     const section = (labelKey, items) => items.length
       ? `<div class="companion-section">${esc(t(labelKey))}</div>` +
-        items.map(item => companionRowMarkup(item, currentKey, pinnedSet)).join("")
+        items.map(item => companionRowMarkup(item, currentKey, pinnedSet, manage)).join("")
       : "";
     list.innerHTML = section("memorial.pinned", pinned)
       + section("memorial.recentlyViewed", recent)
@@ -1173,7 +1196,7 @@ window.OD = window.OD || {};
     host.innerHTML = `<section class="memorial-card" data-companion-key="${esc(entry.key)}" aria-label="${esc(title)}">
       <div class="memorial-head">
         <span class="memorial-eyebrow"><span class="memorial-plate" aria-hidden="true"></span>${esc(t("memorial.eyebrow"))}</span>
-        <div class="memorial-switch">
+        <div class="memorial-switch"${stepper ? "" : ` title="${esc(t("memorial.stepNeedsPins"))}"`}>
           <button type="button" data-memorial-step="-1"${stepper ? "" : " disabled"}
             aria-label="${esc(t("memorial.previous"))}" title="${esc(t("memorial.previous"))}">&lsaquo;</button>
           <button type="button" data-memorial-open="1" aria-haspopup="dialog"
@@ -1502,6 +1525,7 @@ window.OD = window.OD || {};
     }
     syncOrganizeControls();
     if ($("tagEditor")?.hidden === false) renderTagEditor();
+    if ($("companionPicker")?.hidden === false) renderCompanionPicker();
     performSearch();
     state.statusText = archiveStatusText();
     renderStatus();
@@ -3644,7 +3668,15 @@ window.OD = window.OD || {};
     // Every opener of the picker belongs on this list, including the menu item
     // that opens it: that click is still bubbling up here, and an opener left
     // off the list closes the layer it just opened — which reads as a dead button.
-    if (companionPicker && !companionPicker.hidden
+    //
+    // Pinning rebuilds the rows under the pointer, so the clicked button is
+    // already detached by the time this runs and a detached node answers
+    // closest() with null. A node that left the document during its own click
+    // never came from outside. Only the picker rewrites itself on click, so
+    // only the picker gets this pass — elsewhere a re-rendering click (opening
+    // a conversation, say) still closes the layers above it.
+    const detached = event?.target?.isConnected === false;
+    if (companionPicker && !companionPicker.hidden && !detached
       && !event?.target?.closest?.("#companionPicker, [data-memorial-open], #memorialManagePinned")) {
       closeCompanionPicker();
     }
@@ -3980,7 +4012,7 @@ window.OD = window.OD || {};
   $("memorialManagePinned")?.addEventListener?.("click", () => {
     const trigger = state.memorialMenuReturn;
     closeMemorialMenu();
-    openCompanionPicker(trigger);
+    openCompanionPicker(trigger, { mode: "manage" });
   });
   $("memorialDateClose")?.addEventListener?.("click", () => closeMemorialDateEditor());
   $("memorialCancel")?.addEventListener?.("click", () => closeMemorialDateEditor());

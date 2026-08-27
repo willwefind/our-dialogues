@@ -105,7 +105,9 @@ async function loadAppRuntime(savedSortMode="asc", options={}) {
     "backgroundPaperOpacityValue",
     "memorialCard",
     "companionPicker",
+    "companionPickerTitle",
     "companionSearch",
+    "companionPickerHint",
     "companionList",
     "companionPickerClose",
     "memorialMenu",
@@ -1175,6 +1177,112 @@ test("the Aa popover toggles and an outside click closes it", async () => {
   assert.equal(panel.hidden, false);
   dispatchDocument("click");
   assert.equal(panel.hidden, true, "clicking elsewhere closes the popover");
+});
+
+/* A target that models a real click: the deepest element, which answers
+   closest() for its own selector and nothing else. */
+function clickTarget(dataKey, value="1") {
+  const element = fakeElement("");
+  element.dataset[dataKey] = value;
+  const marker = dataKey.replace(/[A-Z]/g, letter => `-${letter.toLowerCase()}`);
+  element.closest = selector => (selector.includes(`data-${marker}`) ? element : null);
+  return element;
+}
+
+async function loadTwoCompanions() {
+  const harness = await loadAppRuntime("asc");
+  harness.runtime.OD.app.loadArchive({
+    conversations: [{
+      id: "sol-1", title: "\u4e00", createdAt: "2026-03-22T12:00:00.000Z",
+      messages: [{ id: "sol-1-m1", role: "assistant", content: "\u5728" }]
+    }]
+  }, "Sol");
+  harness.runtime.OD.app.loadArchive({
+    conversations: [{
+      id: "ciel-1", title: "\u4e8c", createdAt: "2026-04-01T12:00:00.000Z",
+      messages: [{ id: "ciel-1-m1", role: "assistant", content: "\u5728" }]
+    }]
+  }, "Ciel");
+  return harness;
+}
+
+function companionKeyOnCard(card) {
+  return /data-companion-key="([^"]+)"/.exec(card.innerHTML)?.[1] || null;
+}
+
+test("\u6362\u4e00\u4f4d and \u7ba1\u7406\u7f6e\u9876 open the same list in two different modes", async () => {
+  const { elements } = await loadTwoCompanions();
+  const heading = elements.get("companionPickerTitle");
+  const hint = elements.get("companionPickerHint");
+  const list = elements.get("companionList");
+  elements.get("companionPicker").hidden = true;
+
+  // The chevron on the card picks who is remembered; it says nothing about pins.
+  elements.get("memorialCard").dispatch("click", clickTarget("memorialOpen"));
+  assert.equal(elements.get("companionPicker").hidden, false);
+  assert.equal(heading.textContent, "\u9009\u62e9\u8981\u7eaa\u5ff5\u7684\u4e00\u4f4d");
+  assert.equal(hint.hidden, true, "picking mode keeps the pin hint out of the way");
+  assert.doesNotMatch(list.innerHTML, /companion-pin-label/, "the pin stays a quiet icon");
+  elements.get("companionPickerClose").click();
+
+  // \u7ba1\u7406\u7f6e\u9876 opens the same list to work on the pins, and says so.
+  elements.get("memorialCard").dispatch("click", clickTarget("memorialMenu"));
+  elements.get("memorialManagePinned").click();
+  assert.equal(heading.textContent, "\u7ba1\u7406\u7f6e\u9876", "the heading names the job");
+  assert.equal(hint.hidden, false, "managing pins explains what pinning buys");
+  assert.match(list.innerHTML, /companion-pin-label/, "the pin action is spelled out");
+
+  // Closing drops back to picking, so the next chevron click is not in manage mode.
+  elements.get("companionPickerClose").click();
+  elements.get("memorialCard").dispatch("click", clickTarget("memorialOpen"));
+  assert.equal(hint.hidden, true);
+});
+
+test("pinning from inside the picker does not read as a click from outside it", async () => {
+  const { runtime, elements, dispatchDocument } = await loadTwoCompanions();
+  const picker = elements.get("companionPicker");
+  picker.hidden = true;
+  elements.get("memorialCard").dispatch("click", clickTarget("memorialOpen"));
+  assert.equal(picker.hidden, false);
+
+  const key = runtime.OD.companionship
+    .companionKey(runtime.OD.app.getState().sources[0].id, null);
+  const pin = clickTarget("companionPin", key);
+  elements.get("companionList").dispatch("click", pin);
+
+  // Pinning rebuilds the rows, so the button the reader pressed has left the
+  // document by the time the same click reaches the closer, and a detached
+  // node answers closest() with null.
+  pin.isConnected = false;
+  pin.closest = () => null;
+  dispatchDocument("click", pin);
+  assert.equal(picker.hidden, false, "the picker survives its own pin button");
+
+  // A real outside click still closes it.
+  dispatchDocument("click");
+  assert.equal(picker.hidden, true);
+});
+
+test("the card's arrows wake up once two companions are pinned", async () => {
+  const { runtime, elements } = await loadTwoCompanions();
+  const card = elements.get("memorialCard");
+  assert.match(card.innerHTML, /data-memorial-step="-1" disabled/, "nothing to step through yet");
+  assert.match(card.innerHTML, /\u7f6e\u9876\u4e24\u4f4d\u4ee5\u4e0a\u624d\u80fd\u5de6\u53f3\u5207\u6362/,
+    "the dead arrows say why they are dead");
+
+  // Pin both the way the reader does: through the rows in the picker.
+  const keys = runtime.OD.app.getState().sources
+    .map(source => runtime.OD.companionship.companionKey(source.id, null));
+  for (const key of keys) {
+    elements.get("companionList").dispatch("click", clickTarget("companionPin", key));
+  }
+  assert.doesNotMatch(card.innerHTML, /disabled/, "two pins bring the arrows to life");
+
+  const before = companionKeyOnCard(card);
+  card.dispatch("click", clickTarget("memorialStep", "1"));
+  const after = companionKeyOnCard(card);
+  assert.notEqual(after, before, "the arrow moves to the other pinned companion");
+  assert.ok(keys.includes(after), "and it lands on a pinned one");
 });
 
 test("the memorial menu's manage-pinned item opens the picker and it stays open", async () => {
