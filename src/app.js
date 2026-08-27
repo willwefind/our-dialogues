@@ -908,6 +908,14 @@ window.OD = window.OD || {};
     return entries;
   }
 
+  /* The archive's own label is the honest default and stays on `entry.name`
+     so it can always be restored and still answers a search; what the reader
+     wrote down is what the room calls this companion. */
+  function companionDisplayName(entry) {
+    if (!entry) return "";
+    return OD.companionship.nameFor(state.companionshipOverrides, entry.key) || entry.name;
+  }
+
   function companionSummary(entry) {
     return OD.companionship.resolve(entry.conversations, {
       key: entry.key,
@@ -1052,7 +1060,7 @@ window.OD = window.OD || {};
       .filter(Boolean).join(" · ");
     return `<div class="companion-row"${item.entry.key === currentKey ? ' aria-current="true"' : ""}>
       <button type="button" class="companion-pick" data-companion-pick="${esc(item.entry.key)}">
-        <span class="companion-pick-name">${esc(item.entry.name)}</span>
+        <span class="companion-pick-name">${esc(companionDisplayName(item.entry))}</span>
         ${meta ? `<span class="companion-pick-meta">${esc(meta)}</span>` : ""}
       </button>
       <button type="button" class="companion-pin${manage ? " companion-pin-labelled" : ""}"
@@ -1082,7 +1090,10 @@ window.OD = window.OD || {};
     const entries = companionEntries();
     const currentKey = memorialCompanion(entries)?.key || null;
     const matches = entries
+      // A renamed companion answers to both names: the one on the card and
+      // the one the archive brought with it.
       .filter(entry => !query
+        || companionDisplayName(entry).toLowerCase().includes(query)
         || entry.name.toLowerCase().includes(query)
         || String(entry.sourceLabel || "").toLowerCase().includes(query))
       .map(entry => ({ entry, summary: companionSummary(entry) }));
@@ -1204,6 +1215,61 @@ window.OD = window.OD || {};
     trigger?.focus?.({ preventScroll: true });
   }
 
+  function openMemorialNameEditor(key, trigger) {
+    const editor = $("memorialNameEditor");
+    const entry = companionEntries().find(item => item.key === key);
+    if (!editor || !entry) return;
+    memorialEditorKey = key;
+    state.memorialEditorReturn = trigger || null;
+    const custom = OD.companionship.nameFor(state.companionshipOverrides, key);
+    const input = $("memorialNameInput");
+    if (input) {
+      input.value = custom || "";
+      input.placeholder = entry.name;
+      input.maxLength = OD.companionship.MAX_NAME_LENGTH;
+    }
+    const archive = $("memorialArchiveName");
+    if (archive) archive.textContent = t("memorial.archiveName", { name: entry.name });
+    const restore = $("memorialNameRestore");
+    // Nothing to restore to when the card is already showing the archive's own.
+    if (restore) restore.disabled = !custom;
+    editor.hidden = false;
+    placeMemorialPopover(editor, trigger, 344);
+    input?.focus?.({ preventScroll: true });
+  }
+
+  function closeMemorialNameEditor() {
+    const editor = $("memorialNameEditor");
+    if (!editor || editor.hidden) return;
+    editor.hidden = true;
+    memorialEditorKey = null;
+    const trigger = state.memorialEditorReturn;
+    state.memorialEditorReturn = null;
+    trigger?.focus?.({ preventScroll: true });
+  }
+
+  function saveMemorialName() {
+    const key = memorialEditorKey;
+    if (!key) return;
+    const name = String($("memorialNameInput")?.value || "");
+    // An emptied field is the same request as Restore: go back to the archive.
+    state.companionshipOverrides = OD.companionship.setName(state.companionshipOverrides, key, name);
+    closeMemorialNameEditor();
+    renderMemorialCard();
+    if ($("companionPicker")?.hidden === false) renderCompanionPicker();
+    void saveReaderState();
+  }
+
+  function clearMemorialName() {
+    const key = memorialEditorKey;
+    if (!key) return;
+    state.companionshipOverrides = OD.companionship.clearName(state.companionshipOverrides, key);
+    closeMemorialNameEditor();
+    renderMemorialCard();
+    if ($("companionPicker")?.hidden === false) renderCompanionPicker();
+    void saveReaderState();
+  }
+
   function saveMemorialDate() {
     const key = memorialEditorKey;
     const date = String($("memorialDateInput")?.value || "").trim();
@@ -1236,7 +1302,7 @@ window.OD = window.OD || {};
     const summary = companionSummary(entry);
     const rotation = memorialRotation(entries);
     const stepper = rotation.length > 1;
-    const title = t("memorial.with", { name: entry.name });
+    const title = t("memorial.with", { name: companionDisplayName(entry) });
     host.innerHTML = `<section class="memorial-card" data-companion-key="${esc(entry.key)}" aria-label="${esc(title)}">
       <div class="memorial-head">
         <span class="memorial-eyebrow"><span class="memorial-plate" aria-hidden="true"></span>${esc(t("memorial.eyebrow"))}</span>
@@ -4065,6 +4131,19 @@ window.OD = window.OD || {};
     closeMemorialMenu();
     openCompanionPicker(trigger, { mode: "manage" });
   });
+  $("memorialRename")?.addEventListener?.("click", () => {
+    const key = document.querySelector?.(".memorial-card")?.dataset?.companionKey;
+    const trigger = state.memorialMenuReturn;
+    closeMemorialMenu();
+    if (key) openMemorialNameEditor(key, trigger);
+  });
+  $("memorialNameClose")?.addEventListener?.("click", () => closeMemorialNameEditor());
+  $("memorialNameCancel")?.addEventListener?.("click", () => closeMemorialNameEditor());
+  $("memorialNameSave")?.addEventListener?.("click", () => saveMemorialName());
+  $("memorialNameRestore")?.addEventListener?.("click", () => clearMemorialName());
+  $("memorialNameInput")?.addEventListener?.("keydown", event => {
+    if (event?.key === "Enter") saveMemorialName();
+  });
   $("memorialDateClose")?.addEventListener?.("click", () => closeMemorialDateEditor());
   $("memorialCancel")?.addEventListener?.("click", () => closeMemorialDateEditor());
   $("memorialSave")?.addEventListener?.("click", () => saveMemorialDate());
@@ -4132,6 +4211,8 @@ window.OD = window.OD || {};
     if (event.key === "Escape") {
       // 拾句 Studio 开着时它自己的 Esc 收面板，阅读器这层按兵不动
       if (OD.shijuStudio?.isOpen?.()) return;
+      const nameEditor = $("memorialNameEditor");
+      if (nameEditor && !nameEditor.hidden) { closeMemorialNameEditor(); return; }
       const dateEditor = $("memorialDateEditor");
       if (dateEditor && !dateEditor.hidden) { closeMemorialDateEditor(); return; }
       const memorialMenuOpen = $("memorialMenu");

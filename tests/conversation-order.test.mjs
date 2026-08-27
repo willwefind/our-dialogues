@@ -117,7 +117,16 @@ async function loadAppRuntime(savedSortMode="asc", options={}) {
     "companionPickerClose",
     "memorialMenu",
     "memorialEditDate",
+    "memorialRename",
     "memorialManagePinned",
+    "memorialNameEditor",
+    "memorialNameTitle",
+    "memorialNameClose",
+    "memorialNameInput",
+    "memorialArchiveName",
+    "memorialNameRestore",
+    "memorialNameCancel",
+    "memorialNameSave",
     "memorialDateEditor",
     "memorialDateTitle",
     "memorialDateClose",
@@ -181,6 +190,14 @@ async function loadAppRuntime(savedSortMode="asc", options={}) {
       querySelectorAll(selector) {
         if (selector === "[data-sort-mode]") return [sortAscending, sortDescending];
         return [];
+      },
+      // The memorial menu items find the card this way to learn whose card
+      // they are acting on.
+      querySelector(selector) {
+        if (selector !== ".memorial-card") return null;
+        const key = /data-companion-key="([^"]+)"/
+          .exec(elements.get("memorialCard")?.innerHTML || "")?.[1];
+        return key ? { dataset: { companionKey: key } } : null;
       }
     }
   };
@@ -1287,6 +1304,47 @@ test("\u6362\u4e00\u4f4d and \u7ba1\u7406\u7f6e\u9876 open the same list in two 
   elements.get("companionPickerClose").click();
   elements.get("memorialCard").dispatch("click", clickTarget("memorialOpen"));
   assert.equal(hint.hidden, true);
+});
+
+test("a companion can be called what the reader calls it, archive name one click away", async () => {
+  const { runtime, elements } = await loadTwoCompanions();
+  const card = elements.get("memorialCard");
+  const shownName = () => /class="memorial-name-button"[^>]*>([^<]*)</.exec(card.innerHTML)?.[1] || "";
+
+  // Choose whose card this is the way a reader does, through the picker.
+  const sol = runtime.OD.app.getState().sources.find(source => source.label === "Sol");
+  const key = runtime.OD.companionship.companionKey(sol.id, null);
+  elements.get("companionList").dispatch("click", clickTarget("companionPick", key));
+  assert.match(shownName(), /Sol/, "the archive's own label is the honest default");
+
+  card.dispatch("click", clickTarget("memorialMenu"));
+  elements.get("memorialRename").click();
+  assert.equal(elements.get("memorialNameEditor").hidden, false);
+  assert.match(elements.get("memorialArchiveName").textContent, /Sol/,
+    "the editor keeps the archive's own name in view");
+  assert.equal(elements.get("memorialNameRestore").disabled, true, "nothing to restore to yet");
+
+  elements.get("memorialNameInput").value = "小 S";
+  elements.get("memorialNameSave").click();
+  assert.match(shownName(), /小 S/, "the card calls the companion what the reader does");
+  assert.equal(elements.get("memorialNameEditor").hidden, true);
+
+  // Renaming leaves the archive's own name underneath: the picker still
+  // answers to it, and Restore has somewhere to go back to.
+  elements.get("companionPicker").hidden = true;
+  card.dispatch("click", clickTarget("memorialOpen"));
+  const search = elements.get("companionSearch");
+  search.value = "Sol";
+  search.dispatch("input");
+  assert.match(elements.get("companionList").innerHTML, /小 S/,
+    "found by its archive name, shown by its new one");
+  elements.get("companionPickerClose").click();
+
+  card.dispatch("click", clickTarget("memorialMenu"));
+  elements.get("memorialRename").click();
+  assert.equal(elements.get("memorialNameRestore").disabled, false);
+  elements.get("memorialNameRestore").click();
+  assert.match(shownName(), /Sol/, "the archive's own name comes back whole");
 });
 
 test("pinning from inside the picker does not read as a click from outside it", async () => {

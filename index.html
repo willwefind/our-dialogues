@@ -187,7 +187,23 @@
 
     <div id="memorialMenu" class="memorial-menu" hidden role="menu">
       <button id="memorialEditDate" type="button" role="menuitem" data-i18n="memorial.editDate">修改相识日期</button>
+      <button id="memorialRename" type="button" role="menuitem" data-i18n="memorial.rename">改个名字</button>
       <button id="memorialManagePinned" type="button" role="menuitem" data-i18n="memorial.managePinned">管理置顶</button>
+    </div>
+
+    <div id="memorialNameEditor" class="companion-picker memorial-date-editor" hidden role="dialog" aria-labelledby="memorialNameTitle">
+      <div class="companion-picker-head">
+        <span id="memorialNameTitle" class="pref-label" data-i18n="memorial.nameTitle">改个名字</span>
+        <button id="memorialNameClose" type="button" aria-label="关闭" data-i18n-aria-label="memorial.close">✕</button>
+      </div>
+      <div class="memorial-field-label" data-i18n="memorial.nameLabel">卡片上显示的名字</div>
+      <input id="memorialNameInput" type="text" maxlength="40" aria-label="卡片上显示的名字" data-i18n-aria-label="memorial.nameLabel">
+      <div id="memorialArchiveName" class="memorial-archive-line"></div>
+      <div class="memorial-editor-actions">
+        <button id="memorialNameRestore" type="button" data-i18n="memorial.restoreArchiveName">恢复原名</button>
+        <button id="memorialNameCancel" type="button" data-i18n="memorial.cancel">取消</button>
+        <button id="memorialNameSave" type="button" class="memorial-save" data-i18n="memorial.save">保存</button>
+      </div>
     </div>
 
     <div id="memorialDateEditor" class="companion-picker memorial-date-editor" hidden role="dialog" aria-labelledby="memorialDateTitle">

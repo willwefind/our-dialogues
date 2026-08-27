@@ -361,8 +361,9 @@ body.toolbar-hidden .toolbar{transform:translateY(-53px);pointer-events:none}
 .memorial-date-editor{gap:10px}
 .memorial-field-label{font:11px/16px var(--font-ui);letter-spacing:.06em;color:var(--muted)}
 .memorial-date-fields{display:flex;gap:8px}
-.memorial-date-fields input{flex:1;min-width:0;box-sizing:border-box;padding:8px 10px;border:1px solid var(--line);
+.memorial-date-fields input,#memorialNameInput{flex:1;min-width:0;box-sizing:border-box;padding:8px 10px;border:1px solid var(--line);
   border-radius:6px;background:var(--paper);color:var(--ink);font:13px var(--font-ui)}
+#memorialNameInput{width:100%}
 .memorial-archive-line{font:11px/1.6 var(--font-ui);color:var(--muted)}
 .memorial-editor-actions{display:flex;align-items:center;gap:8px;margin-top:2px}
 .memorial-editor-actions button{min-height:36px;padding:0 12px;border:1px solid var(--line);border-radius:6px;

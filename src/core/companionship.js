@@ -150,26 +150,49 @@ window.OD = window.OD || {};
     };
   }
 
+  /* A reader's own name for a companion. The archive's label — a source name
+     like "ChatGPT official export (2026 validated)" — is the honest default
+     but rarely what the person was called, so the card lets it be renamed and
+     keeps the archive's own name one click away, exactly as dates do. */
+  const MAX_NAME_LENGTH = 40;
+
+  function readerName(value) {
+    const text = String(value ?? "").replace(/\s+/g, " ").trim();
+    return text ? text.slice(0, MAX_NAME_LENGTH) : null;
+  }
+
+  function overrideRecord(firstAt, name) {
+    const record = {};
+    if (firstAt) record.firstAt = firstAt;
+    if (name) record.name = name;
+    return record;
+  }
+
   function normalizeOverrides(value) {
-    const anniversaries = {};
+    const overrides = {};
     if (value && typeof value === "object" && !Array.isArray(value)) {
       for (const [rawKey, rawEntry] of Object.entries(value)) {
         const key = String(rawKey ?? "").trim();
         if (!key || !rawEntry || typeof rawEntry !== "object") continue;
         const firstAt = isoOrNull(rawEntry.firstAt);
-        if (!firstAt) continue;
-        anniversaries[key] = { firstAt };
+        const name = readerName(rawEntry.name);
+        // An entry holding neither is not an override at all.
+        if (!firstAt && !name) continue;
+        overrides[key] = overrideRecord(firstAt, name);
       }
     }
-    return anniversaries;
+    return overrides;
   }
 
+  // The two overrides are independent: restoring the archive's date must not
+  // take the reader's name down with it, and renaming must not touch the date.
   function setOverride(overrides, key, firstAt) {
     const next = normalizeOverrides(overrides);
     const id = String(key ?? "").trim();
-    const value = isoOrNull(firstAt);
     if (!id) return next;
-    if (value) next[id] = { firstAt: value };
+    const value = isoOrNull(firstAt);
+    const name = next[id]?.name || null;
+    if (value || name) next[id] = overrideRecord(value, name);
     else delete next[id];
     return next;
   }
@@ -178,10 +201,31 @@ window.OD = window.OD || {};
     return setOverride(overrides, key, null);
   }
 
+  function setName(overrides, key, name) {
+    const next = normalizeOverrides(overrides);
+    const id = String(key ?? "").trim();
+    if (!id) return next;
+    const value = readerName(name);
+    const firstAt = next[id]?.firstAt || null;
+    if (value || firstAt) next[id] = overrideRecord(firstAt, value);
+    else delete next[id];
+    return next;
+  }
+
+  function clearName(overrides, key) {
+    return setName(overrides, key, null);
+  }
+
   function overrideFor(overrides, key) {
     const anniversaries = normalizeOverrides(overrides);
     const id = String(key ?? "").trim();
-    return id && anniversaries[id] ? anniversaries[id].firstAt : null;
+    return id && anniversaries[id] ? (anniversaries[id].firstAt || null) : null;
+  }
+
+  function nameFor(overrides, key) {
+    const overridden = normalizeOverrides(overrides);
+    const id = String(key ?? "").trim();
+    return id && overridden[id] ? (overridden[id].name || null) : null;
   }
 
   /*
@@ -214,6 +258,10 @@ window.OD = window.OD || {};
     normalizeOverrides,
     setOverride,
     clearOverride,
+    setName,
+    clearName,
+    nameFor,
+    MAX_NAME_LENGTH,
     overrideFor
   };
 })(window.OD);

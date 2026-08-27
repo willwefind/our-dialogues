@@ -199,3 +199,38 @@ test("companion keys compose the way the sidebar already groups", async () => {
   assert.equal(companionship.companionKey("src-1", "  "), "src-1");
   assert.equal(companionship.companionKey("", "id:char-9"), null);
 });
+
+test("a reader's name for a companion is stored beside the date, not instead of it", async () => {
+  const companionship = await loadCompanionship();
+  const key = "source-a::id:7";
+
+  let overrides = companionship.setName({}, key, "  小 C  ");
+  assert.equal(companionship.nameFor(overrides, key), "小 C", "whitespace is tidied, not kept");
+  assert.equal(companionship.overrideFor(overrides, key), null);
+
+  // Setting a date must not take the name down with it, and vice versa.
+  overrides = companionship.setOverride(overrides, key, "2024-06-17T23:41");
+  assert.equal(companionship.nameFor(overrides, key), "小 C");
+  assert.ok(companionship.overrideFor(overrides, key));
+
+  // Restoring the archive's date leaves the name alone.
+  overrides = companionship.clearOverride(overrides, key);
+  assert.equal(companionship.overrideFor(overrides, key), null);
+  assert.equal(companionship.nameFor(overrides, key), "小 C", "the name survives a date restore");
+
+  // Restoring the archive's name drops the whole record once nothing is left.
+  overrides = companionship.clearName(overrides, key);
+  assert.equal(companionship.nameFor(overrides, key), null);
+  assert.deepEqual(plain(overrides), {}, "an override holding neither is not an override");
+
+  // Blank names never become a name, and long ones are cut rather than refused.
+  assert.deepEqual(plain(companionship.setName({}, key, "   ")), {});
+  const long = companionship.setName({}, key, "名".repeat(200));
+  assert.equal(companionship.nameFor(long, key).length, companionship.MAX_NAME_LENGTH);
+
+  // A stored record carrying only a name survives normalization, which the
+  // old date-only rule would have thrown away.
+  const restored = companionship.normalizeOverrides({ [key]: { name: "Sol" } });
+  assert.equal(companionship.nameFor(restored, key), "Sol");
+});
+
