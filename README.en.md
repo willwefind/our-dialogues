@@ -251,6 +251,8 @@ through the companions you **pin** (`···` → Manage pinned, which also expla
 why two is the threshold), and the name opens a searchable picker that stays
 usable at two hundred characters.
 
+`···` → **Rename** lets the card call a companion what you actually call them — turning a label like "Ciel House Export v1" into "Ciel". The archive's own name never disappears: the editor keeps it in view, Restore archive name brings it back, and the picker still answers to it, so a renamed companion is found by either name and shown by the chosen one. Renaming is presentation only; nothing in the archive is touched.
+
 **Dates are never invented.** The earliest date an archive can prove is often
 not the day you remember — histories get truncated, migrated, deleted. So a
 date you write down yourself outranks the derived one, and the card names which
