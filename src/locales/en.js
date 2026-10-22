@@ -44,7 +44,7 @@ window.OD = window.OD || {};
   "source.pickFolder": "Add a source folder",
   "source.pickFolderHint": "Recommended · can remember folder permission when the browser allows it",
   "source.pickFolderCompat": "Choose a source folder (compatibility mode)",
-  "source.pickFolderCompatHint": "ChatGPT official export · multiple Mufy ZIPs",
+  "source.pickFolderCompatHint": "ChatGPT official export · multiple Mufy ZIPs · SillyTavern",
   "source.or": "or",
   "source.pickFiles": "Choose JSON / ZIP",
   "source.manage": "Manage connected sources…",

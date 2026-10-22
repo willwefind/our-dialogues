@@ -43,7 +43,7 @@ window.OD = window.OD || {};
   "source.pickFolder": "添加来源文件夹",
   "source.pickFolderHint": "推荐 · 可在浏览器允许时记住文件夹权限",
   "source.pickFolderCompat": "选择来源文件夹（兼容添加）",
-  "source.pickFolderCompatHint": "ChatGPT 官方 Export · 多个 Mufy ZIP",
+  "source.pickFolderCompatHint": "ChatGPT 官方 Export · 多个 Mufy ZIP · SillyTavern",
   "source.or": "或",
   "source.pickFiles": "选择 JSON / ZIP",
   "source.manage": "管理已连接来源…",

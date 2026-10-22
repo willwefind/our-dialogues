@@ -206,6 +206,59 @@ window.OD = window.OD || {};
     };
   }
 
+  /* SillyTavern keeps one JSON Lines file per chat. Its own backups/ copies
+     every chat many times over, and extensions/ belongs to third parties,
+     so both are left alone. */
+  function sillyTavernCandidates(fileList) {
+    return Array.from(fileList || [])
+      .filter(file => /\.jsonl$/i.test(filePath(file)))
+      .filter(file => !filePath(file).split("/").some(part => /^(backups|extensions)$/i.test(part)))
+      .sort((a, b) => filePath(a).localeCompare(filePath(b)));
+  }
+
+  async function firstLine(file) {
+    const head = typeof file?.slice === "function" ? await file.slice(0, 65536).text() : await file.text();
+    return head.replace(/^﻿/, "").split(/\r?\n/).find(line => line.trim()) || "";
+  }
+
+  async function looksLikeSillyTavern(file) {
+    try { return !!OD.sillyTavern?.isHeader(JSON.parse(await firstLine(file))); } catch (_) { return false; }
+  }
+
+  async function readSillyTavernGroups(fileList) {
+    const groups = [];
+    for (const file of Array.from(fileList || [])) {
+      const parts = filePath(file).split("/");
+      if (parts.length < 2 || parts[parts.length - 2].toLowerCase() !== "groups" || !/\.json$/i.test(parts[parts.length - 1])) continue;
+      try {
+        const group = JSON.parse((await file.text()).replace(/^﻿/, ""));
+        if (group && typeof group === "object" && Array.isArray(group.chats)) groups.push(group);
+      } catch (_) {}
+    }
+    return groups;
+  }
+
+  async function parseSillyTavern(fileList) {
+    const candidates = sillyTavernCandidates(fileList);
+    const chats = [];
+    let skippedFiles = 0;
+    let invalidLines = 0;
+    for (const file of candidates) {
+      const { lines, invalid } = OD.sillyTavern.parseLines(await file.text());
+      invalidLines += invalid;
+      if (OD.sillyTavern.isChat(lines)) chats.push({ path: filePath(file), lines });
+      else skippedFiles += 1;
+    }
+    const groups = await readSillyTavernGroups(fileList);
+    const archive = OD.sillyTavern.convertChats(chats, { groups });
+    const characters = new Set(archive.conversations.filter(c => !c.context.sourceMetadata.isGroupChat).map(c => c.context.sourceMetadata.characterId));
+    const groupChats = archive.conversations.filter(c => c.context.sourceMetadata.isGroupChat).length;
+    return {
+      archive,
+      stats: { candidateFileCount: candidates.length, chatCount: chats.length, characterCount: characters.size, groupChatCount: groupChats, skippedFiles, invalidLines }
+    };
+  }
+
   const handlers = [
     {
       id: "chatgpt-official-folder",
@@ -271,6 +324,33 @@ window.OD = window.OD || {};
           }
         };
       }
+    },
+    {
+      id: "sillytavern-folder",
+      label: "SillyTavern",
+      async detect(files) {
+        if (await OD.chatgptExportFolder?.detect?.(files)) return false;
+        for (const file of sillyTavernCandidates(files).slice(0, 8)) {
+          if (await looksLikeSillyTavern(file)) return true;
+        }
+        return false;
+      },
+      async parse(files) {
+        const { archive, stats } = await parseSillyTavern(files);
+        if (!archive.conversations.length) throw new Error("这个文件夹里没有可以读取的 SillyTavern 聊天记录。");
+        const details = [`${stats.chatCount} 段聊天`, `${stats.characterCount} 个角色`];
+        if (stats.groupChatCount) details.push(`${stats.groupChatCount} 段群聊`);
+        if (stats.skippedFiles) details.push(`${stats.skippedFiles} 个文件无法识别已跳过`);
+        if (stats.invalidLines) details.push(`${stats.invalidLines} 行损坏已跳过`);
+        return {
+          archive,
+          adapter: { id: "sillytavern-chat", label: "SillyTavern" },
+          assetSession: null,
+          importDetails: details.join(" · "),
+          folderSourceId: "sillytavern-folder",
+          stats
+        };
+      }
     }
   ];
 
@@ -297,7 +377,7 @@ window.OD = window.OD || {};
     if (diagnostics?.reason === "ambiguous-folder") {
       return `这个文件夹同时匹配多个来源（${diagnostics.matchedSourceIds.join("、")}）。请选择单一导出来源的文件夹。`;
     }
-    return `暂时无法识别这个文件夹。请选择解压后的 ChatGPT 官方 Export 文件夹，或包含 Mufy ZIP 的文件夹（检测到 ${diagnostics?.zipFileCount || 0} 个 ZIP）。`;
+    return `暂时无法识别这个文件夹。请选择解压后的 ChatGPT 官方 Export 文件夹、包含 Mufy ZIP 的文件夹，或 SillyTavern 的 data/default-user 文件夹（检测到 ${diagnostics?.zipFileCount || 0} 个 ZIP）。`;
   }
 
   async function parse(fileList) {
@@ -314,6 +394,6 @@ window.OD = window.OD || {};
     inspect,
     parse,
     formatDiagnostics,
-    _internals: { filePath, zipFiles, inspectMufy, mergeMufyArchives, stableConversationIdentity, titleSourceRank }
+    _internals: { filePath, zipFiles, inspectMufy, sillyTavernCandidates, parseSillyTavern, mergeMufyArchives, stableConversationIdentity, titleSourceRank }
   };
 })(window.OD);

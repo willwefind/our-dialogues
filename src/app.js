@@ -564,6 +564,11 @@ window.OD = window.OD || {};
     };
   }
 
+  /* Sources whose sidebar groups conversations by character (or group chat). */
+  function groupsByCharacter(source) {
+    return ["mufy", "sillytavern"].includes(source?.source?.platform);
+  }
+
   function isGreetingConversation(conversation) {
     return conversation.context?.sourceMetadata?.isGreeting === true;
   }
@@ -887,7 +892,7 @@ window.OD = window.OD || {};
     const entries = [];
     for (const source of state.library?.sources?.() || []) {
       const conversations = source.conversations || [];
-      if (source.source?.platform === "mufy") {
+      if (groupsByCharacter(source)) {
         const characters = new Map();
         for (const conversation of conversations) {
           const character = mufyCharacter(conversation);
@@ -1748,7 +1753,7 @@ window.OD = window.OD || {};
 
   function sourceMarkup(source, conversations, searching, readingOrder) {
     let children = "";
-    if (source.source?.platform === "mufy") {
+    if (groupsByCharacter(source)) {
       const characters = new Map();
       for (const conversation of conversations) {
         const character = mufyCharacter(conversation);
@@ -1771,7 +1776,7 @@ window.OD = window.OD || {};
         const pinnedCount = ordered.filter(isGreetingConversation).length;
         return `<details class="character-group" data-character-key="${esc(characterKey)}"${open ? " open" : ""}>
         <summary>
-          <span class="character-summary-label">${esc(character.name)}${character.id ? `<small class="character-identity">${esc(character.id)}</small>` : ""}</span>
+          <span class="character-summary-label">${esc(character.name)}${character.id && source.source?.platform === "mufy" ? `<small class="character-identity">${esc(character.id)}</small>` : ""}</span>
           <span class="character-count">${character.conversations.length}</span>
         </summary>
         <div class="character-conversations">${conversationListMarkup(ordered, { skipLeading: pinnedCount })}</div>
@@ -3528,7 +3533,10 @@ window.OD = window.OD || {};
       );
     }
     const text = await file.text();
-    const data = JSON.parse(text.replace(/^\uFEFF/, ""));
+    // JSON Lines (a SillyTavern chat) reads as the array of its lines.
+    const data = /\.jsonl$/i.test(file.name)
+      ? OD.sillyTavern.parseLines(text).lines
+      : JSON.parse(text.replace(/^\uFEFF/, ""));
     const result = requireRecognized(await OD.registry.parseJSON(data));
     /* Adapters may name the source themselves (a personal archive shows its
        own archive name instead of the generic adapter label). */
@@ -3740,6 +3748,8 @@ window.OD = window.OD || {};
       const expectedSourceId = state.pendingReconnectSourceId;
       state.pendingReconnectSourceId = null;
       if (expectedSourceId) await loadFile(files[0], { expectedSourceId });
+      // Several SillyTavern chats picked at once become one source, as a folder would.
+      else if (files.length > 1 && files.every(file => /\.jsonl$/i.test(file.name))) await loadSourceFolder(files);
       else for (const file of files) await loadFile(file);
     } catch (error) {
       console.error(error);

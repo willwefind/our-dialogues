@@ -143,6 +143,7 @@ node --test --test-isolation=none tests/*.test.mjs
 |---|---|
 | Ciel House Export v1 | JSON 与按需加载附件的 ZIP 导入均已验证 |
 | Mufy `_原始数据.json` | JSON、单 ZIP、多 ZIP 文件夹导入；按稳定 `characterId + sessionId` 批量合并 |
+| SillyTavern 聊天记录 | 单个 `.jsonl`、一次选多个 `.jsonl`，或直接选 `data/default-user` 文件夹（合成一个来源，`backups/` 不读）；按角色分组，群聊用 `groups/` 里的名字；卡片 HTML 走与 Mufy 相同的富块阅读，`extra.reasoning` 进入思考，未选中的 swipe 原样保留在数据里；按 SillyTavern 1.19 真实数据结构验证，公开夹具为合成数据 |
 | ChatGPT 官方导出 | JSON、ZIP、清单驱动的导出文件夹导入；文件夹结构按 2026 年真实导出验证 |
 | SolVoice 本地语音伴读 | 可选的映射 v2 + VoiceArchive 或 `sol/audio` 文件夹；只连接 strong 映射 |
 | CielVoice 本地语音伴读 | 可选的 `claude-cielvoice.json` 映射 v1，由 ElevenLabs VoiceArchive 逐字精确匹配生成；连接到 Claude 官方对话，只连接 strong 映射 |

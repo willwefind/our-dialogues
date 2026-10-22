@@ -79,13 +79,13 @@
             <label class="pick pick-folder">
               <input id="folderInput" type="file" webkitdirectory directory multiple hidden>
               <span data-i18n="source.pickFolderCompat">选择来源文件夹（兼容添加）</span>
-              <small data-i18n="source.pickFolderCompatHint">ChatGPT 官方 Export · 多个 Mufy ZIP</small>
+              <small data-i18n="source.pickFolderCompatHint">ChatGPT 官方 Export · 多个 Mufy ZIP · SillyTavern</small>
             </label>
 
             <div class="pick-divider"><span data-i18n="source.or">或</span></div>
 
             <label class="pick pick-secondary">
-              <input id="fileInput" type="file" accept=".json,.zip,application/json,application/zip" multiple hidden>
+              <input id="fileInput" type="file" accept=".json,.jsonl,.zip,application/json,application/zip" multiple hidden>
               <span data-i18n="source.pickFiles">选择 JSON / ZIP</span>
             </label>
           </div>
@@ -502,6 +502,7 @@
   <script src="src/adapters/personal-archive.js"></script>
   <script src="src/adapters/ciel-house.js"></script>
   <script src="src/adapters/mufy.js"></script>
+  <script src="src/adapters/sillytavern.js"></script>
   <script src="src/adapters/claude-web-exporter.js"></script>
   <script src="src/adapters/claude-official.js"></script>
   <script src="src/adapters/chatgpt-official.js"></script>

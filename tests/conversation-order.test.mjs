@@ -1951,3 +1951,26 @@ test("整理 mode picks several sources and files them together, then lets go", 
   assert.deepEqual([...runtime.OD.app.getState().shelfSelection], []);
   assert.equal(runtime.OD.app.applyShelfSelection(), null, "with nothing picked there is nothing to apply");
 });
+
+test("SillyTavern sources group by character in the sidebar, without the folder name as a subtitle", async () => {
+  const { runtime, elements } = await loadAppRuntime("asc");
+  const chat = (id, characterId, characterName, extra = {}) => ({
+    id, title: id, createdAt: "2026-08-16T00:00:00.000Z", participants: [],
+    context: { sourceMetadata: { characterId, characterName, ...extra } },
+    messages: [{ id: `${id}-m1`, role: "assistant", speaker: characterName, content: "body" }]
+  });
+  runtime.OD.app.loadArchive({
+    source: { platform: "sillytavern", exporter: "sillytavern-chats" },
+    conversations: [
+      chat("lantern-1", "Lantern", "Lantern"),
+      chat("lantern-2", "Lantern", "Lantern"),
+      chat("porch", "group:1787", "The porch", { isGroupChat: true })
+    ]
+  }, "SillyTavern");
+  const html = elements.get("conversationList").innerHTML;
+  assert.equal((html.match(/class="character-group"/g) || []).length, 2);
+  assert.match(html, /data-character-key="[^"]+::id:Lantern"/);
+  assert.match(html, /<span class="character-summary-label">Lantern<\/span>\s*<span class="character-count">2</);
+  assert.match(html, /<span class="character-summary-label">The porch<\/span>/);
+  assert.doesNotMatch(html, /character-identity/, "the folder name is not repeated under the character");
+});
