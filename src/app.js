@@ -581,7 +581,10 @@ window.OD = window.OD || {};
       metaBits.push(esc(documentRow ? fmtDateOnly(c.createdAt) : fmtDate(c.createdAt)));
     }
     if (progress) metaBits.push(`<span class="conv-progress">${esc(progress)}</span>`);
-    return `<div class="conv${active}" data-id="${esc(c.id)}" draggable="true">
+    // Focusable so the keyboard can open it; in 整理 mode it picks instead,
+    // so it says so (syncShelfSelectionMarks keeps aria-checked current).
+    const role = state.shelfSelecting ? `role="checkbox" aria-checked="false"` : `role="link"`;
+    return `<div class="conv${active}" data-id="${esc(c.id)}" draggable="true" tabindex="0" ${role}>
       ${provenance ? `<div class="conv-provenance">${esc(provenance)}</div>` : ""}
       <div class="conv-title">${favorite}${esc(displayConversationTitle(c))}</div>
       <div class="conv-meta">${metaBits.join(" · ")}${tagChips ? ` ${tagChips}` : ""}</div>
@@ -1649,6 +1652,7 @@ window.OD = window.OD || {};
     group.open = true;
     const menu = group.querySelector?.(".shelf-group-menu");
     if (menu) menu.hidden = false;
+    group.querySelector?.("[data-shelf-group-menu]")?.setAttribute?.("aria-expanded", "true");
     const input = menu?.querySelector?.("[data-shelf-group-name-input]");
     input?.focus?.({ preventScroll: true });
     input?.select?.();
@@ -1715,6 +1719,7 @@ window.OD = window.OD || {};
     });
     [...(list.querySelectorAll(".conv") || [])].forEach(el => {
       el.classList.toggle("is-shelf-selected", state.shelfSelecting && isConversationPicked(el.dataset.id));
+      if (state.shelfSelecting) el.setAttribute?.("aria-checked", String(isConversationPicked(el.dataset.id)));
     });
     const markHeading = (el, items) => {
       const picks = [...items.sources.map(isShelfSelected), ...items.conversations.map(isConversationPicked)];
@@ -2026,7 +2031,7 @@ window.OD = window.OD || {};
         ${shelfCheckMarkup(picked, name)}
         <span class="source-summary-label" title="${esc(name === source.label ? name : `${name} · ${source.label}`)}">${esc(name)}</span>
         <span class="source-count">${conversations.length}</span>
-        <button class="source-menu-button" type="button" data-source-menu="${esc(source.id)}" title="${esc(t("source.menuTitle"))}" aria-haspopup="true" aria-label="${esc(t("source.menuAria", { label: name }))}">···</button>
+        <button class="source-menu-button" type="button" data-source-menu="${esc(source.id)}" title="${esc(t("source.menuTitle"))}" aria-haspopup="true" aria-expanded="false" aria-label="${esc(t("source.menuAria", { label: name }))}">···</button>
       </summary>
       ${sourceRowMenuMarkup(source, conversations.length)}
       ${children}
@@ -2043,7 +2048,7 @@ window.OD = window.OD || {};
         ${shelfCheckMarkup(false, group.name)}
         <span class="shelf-group-label">${esc(group.name)}</span>
         <span class="source-count">${conversationCount}</span>
-        <button class="source-menu-button" type="button" data-shelf-group-menu="${esc(group.id)}" title="${esc(t("shelf.groupMenuTitle"))}" aria-haspopup="true" aria-label="${esc(t("shelf.groupMenuAria", { group: group.name }))}">···</button>
+        <button class="source-menu-button" type="button" data-shelf-group-menu="${esc(group.id)}" title="${esc(t("shelf.groupMenuTitle"))}" aria-haspopup="true" aria-expanded="false" aria-label="${esc(t("shelf.groupMenuAria", { group: group.name }))}">···</button>
       </summary>
       <div class="shelf-group-menu" hidden>
         <label class="source-row-field">
@@ -2098,6 +2103,7 @@ window.OD = window.OD || {};
       quiet(event);
       const menu = button.closest?.(".shelf-group")?.querySelector?.(".shelf-group-menu");
       if (menu) menu.hidden = !menu.hidden;
+      button.setAttribute?.("aria-expanded", String(menu?.hidden === false));
     }));
     each("[data-shelf-group-name-save]", button => button.addEventListener("click", event => {
       quiet(event);
@@ -2187,7 +2193,7 @@ window.OD = window.OD || {};
       const title = editing
         ? `<input class="bookmark-rename" data-bookmark-rename="${esc(bookmark.id)}" value="${esc(bookmark.label)}" placeholder="${esc(bookmark.conversationTitle)}" aria-label="${esc(t("bookmark.renameAria"))}">`
         : `<div class="bookmark-title">${esc(OD.bookmarks.displayTitle(bookmark))}</div>`;
-      return `<div class="bookmark${missing ? " missing" : ""}" data-bookmark-id="${esc(bookmark.id)}">
+      return `<div class="bookmark${missing ? " missing" : ""}" data-bookmark-id="${esc(bookmark.id)}" tabindex="0">
         <div class="bookmark-head">
           ${title}
           <span class="bookmark-actions">
@@ -2374,7 +2380,7 @@ window.OD = window.OD || {};
       const excerpt = annotation.selectedText.length > 46
         ? `${annotation.selectedText.slice(0, 46)}…`
         : annotation.selectedText;
-      return `<div class="annotation-item${missing ? " missing" : ""}" data-annotation-item="${esc(annotation.id)}">
+      return `<div class="annotation-item${missing ? " missing" : ""}" data-annotation-item="${esc(annotation.id)}" tabindex="0">
         <div class="bookmark-head">
           <span class="annotation-dot hl-${esc(annotation.color)}" aria-hidden="true"></span>
           <div class="bookmark-title">${esc(excerpt)}</div>
@@ -2430,7 +2436,7 @@ window.OD = window.OD || {};
       const title = conversation ? displayConversationTitle(conversation) : entry.conversationId;
       const finished = OD.readingProgress.isFinished(entry);
       const label = finished ? t("progress.finished") : (entry.percent > 0 ? t("progress.readTo", { percent: entry.percent }) : t("progress.justStarted"));
-      return `<div class="recent-item${missing ? " missing" : ""}" data-recent-id="${esc(entry.conversationId)}">
+      return `<div class="recent-item${missing ? " missing" : ""}" data-recent-id="${esc(entry.conversationId)}" role="link" tabindex="0">
         <div class="bookmark-head">
           <div class="bookmark-title">${esc(title)}</div>
           <span class="recent-progress${finished ? " finished" : ""}">${esc(label)}</span>
@@ -2865,7 +2871,7 @@ window.OD = window.OD || {};
     };
     results.innerHTML = [
       truncated ? `<div class="bookmarks-empty">${esc(t("search.truncated", { limit: OD.messageSearch.DEFAULT_LIMIT }))}</div>` : "",
-      ...hits.map(hit => `<div class="search-hit" data-search-conversation="${esc(hit.conversationId)}" data-search-message="${esc(hit.messageId)}">
+      ...hits.map(hit => `<div class="search-hit" data-search-conversation="${esc(hit.conversationId)}" data-search-message="${esc(hit.messageId)}" role="link" tabindex="0">
         <div class="bookmark-meta">${esc(hitLabel(hit))}</div>
         <div class="search-snippet">${hit.before ? "…" : ""}${esc(hit.before)}<b>${esc(hit.match)}</b>${esc(hit.after)}…</div>
       </div>`)
@@ -3023,6 +3029,9 @@ window.OD = window.OD || {};
     };
     let rows = OD.sourceShelf.arrange(state.sourceShelf, visibleSources);
     if (groupFilter) rows = rows.filter(row => row.type === "group" && row.group.id === groupFilter);
+    // Re-rendering replaces every row; a row that held focus gets it back
+    // below, so opening a conversation from the keyboard does not drop it.
+    const focusedRowId = document.activeElement?.closest?.("#conversationList .conv")?.dataset?.id;
     $("conversationList").innerHTML = rows.map(row => {
       if (row.type === "source") return sourceRow(row.source).html;
       // Hand-picked conversations first, then whole sources, in that order
@@ -3045,6 +3054,9 @@ window.OD = window.OD || {};
         else openConversation(el.dataset.id);
       });
     });
+    if (focusedRowId != null) {
+      [...document.querySelectorAll(".conv")].find(el => el.dataset.id === focusedRowId)?.focus?.({ preventScroll: true });
+    }
     [...document.querySelectorAll("#conversationList details.shelf-group, #conversationList details.source-group, #conversationList details.character-group")].forEach(el => {
       el.addEventListener("toggle", () => {
         if (state.searchForcedOpen) return;
@@ -3071,6 +3083,7 @@ window.OD = window.OD || {};
         const group = button.closest?.(".source-group");
         const menu = group?.querySelector?.(".source-row-menu");
         if (menu) menu.hidden = !menu.hidden;
+        button.setAttribute?.("aria-expanded", String(menu?.hidden === false));
       });
     });
 
@@ -3807,14 +3820,15 @@ window.OD = window.OD || {};
       );
     }
     const text = await file.text();
-    // JSON Lines (a SillyTavern chat) reads as the array of its lines.
-    const data = /\.jsonl$/i.test(file.name)
-      ? OD.sillyTavern.parseLines(text).lines
-      : JSON.parse(text.replace(/^\uFEFF/, ""));
+    // JSON Lines (a SillyTavern chat) reads as the array of its lines; damaged
+    // lines are counted and said, as the folder import already does.
+    const lines = /\.jsonl$/i.test(file.name) ? OD.sillyTavern.parseLines(text) : null;
+    const data = lines ? lines.lines : JSON.parse(text.replace(/^\uFEFF/, ""));
+    const details = lines?.invalid ? `${lines.invalid} 行损坏已跳过` : "";
     const result = requireRecognized(await OD.registry.parseJSON(data));
     /* Adapters may name the source themselves (a personal archive shows its
        own archive name instead of the generic adapter label). */
-    return loadArchive(result.archive, result.archive?.source?.sourceLabel || result.adapter.label, null, "", { ...options, reconnectMode: "file" });
+    return loadArchive(result.archive, result.archive?.source?.sourceLabel || result.adapter.label, null, details, { ...options, reconnectMode: "file" });
   }
 
   /*
@@ -4276,6 +4290,7 @@ window.OD = window.OD || {};
   $("aaDone")?.addEventListener?.("click", () => {
     const panel = $("readerPrefsPanel");
     if (panel) panel.hidden = true;
+    syncPopoverToggles();
     $("readerPrefsToggle")?.focus?.();
   });
   $("resetPrefs")?.addEventListener?.("click", () => {
@@ -4436,20 +4451,27 @@ window.OD = window.OD || {};
     if (!touch) return;
     const dx = touch.clientX - drawerSwipe.x;
     const dy = touch.clientY - drawerSwipe.y;
-    if (Math.abs(dx) >= 80 && Math.abs(dx) > Math.abs(dy)) {
-      $("sidebar").classList.add("closed");
-      syncSidebarBackdrop();
-    }
+    if (Math.abs(dx) >= 80 && Math.abs(dx) > Math.abs(dy)) closeDrawer();
   }, { passive: true });
 
+  /* Each toolbar popover's button says whether its panel is open; every
+     path that opens or closes one of them ends by calling this. */
+  function syncPopoverToggles() {
+    const toggles = { readerPrefsPanel: "readerPrefsToggle", readerMoreMenu: "readerMoreToggle", exportMenu: "exportToggle", tagEditor: "tagToggle" };
+    for (const [panelId, toggleId] of Object.entries(toggles)) {
+      $(toggleId)?.setAttribute?.("aria-expanded", String($(panelId)?.hidden === false));
+    }
+  }
   function closeMoreMenu() {
     const menu = $("readerMoreMenu");
     if (menu) menu.hidden = true;
+    syncPopoverToggles();
   }
   $("readerMoreToggle")?.addEventListener?.("click", event => {
     event.stopPropagation?.();
     const menu = $("readerMoreMenu");
     if (menu) menu.hidden = !menu.hidden;
+    syncPopoverToggles();
     setToolbarHidden(false);
   });
   $("toTop").addEventListener("click", () => {
@@ -4471,30 +4493,44 @@ window.OD = window.OD || {};
     return window.matchMedia?.("(max-width: 760px)")?.matches === true;
   }
 
+  /* Every change to the drawer's closed state ends here, so ☰ always says
+     whether the sidebar is showing. */
   function syncSidebarBackdrop() {
+    $("sidebarToggle")?.setAttribute?.("aria-expanded", String(!$("sidebar").classList.contains("closed")));
     const backdrop = $("sidebarBackdrop");
     if (!backdrop) return;
     backdrop.hidden = !isNarrowScreen() || $("sidebar").classList.contains("closed");
   }
 
-  function closeSidebarOnNarrow() {
-    if (!isNarrowScreen()) return;
-    $("sidebar").classList.add("closed");
+  /* A closed drawer is invisible to the keyboard too, so focus that was
+     inside it — or that a re-render inside it just dropped to the page —
+     goes back to ☰. */
+  function closeDrawer() {
+    const sidebar = $("sidebar");
+    const active = document.activeElement;
+    const focusWasInside = (active != null && active === document.body) || sidebar.contains?.(active) === true;
+    sidebar.classList.add("closed");
     syncSidebarBackdrop();
+    if (focusWasInside) $("sidebarToggle")?.focus?.({ preventScroll: true });
   }
 
-  $("sidebarToggle").addEventListener("click", () => {
+  function closeSidebarOnNarrow() {
+    if (!isNarrowScreen()) return;
+    closeDrawer();
+  }
+
+  $("sidebarToggle").addEventListener("click", event => {
+    const opening = $("sidebar").classList.contains("closed");
     $("sidebar").classList.toggle("closed");
     syncSidebarBackdrop();
+    // Over the page, the drawer takes keyboard focus with it, so Tab moves
+    // through the sidebar instead of the text hidden behind the backdrop.
+    // Only for a keyboard press (a click with no pointer, detail 0): a tap or
+    // a mouse click leaves focus, and the look, exactly as it was.
+    if (opening && isNarrowScreen() && event?.detail === 0) $("sidebarClose")?.focus?.({ preventScroll: true });
   });
-  $("sidebarBackdrop")?.addEventListener?.("click", () => {
-    $("sidebar").classList.add("closed");
-    syncSidebarBackdrop();
-  });
-  $("sidebarClose")?.addEventListener?.("click", () => {
-    $("sidebar").classList.add("closed");
-    syncSidebarBackdrop();
-  });
+  $("sidebarBackdrop")?.addEventListener?.("click", () => closeDrawer());
+  $("sidebarClose")?.addEventListener?.("click", () => closeDrawer());
   // Crossing the width breakpoint mid-session must never strand the drawer:
   // entering narrow closes it (☰ would be buried underneath), and leaving
   // narrow retires the backdrop. Both matchMedia change and window resize
@@ -4554,6 +4590,24 @@ window.OD = window.OD || {};
     event.stopPropagation?.();
     syncLibraryMenus({ add: $("sourceAddMenu")?.hidden !== false });
   });
+  /* Rows that open on click answer Enter and Space too, but only when the row
+     itself has focus: a key pressed on a button or input inside it is that
+     control's own. The click it fires runs the row's usual handler. */
+  for (const [listId, rowSelector] of [
+    ["conversationList", ".conv"],
+    ["recentList", ".recent-item"],
+    ["bookmarksList", ".bookmark"],
+    ["annotationsList", ".annotation-item"],
+    ["searchResults", ".search-hit"]
+  ]) {
+    $(listId)?.addEventListener?.("keydown", event => {
+      if ((event.key !== "Enter" && event.key !== " ") || composing(event)) return;
+      const row = event.target;
+      if (row?.matches?.(rowSelector) !== true) return;
+      event.preventDefault?.();
+      row.click?.();
+    });
+  }
   $("sourceManageToggle")?.addEventListener?.("click", event => {
     event.stopPropagation?.();
     renderSourceManageList();
@@ -4564,6 +4618,7 @@ window.OD = window.OD || {};
   $("readerPrefsToggle").addEventListener("click", event => {
     event.stopPropagation?.();
     $("readerPrefsPanel").hidden = !$("readerPrefsPanel").hidden;
+    syncPopoverToggles();
     // The background numbers are read off the viewport, which may have moved
     // while the panel was shut.
     if (!$("readerPrefsPanel").hidden) renderBackgroundControls();
@@ -4608,12 +4663,14 @@ window.OD = window.OD || {};
     if (moreMenu && !moreMenu.hidden && !event?.target?.closest?.("#readerMoreMenu, #readerMoreToggle")) {
       moreMenu.hidden = true;
     }
+    syncPopoverToggles();
   });
   $("exportMenu").hidden = true;
   $("exportToggle").addEventListener("click", event => {
     event.stopPropagation?.();
     closeMoreMenu();
     $("exportMenu").hidden = !$("exportMenu").hidden;
+    syncPopoverToggles();
   });
   $("exportCurrentMd").addEventListener("click", () => exportAs("current-markdown"));
   $("exportCurrentJson").addEventListener("click", () => exportAs("current-json"));
@@ -4623,12 +4680,14 @@ window.OD = window.OD || {};
   $("exportCurrentHtml").addEventListener("click", () => exportAs("current-html"));
   $("exportListHtml").addEventListener("click", () => exportAs("list-html"));
   $("tagEditor").hidden = true;
+  syncPopoverToggles();
   $("favoriteToggle").addEventListener("click", () => toggleFavorite());
   $("tagToggle").addEventListener("click", event => {
     event.stopPropagation?.();
     closeMoreMenu();
     const editor = $("tagEditor");
     editor.hidden = !editor.hidden;
+    syncPopoverToggles();
     if (!editor.hidden) {
       renderTagEditor();
       $("tagInput")?.focus?.();
@@ -5041,7 +5100,19 @@ window.OD = window.OD || {};
         const panel = $(id);
         if (panel && !panel.hidden) {
           panel.hidden = true;
+          syncPopoverToggles();
           $(FOCUS_RETURN[id])?.focus?.();
+          return;
+        }
+      }
+      // The library pane's own menus fold the same way, back to their buttons
+      // (管理 opens from inside ＋, so it returns to ＋) — while the sidebar
+      // is showing; a menu left open in a closed drawer is not on screen.
+      const LIBRARY_MENU_RETURN = { filterMenu: "filterMenuToggle", sourceAddMenu: "sourceAddToggle", sourceManagePanel: "sourceAddToggle" };
+      for (const [id, toggleId] of Object.entries(LIBRARY_MENU_RETURN)) {
+        if (!$("sidebar").classList.contains("closed") && $(id)?.hidden === false) {
+          syncLibraryMenus({});
+          $(toggleId)?.focus?.();
           return;
         }
       }

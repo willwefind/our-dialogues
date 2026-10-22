@@ -2262,3 +2262,258 @@ test("a bare calendar date belongs to that day and year in every time zone", asy
   // New Year's Day read as UTC midnight was still 2025 west of London.
   assert.doesNotMatch(elements.get("conversationList").innerHTML, /year-heading/);
 });
+
+/* ── Keyboard and screen-reader reach (reader sweep) ── */
+
+// The Esc handler walks every transient layer first; the fake elements start
+// visible, so tests that reach the later branches shut the earlier ones.
+function shutTransientLayers(elements) {
+  for (const id of ["memorialNameEditor", "memorialDateEditor", "memorialMenu", "companionPicker",
+    "annotationEditor", "readerMoreMenu", "exportMenu", "tagEditor", "readerPrefsPanel",
+    "filterMenu", "sourceAddMenu", "sourceManagePanel"]) elements.get(id).hidden = true;
+}
+
+function focusSpy(elements, ids) {
+  const focused = [];
+  for (const id of ids) elements.get(id).focus = () => focused.push(id);
+  return focused;
+}
+
+test("catalog, history, and search rows are in the Tab order with the right roles", async () => {
+  const { runtime, elements } = await loadAppRuntime("asc");
+  runtime.OD.app.loadArchive({
+    conversations: [{ id: "alpha", title: "第一段", createdAt: "2025-01-01T00:00:00.000Z",
+      messages: [{ id: "alpha-1", role: "assistant", content: "重点的一句话" }] }]
+  }, "Rows");
+  runtime.OD.app.openConversation("alpha");
+  runtime.OD.app.addBookmark();
+  runtime.OD.app.addAnnotation({ messageId: "alpha-1", selectedText: "重点", color: "green" });
+  elements.get("searchQuery").value = "重点";
+  runtime.OD.app.setSearchScope("library");
+  runtime.OD.app.performSearch();
+
+  assert.match(elements.get("conversationList").innerHTML, /class="conv[^"]*" data-id="alpha" draggable="true" tabindex="0" role="link"/);
+  assert.match(elements.get("recentList").innerHTML, /class="recent-item" data-recent-id="alpha" role="link" tabindex="0"/);
+  assert.match(elements.get("searchResults").innerHTML, /class="search-hit"[^>]* role="link" tabindex="0"/);
+  // Rows that hold their own buttons are focusable but not links.
+  assert.match(elements.get("bookmarksList").innerHTML, /class="bookmark" data-bookmark-id="[^"]+" tabindex="0">/);
+  assert.match(elements.get("annotationsList").innerHTML, /class="annotation-item" data-annotation-item="[^"]+" tabindex="0">/);
+
+  runtime.OD.app.setShelfSelecting(true);
+  assert.match(elements.get("conversationList").innerHTML, /data-id="alpha" draggable="true" tabindex="0" role="checkbox" aria-checked="false"/,
+    "in 整理 a row picks, so it reads as a checkbox");
+  runtime.OD.app.setShelfSelecting(false);
+  assert.match(elements.get("conversationList").innerHTML, /data-id="alpha" draggable="true" tabindex="0" role="link"/);
+});
+
+test("Enter and Space on a focused row open it, never on a control inside the row", async () => {
+  const { elements } = await loadAppRuntime("asc");
+  const lists = [["conversationList", ".conv"], ["recentList", ".recent-item"], ["bookmarksList", ".bookmark"],
+    ["annotationsList", ".annotation-item"], ["searchResults", ".search-hit"]];
+  for (const [listId, selector] of lists) {
+    let clicks = 0;
+    let prevented = 0;
+    const row = { matches: candidate => candidate === selector, click() { clicks++; } };
+    const nested = { matches: () => false, click() { clicks += 100; } };
+    const press = (target, details) => elements.get(listId).dispatch("keydown", target, { preventDefault() { prevented++; }, ...details });
+
+    press(row, { key: "Enter" });
+    press(row, { key: " " });
+    assert.equal(clicks, 2, `${listId}: Enter and Space open the row`);
+    assert.equal(prevented, 2, `${listId}: Space does not also scroll the sidebar`);
+    press(nested, { key: "Enter" });
+    press(nested, { key: " " });
+    press(row, { key: "a" });
+    press(row, { key: "Enter", isComposing: true });
+    assert.equal(clicks, 2, `${listId}: keys on a nested control, other keys, and IME Enter are left alone`);
+  }
+});
+
+test("☰ says whether the drawer is open, and the drawer takes focus in and hands it back", async () => {
+  const mediaQuery = { matches: true, addEventListener() {} };
+  const { runtime, elements } = await loadAppRuntime("asc", { matchMedia: () => mediaQuery });
+  const sidebar = elements.get("sidebar");
+  const toggle = elements.get("sidebarToggle");
+  const focused = focusSpy(elements, ["sidebarClose", "sidebarToggle"]);
+  assert.equal(sidebar.classList.contains("closed"), true);
+  assert.equal(toggle.getAttribute("aria-expanded"), "false");
+
+  // A pointer click (detail ≥ 1) opens the drawer and leaves focus alone…
+  toggle.dispatch("click", toggle, { detail: 1 });
+  assert.equal(toggle.getAttribute("aria-expanded"), "true");
+  assert.deepEqual(focused, []);
+  elements.get("sidebarBackdrop").click();
+  // …a keyboard press (detail 0) takes focus into it.
+  toggle.dispatch("click", toggle, { detail: 0 });
+  assert.equal(toggle.getAttribute("aria-expanded"), "true");
+  assert.deepEqual(focused, ["sidebarClose"], "opening from the keyboard on a narrow screen moves focus into the drawer");
+
+  // Focus inside the drawer goes back to ☰ when the drawer shuts.
+  runtime.document.activeElement = elements.get("sidebarClose");
+  sidebar.contains = element => element === elements.get("sidebarClose");
+  elements.get("sidebarClose").click();
+  assert.equal(sidebar.classList.contains("closed"), true);
+  assert.equal(toggle.getAttribute("aria-expanded"), "false");
+  assert.deepEqual(focused, ["sidebarClose", "sidebarToggle"]);
+
+  // A backdrop click while focus is out on the page leaves focus where it was.
+  toggle.click();
+  runtime.document.activeElement = { tagName: "MAIN" };
+  elements.get("sidebarBackdrop").click();
+  assert.equal(toggle.getAttribute("aria-expanded"), "false");
+  assert.deepEqual(focused, ["sidebarClose", "sidebarToggle"]);
+
+  // Focus a re-render inside the drawer dropped to the page also comes back to ☰.
+  toggle.click();
+  runtime.document.activeElement = runtime.document.body;
+  elements.get("sidebarBackdrop").click();
+  assert.deepEqual(focused, ["sidebarClose", "sidebarToggle", "sidebarToggle"]);
+});
+
+test("a catalog row that had focus keeps it when the catalog re-renders", async () => {
+  const { runtime } = await loadAppRuntime("asc");
+  const focusedIds = [];
+  const freshRow = id => {
+    const row = fakeElement("");
+    row.dataset.id = id;
+    row.focus = () => focusedIds.push(id);
+    return row;
+  };
+  const listQuery = runtime.document.querySelectorAll;
+  runtime.document.querySelectorAll = selector =>
+    (selector === ".conv" ? [freshRow("alpha"), freshRow("beta")] : listQuery(selector));
+  const one = id => ({ id, title: id, createdAt: "2025-01-01T00:00:00.000Z", messages: [{ id: `${id}-1`, role: "assistant", content: "正文" }] });
+  runtime.OD.app.loadArchive({ conversations: [one("alpha"), one("beta")] }, "Focus");
+  assert.deepEqual(focusedIds, [], "nothing is focused that was not focused before");
+
+  // Opening beta from its focused row re-renders the list under it.
+  runtime.document.activeElement = { closest: selector => (selector === "#conversationList .conv" ? { dataset: { id: "beta" } } : null) };
+  runtime.OD.app.openConversation("beta");
+  assert.deepEqual(focusedIds, ["beta"]);
+});
+
+test("on a wide screen ☰ still reports the sidebar's state but leaves focus alone", async () => {
+  const { elements } = await loadAppRuntime("asc");
+  const toggle = elements.get("sidebarToggle");
+  const focused = focusSpy(elements, ["sidebarClose"]);
+  assert.equal(toggle.getAttribute("aria-expanded"), "true", "desktop starts with the sidebar showing");
+  toggle.dispatch("click", toggle, { detail: 0 });
+  assert.equal(toggle.getAttribute("aria-expanded"), "false");
+  toggle.dispatch("click", toggle, { detail: 0 });
+  assert.equal(toggle.getAttribute("aria-expanded"), "true");
+  assert.deepEqual(focused, [], "the sidebar sits beside the page here, so focus stays on ☰");
+});
+
+test("toolbar popover buttons report open and closed through every way out", async () => {
+  const { runtime, elements, dispatchDocument } = await loadAppRuntime("asc");
+  runtime.OD.app.loadArchive({
+    conversations: [{ id: "only", title: "对话", messages: [{ id: "m1", role: "assistant", content: "正文" }] }]
+  }, "Popovers");
+  runtime.OD.app.openConversation("only");
+  shutTransientLayers(elements);
+  const expanded = id => elements.get(id).getAttribute("aria-expanded");
+  const outside = { closest: () => null };
+  const escape = () => dispatchDocument("keydown", { tagName: "MAIN" }, { key: "Escape", preventDefault() {} });
+  // The page ships every panel hidden; the fakes were shut by hand above, so
+  // let one ordinary click bring the buttons in step first.
+  dispatchDocument("click", outside);
+
+  for (const id of ["readerPrefsToggle", "readerMoreToggle", "exportToggle", "tagToggle"]) {
+    assert.equal(expanded(id), "false", `${id} starts closed`);
+  }
+
+  elements.get("readerPrefsToggle").click();
+  assert.equal(expanded("readerPrefsToggle"), "true");
+  dispatchDocument("click", outside);
+  assert.equal(elements.get("readerPrefsPanel").hidden, true);
+  assert.equal(expanded("readerPrefsToggle"), "false", "an outside click closes it and says so");
+
+  elements.get("readerPrefsToggle").click();
+  elements.get("aaDone").click();
+  assert.equal(expanded("readerPrefsToggle"), "false", "完成 closes it and says so");
+
+  elements.get("readerMoreToggle").click();
+  assert.equal(expanded("readerMoreToggle"), "true");
+  elements.get("toTop").click();
+  assert.equal(expanded("readerMoreToggle"), "false", "a menu action closes the menu and says so");
+
+  elements.get("exportToggle").click();
+  assert.equal(expanded("exportToggle"), "true");
+  escape();
+  assert.equal(elements.get("exportMenu").hidden, true);
+  assert.equal(expanded("exportToggle"), "false", "Esc closes it and says so");
+
+  elements.get("tagToggle").click();
+  assert.equal(expanded("tagToggle"), "true");
+  elements.get("tagToggle").click();
+  assert.equal(expanded("tagToggle"), "false");
+});
+
+test("Esc folds the library pane's own menus back to their buttons", async () => {
+  const { elements, dispatchDocument } = await loadAppRuntime("asc");
+  shutTransientLayers(elements);
+  const focused = focusSpy(elements, ["filterMenuToggle", "sourceAddToggle", "sidebarToggle"]);
+  const escape = () => dispatchDocument("keydown", { tagName: "MAIN" }, { key: "Escape", preventDefault() {} });
+
+  elements.get("filterMenuToggle").click();
+  assert.equal(elements.get("filterMenu").hidden, false);
+  escape();
+  assert.equal(elements.get("filterMenu").hidden, true);
+  assert.equal(elements.get("filterMenuToggle").getAttribute("aria-pressed"), "false");
+  assert.deepEqual(focused, ["filterMenuToggle"]);
+
+  elements.get("sourceAddToggle").click();
+  escape();
+  assert.equal(elements.get("sourceAddMenu").hidden, true);
+  elements.get("sourceManageToggle").click();
+  assert.equal(elements.get("sourceManagePanel").hidden, false);
+  escape();
+  assert.equal(elements.get("sourceManagePanel").hidden, true);
+  assert.deepEqual(focused, ["filterMenuToggle", "sourceAddToggle", "sourceAddToggle"], "管理 returns to ＋, which opened it");
+
+  // A menu left open inside a closed sidebar is not on screen; Esc is not spent on it.
+  elements.get("filterMenuToggle").click();
+  elements.get("sidebar").classList.add("closed");
+  escape();
+  assert.equal(elements.get("filterMenu").hidden, false);
+  assert.deepEqual(focused, ["filterMenuToggle", "sourceAddToggle", "sourceAddToggle"]);
+});
+
+test("a source's ··· button says whether its menu is open", async () => {
+  const { runtime, elements } = await loadAppRuntime("asc");
+  const menu = fakeElement("menu");
+  menu.hidden = true;
+  const button = fakeElement("sourceMenuButton");
+  button.closest = selector => (selector === ".source-group" ? { querySelector: () => menu } : null);
+  const listQuery = runtime.document.querySelectorAll;
+  runtime.document.querySelectorAll = selector =>
+    (selector === "#conversationList [data-source-menu]" ? [button] : listQuery(selector));
+  runtime.OD.app.loadArchive({
+    conversations: [{ id: "only", title: "对话", messages: [{ id: "m1", role: "assistant", content: "正文" }] }]
+  }, "Menus");
+  assert.match(elements.get("conversationList").innerHTML, /data-source-menu="[^"]+"[^>]* aria-haspopup="true" aria-expanded="false"/);
+
+  const quiet = { preventDefault() {}, stopPropagation() {} };
+  button.dispatch("click", button, quiet);
+  assert.equal(menu.hidden, false);
+  assert.equal(button.getAttribute("aria-expanded"), "true");
+  button.dispatch("click", button, quiet);
+  assert.equal(menu.hidden, true);
+  assert.equal(button.getAttribute("aria-expanded"), "false");
+});
+
+test("a single SillyTavern chat with damaged lines says how many it skipped", async () => {
+  const { runtime, elements } = await loadAppRuntime("asc");
+  vm.runInContext(await readFile(path.join(repositoryRoot, "src/adapters/sillytavern.js"), "utf8"), runtime, { filename: "src/adapters/sillytavern.js" });
+  runtime.OD.registry = {
+    async parseJSON(lines) {
+      return { archive: { conversations: [{ id: "st", title: "ST", messages: lines.map((line, i) => ({ id: `l${i}`, role: "assistant", content: String(line.mes) })) }] }, adapter: { label: "SillyTavern" } };
+    }
+  };
+  const chat = ['{"mes":"Synthetic one"}', '{"mes":"Synthetic tw', '{"mes":"Synthetic three"}'].join("\n");
+  const input = elements.get("fileInput");
+  input.files = [new File([chat], "synthetic.jsonl")];
+  await input.dispatch("change");
+  assert.equal(runtime.OD.app.getState().archive.conversations[0].messages.length, 2);
+  assert.match(elements.get("status").textContent, /1 行损坏已跳过/);
+});

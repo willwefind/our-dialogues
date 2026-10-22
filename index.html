@@ -79,7 +79,7 @@
               <small data-i18n="source.pickFolderHint">推荐 · 可在浏览器允许时记住文件夹权限</small>
             </button>
             <label class="pick pick-folder">
-              <input id="folderInput" type="file" webkitdirectory directory multiple hidden>
+              <input id="folderInput" class="od-file-input" type="file" webkitdirectory directory multiple>
               <span data-i18n="source.pickFolderCompat">选择来源文件夹（兼容添加）</span>
               <small data-i18n="source.pickFolderCompatHint">ChatGPT 官方 Export · 多个 Mufy ZIP · SillyTavern</small>
             </label>
@@ -87,7 +87,7 @@
             <div class="pick-divider"><span data-i18n="source.or">或</span></div>
 
             <label class="pick pick-secondary">
-              <input id="fileInput" type="file" accept=".json,.jsonl,.zip,application/json,application/zip" multiple hidden>
+              <input id="fileInput" class="od-file-input" type="file" accept=".json,.jsonl,.zip,application/json,application/zip" multiple>
               <span data-i18n="source.pickFiles">选择 JSON / ZIP</span>
             </label>
           </div>
@@ -95,11 +95,11 @@
           <div class="sidecar-picks" aria-label="可选的本地语音档案" data-i18n-aria-label="voice.sidecarAria">
             <div class="sidecar-title" data-i18n="voice.sidecarTitle">语音档案（可选）· 本地音频与映射</div>
             <label class="sidecar-pick" title="选整个 VoiceArchive 文件夹；里面的 SolVoice 和 CielVoice 映射会一起被发现" data-i18n-title="voice.archiveTitle">
-              <input id="voiceArchiveInput" type="file" webkitdirectory directory multiple hidden>
+              <input id="voiceArchiveInput" class="od-file-input" type="file" webkitdirectory directory multiple>
               <span data-i18n="voice.pickArchive">选择 VoiceArchive 文件夹</span>
             </label>
             <label class="sidecar-pick" title="也可以单独选一份映射 JSON（chatgpt-solvoice / claude-cielvoice）" data-i18n-title="voice.pickMappingTitle">
-              <input id="voiceMappingInput" type="file" accept=".json,application/json" hidden>
+              <input id="voiceMappingInput" class="od-file-input" type="file" accept=".json,application/json">
               <span data-i18n="voice.pickMapping">单选映射 JSON</span>
             </label>
             <button id="clearSolVoice" class="sidecar-clear" type="button" data-i18n="voice.clear">清除语音连接</button>
@@ -161,17 +161,17 @@
   <!-- tabindex=-1：只许脚本把焦点放回来（拾句关面板后收回焦点用），不进 Tab 序 -->
   <main id="main" tabindex="-1">
     <div id="readerToolbar" class="toolbar">
-      <button id="sidebarToggle" class="ghost icon-button" title="显示/隐藏侧栏" data-i18n-title="reader.sidebarToggleTitle">☰</button>
+      <button id="sidebarToggle" class="ghost icon-button" title="显示/隐藏侧栏" aria-label="显示/隐藏侧栏" aria-expanded="true" data-i18n-title="reader.sidebarToggleTitle" data-i18n-aria-label="reader.sidebarToggleTitle">☰</button>
       <div id="currentTitle" class="current-title">尚未载入档案</div>
       <button id="bookmarkAdd" class="ghost icon-button" type="button" title="把当前读到的位置存为书签；同一位置再存会刷新它" aria-label="存书签" data-i18n-title="reader.bookmarkTitle" data-i18n-aria-label="reader.bookmark">🔖</button>
-      <button id="readerPrefsToggle" class="ghost icon-button" type="button" title="阅读设置：主题、印刷风格、排版、字体、显示开关" aria-haspopup="true" data-i18n-title="settings.toggleTitle">Aa</button>
-      <button id="readerMoreToggle" class="ghost icon-button" type="button" title="更多：收藏、标签、导出、跳转、语音状态" aria-haspopup="true" aria-label="更多操作" data-i18n-title="reader.moreTitle" data-i18n-aria-label="reader.more">···</button>
+      <button id="readerPrefsToggle" class="ghost icon-button" type="button" title="阅读设置：主题、印刷风格、排版、字体、显示开关" aria-label="阅读设置" aria-haspopup="true" aria-expanded="false" data-i18n-title="settings.toggleTitle" data-i18n-aria-label="settings.title">Aa</button>
+      <button id="readerMoreToggle" class="ghost icon-button" type="button" title="更多：收藏、标签、导出、跳转、语音状态" aria-haspopup="true" aria-expanded="false" aria-label="更多操作" data-i18n-title="reader.moreTitle" data-i18n-aria-label="reader.more">···</button>
     </div>
 
     <div id="readerMoreMenu" class="reader-prefs-panel reader-more-menu" hidden>
       <button id="favoriteToggle" type="button" title="收藏 / 取消收藏当前对话" aria-pressed="false" data-i18n-title="organize.favoriteTitle">☆ 收藏</button>
-      <button id="tagToggle" type="button" title="给当前对话加标签" aria-haspopup="true" data-i18n="organize.tags" data-i18n-title="organize.tagsTitle">🏷 标签</button>
-      <button id="exportToggle" type="button" title="导出当前对话或当前列表" aria-haspopup="true" data-i18n="export.menu" data-i18n-title="export.menuTitle">⬇ 导出</button>
+      <button id="tagToggle" type="button" title="给当前对话加标签" aria-haspopup="true" aria-expanded="false" data-i18n="organize.tags" data-i18n-title="organize.tagsTitle">🏷 标签</button>
+      <button id="exportToggle" type="button" title="导出当前对话或当前列表" aria-haspopup="true" aria-expanded="false" data-i18n="export.menu" data-i18n-title="export.menuTitle">⬇ 导出</button>
       <div class="more-menu-divider" aria-hidden="true"></div>
       <button id="toTop" type="button" title="回到顶部（Home）" data-i18n="reader.backToTop" data-i18n-title="reader.backToTopTitle">↑ 回到顶部</button>
       <button id="toEnd" type="button" title="到最底部（End）" data-i18n="reader.toEnd" data-i18n-title="reader.toEndTitle">↓ 到最底部</button>
@@ -364,7 +364,7 @@
         <div id="backgroundEmpty" class="bg-empty" data-i18n="background.none">还没有选图片</div>
         <div class="pref-row bg-actions">
           <label class="bg-choose">
-            <input id="backgroundInput" type="file" accept="image/png,image/jpeg,image/webp" hidden>
+            <input id="backgroundInput" class="od-file-input" type="file" accept="image/png,image/jpeg,image/webp">
             <span id="backgroundChooseLabel" data-i18n="background.choose">选择图片</span>
           </label>
           <button id="backgroundRemove" type="button" data-i18n="background.remove">移除</button>
