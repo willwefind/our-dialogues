@@ -150,13 +150,18 @@ window.OD = window.OD || {};
     for (let i = bytes.length - 22; i >= min; i--) {
       if (u32(view, i) === 0x06054b50) { eocd = i; break; }
     }
-    if (eocd < 0) throw new Error("不是可识别的 ZIP，或 ZIP 使用了当前 v0.1 尚未支持的结构。");
+    const unrecognized = () => new Error("不是可识别的 ZIP，或 ZIP 使用了当前 v0.1 尚未支持的结构。");
+    if (eocd < 0) throw unrecognized();
 
     const entriesCount = u16(view, eocd + 10);
     const centralOffset = u32(view, eocd + 16);
     let p = centralOffset;
     const entries = new Map();
+    // A damaged or cut-off file reports itself as unrecognized instead of
+    // failing with a raw "offset is outside the bounds" error.
+    if (centralOffset > eocd) throw unrecognized();
     for (let i = 0; i < entriesCount; i++) {
+      if (p + 46 > bytes.length) throw unrecognized();
       if (u32(view, p) !== 0x02014b50) break;
       const method = u16(view, p + 10);
       const compSize = u32(view, p + 20);
@@ -174,13 +179,22 @@ window.OD = window.OD || {};
       const entry = entries.get(name);
       if (!entry) throw new Error(`ZIP 中找不到 ${name}`);
       const lp = entry.localOffset;
-      if (u32(view, lp) !== 0x04034b50) throw new Error(`ZIP 本地头损坏：${name}`);
+      if (lp + 30 > centralOffset || u32(view, lp) !== 0x04034b50) throw new Error(`ZIP 本地头损坏：${name}`);
       const nameLen = u16(view, lp + 26);
       const extraLen = u16(view, lp + 28);
       const dataStart = lp + 30 + nameLen + extraLen;
+      if (dataStart + entry.compSize > centralOffset) throw new Error(`ZIP 数据损坏：${name}`);
       const compressed = bytes.slice(dataStart, dataStart + entry.compSize);
       if (entry.method === 0) return compressed;
-      if (entry.method === 8) return await inflateRaw(compressed);
+      if (entry.method === 8) {
+        try {
+          return await inflateRaw(compressed);
+        } catch (error) {
+          // A broken deflate stream rejects with an empty TypeError; name the file.
+          if (!("DecompressionStream" in window)) throw error;
+          throw new Error(`ZIP 数据损坏：${name}`);
+        }
+      }
       throw new Error(`ZIP 压缩方式 ${entry.method} 暂不支持：${name}`);
     }
 

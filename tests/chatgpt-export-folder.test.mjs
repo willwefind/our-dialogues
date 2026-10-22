@@ -376,3 +376,21 @@ test("existing JSON and ZIP registry paths remain compatible", async () => {
   assert.equal(zipResult.archive.conversations[0].id, "synthetic-folder-conversation-001");
   assert.equal(zipResult.archive.conversations[1].id, "synthetic-folder-conversation-002");
 });
+
+test("thousands of library files match their exported files in moments, one to one", async () => {
+  const OD = await loadReaderRuntime();
+  const { buildAssetIndex, buildFileCatalog } = OD.chatgptExportFolder._internals;
+  const count = 3000;
+  const catalog = buildFileCatalog(Array.from({ length: count }, (_, i) => new File(["x"], `file-synthetic-${i}.dat`)));
+  const library = Array.from({ length: count }, (_, i) => ({
+    fileId: `file-synthetic-${i}`, libraryFileId: `lib-synthetic-${i}`, fileName: `synthetic-${i}.png`,
+    exportedName: `file-synthetic-${i}.dat`, mimeType: "image/png", size: 1
+  }));
+  const started = Date.now();
+  const { records } = buildAssetIndex(catalog, "", new Set(), [], library);
+  // The old pass over every record took minutes at this size.
+  assert.ok(Date.now() - started < 10000, `took ${Date.now() - started}ms`);
+  assert.equal(records.length, count);
+  assert.ok(records.every(record => record.available && record.metadata.libraryRecords.length === 1));
+  assert.equal(records[1234].originalName, "synthetic-1234.png");
+});

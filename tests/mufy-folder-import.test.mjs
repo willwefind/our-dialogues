@@ -131,3 +131,27 @@ test("a strict ChatGPT folder match prevents Mufy probing and keeps ZIP assets l
   assert.equal(inspection.handler.id, "chatgpt-official-folder");
   assert.equal(zipReads, 0);
 });
+
+test("two overlapping exports of a long chat merge quickly and keep each message once", async () => {
+  const OD = await loadRuntime();
+  const { mergeMufyArchives } = OD.sourceFolder._internals;
+  const count = 3000;
+  const conversation = () => ({
+    id: "synthetic-session",
+    title: "Synthetic",
+    context: { sourceMetadata: { characterId: "character-synthetic", sessionId: "session-synthetic", titleSource: "fallback" } },
+    messages: Array.from({ length: count }, (_, i) => ({
+      id: `d${i}`, role: "assistant", createdAt: null,
+      content: [{ type: "text", text: `Synthetic message ${i}` }], thinking: [],
+      metadata: { original: { dialogsId: `d${i}`, content: `Synthetic message ${i}` } }
+    }))
+  });
+  const later = conversation();
+  later.messages.push({ ...later.messages[5], metadata: { original: { dialogsId: "d5", content: "Synthetic edit" } } });
+  const started = Date.now();
+  const merged = mergeMufyArchives([conversation(), later].map(archive => ({ result: { archive: { conversations: [archive] } } })));
+  assert.ok(Date.now() - started < 10000, `took ${Date.now() - started}ms`);
+  assert.equal(merged.stats.duplicateMessageCount, count);
+  assert.equal(merged.stats.conflictingMessageIdCount, 1, "a changed message under a known id is kept and flagged");
+  assert.equal(merged.archive.conversations[0].messages.length, count + 1);
+});

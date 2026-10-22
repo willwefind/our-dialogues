@@ -118,3 +118,27 @@ test("control characters in a message never make a chapter invalid XML", async (
   assert.equal(escapeXML("done\u001b[0m\u000b\u0000 & <ok>"), "done�[0m�� &amp; &lt;ok&gt;");
   assert.equal(escapeXML("行一\n行二\t缩进\r"), "行一\n行二\t缩进\r", "tab and line breaks are ordinary text");
 });
+
+test("a damaged ZIP is reported as damaged, never as a raw offset error or someone else's bytes", async () => {
+  const runtime = await loadRuntime();
+  const bytes = runtime.OD.zipWriter.createZip([
+    { name: "a.txt", data: "hello" },
+    { name: "b.txt", data: "world" }
+  ], { date: new Date(2026, 7, 22, 12, 0, 0) });
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  let eocd = bytes.length - 22;
+  while (view.getUint32(eocd, true) !== 0x06054b50) eocd -= 1;
+  const central = view.getUint32(eocd + 16, true);
+
+  // The central directory points past the end of the file.
+  const lost = bytes.slice();
+  new DataView(lost.buffer).setUint32(eocd + 16, lost.length + 1000, true);
+  await assert.rejects(runtime.OD.zip.readZip(new runtime.File([lost], "lost.zip")), /不是可识别的 ZIP/);
+
+  // The first entry claims more bytes than it has: they would run into the next file.
+  const greedy = bytes.slice();
+  new DataView(greedy.buffer).setUint32(central + 20, 4000, true);
+  const zip = await runtime.OD.zip.readZip(new runtime.File([greedy], "greedy.zip"));
+  await assert.rejects(zip.readText("a.txt"), /ZIP 数据损坏：a\.txt/);
+  assert.equal(await zip.readText("b.txt"), "world", "the intact entry still reads");
+});

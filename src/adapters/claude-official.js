@@ -49,6 +49,16 @@ OD.adapters = OD.adapters || [];
      The active thread is the parent chain that ends at the newest leaf. */
   function activeBranch(messages) {
     const byUuid = new Map(messages.map(message => [message.uuid, message]));
+    /* With no parent links at all (none present, or none pointing inside the
+       conversation) there is no branching to choose from: every message is
+       part of the one thread, in the order it was written. */
+    if (!messages.some(message => byUuid.has(message.parent_message_uuid))) {
+      const thread = messages
+        .map((message, index) => ({ message, index }))
+        .sort((a, b) => String(a.message.created_at || "").localeCompare(String(b.message.created_at || "")) || a.index - b.index)
+        .map(entry => entry.message);
+      return { thread, branchPoints: 0, alternateMessageCount: 0 };
+    }
     const referencedAsParent = new Set(messages.map(message => message.parent_message_uuid));
     const leaves = messages.filter(message => !referencedAsParent.has(message.uuid));
     if (!leaves.length) return { thread: messages, branchPoints: 0, alternateMessageCount: 0 };
@@ -162,7 +172,9 @@ OD.adapters = OD.adapters || [];
     const name = String(conversation.name || "").trim();
     if (name) return name;
     const summary = String(conversation.summary || "").trim().split("\n").find(line => line.trim());
-    if (summary) return summary.length > 60 ? `${summary.slice(0, 57).trimEnd()}…` : summary;
+    // Counted in characters, so a shortened title never ends in half an emoji.
+    const characters = summary ? Array.from(summary) : [];
+    if (summary) return characters.length > 60 ? `${characters.slice(0, 57).join("").trimEnd()}…` : summary;
     return `Claude conversation ${index + 1}`;
   }
 
