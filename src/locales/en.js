@@ -256,7 +256,6 @@ window.OD = window.OD || {};
   "typography.narrower": "Narrower",
   "typography.wider": "Wider",
   "typography.widthValue": "{px} px",
-  "typography.widthFollowsScreen": "Fits screen",
   "typography.pagingMode": "Reading mode",
   "typography.readingModeAria": "Reading mode",
   "typography.modeScroll": "Scroll",

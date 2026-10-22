@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- On phones, 整理 / Organize no longer lays its bar over the hint at the bottom of the drawer: on a short screen the library pane now scrolls within itself instead of letting the list spill over the status line, and changes nothing on a tall one. The text width control works on tablets and phones too, where it used to rest at 随屏幕: the column is the chosen width or the room inside the usual margins, whichever is less, with the rest as even side margins, from 240px in 10px steps (20px a press). The default still fills the screen, and the desktop sheet is unchanged. Tests 241 → 241 (the fits-screen test became a phone-range test).
+
 ## v0.5.1 — 2026-10-22 · 正文宽度 / the text width slider
 
 - Text width moves freely. Aa → 排版 → 正文宽度 / Text width trades its three steps (narrow / medium / wide) for − / a slider / ＋ with a live readout: dragging previews the column as it moves and saves once on release, back at the message that was on screen, and each press steps 40px. The range is 480–1280px, but the slider ends where this window does — with the sidebar open on a 1440px screen that is about 920px — so no part of it is dead, and steps start from what is shown. Widening past the default lets the sheet come closer to the stage edges (24px instead of 72px a side), which is what lets the extra width appear at all; the default sheet looks exactly as before. Below 1024px the sheet already fills the screen, so the control reads 随屏幕 / Fits screen and rests, keeping the saved width for a larger screen. Tests 238 → 241.
