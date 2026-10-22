@@ -229,3 +229,208 @@ test("unsupported directory-handle cloning falls back to a restorable text libra
   assert.equal(restored.sources[0].directoryHandle, undefined);
   assert.equal(restored.sources[0].conversations[0].title, "Persistent synthetic session");
 });
+
+/* A small in-memory IndexedDB, just enough for the real driver: stores with a
+   keyPath, one index, cursors, and transactions that commit all-or-nothing.
+   failPut(record) makes the transaction holding that put abort, the way a
+   full disk does. */
+function fakeIndexedDB({ failPut = () => false } = {}) {
+  const databases = new Map();
+  const later = fn => setTimeout(fn, 0);
+  const request = () => ({ onsuccess: null, onerror: null, result: undefined });
+  function openConnection(data) {
+    const connection = {
+      closed: false,
+      onversionchange: null,
+      objectStoreNames: { contains: name => data.stores.has(name) },
+      createObjectStore(name, { keyPath }) {
+        const store = { keyPath, indexes: new Map(), rows: new Map() };
+        data.stores.set(name, store);
+        return { createIndex(indexName, indexKeyPath) { store.indexes.set(indexName, indexKeyPath); } };
+      },
+      close() { connection.closed = true; data.connections.delete(connection); },
+      transaction(names) {
+        if (connection.closed) throw new DOMException("The connection is closing.", "InvalidStateError");
+        // Reads see a snapshot; writes are replayed onto the live rows at
+        // commit, so transactions that overlap in time don't undo each other.
+        const staged = new Map([...data.stores].map(([name, store]) => [name, new Map(store.rows)]));
+        const writes = [];
+        const tx = { oncomplete: null, onerror: null, onabort: null, error: null };
+        let failed = null;
+        let open = 0;
+        let finished = false;
+        // Like a real transaction: it stays alive while requests are pending
+        // and commits once the last one has been answered.
+        const maybeCommit = () => later(() => {
+          if (open > 0 || finished) return;
+          finished = true;
+          if (failed) { tx.error = failed; tx.onabort?.(); return; }
+          for (const write of writes) write(data.stores);
+          tx.oncomplete?.();
+        });
+        const settle = request => value => {
+          open += 1;
+          later(() => { request.result = value; request.onsuccess?.(); open -= 1; maybeCommit(); });
+        };
+        tx.objectStore = name => {
+          const store = data.stores.get(name);
+          const rows = staged.get(name);
+          const indexed = (indexName, key) => [...rows.values()].filter(row => row[store.indexes.get(indexName)] === key);
+          return {
+            put(value) {
+              if (failPut(value)) failed = new DOMException("Synthetic full disk", "QuotaExceededError");
+              rows.set(value[store.keyPath], structuredClone(value));
+              writes.push(live => live.get(name).rows.set(value[store.keyPath], structuredClone(value)));
+              const r = request(); settle(r)(value[store.keyPath]); return r;
+            },
+            delete(key) { rows.delete(key); writes.push(live => live.get(name).rows.delete(key)); const r = request(); settle(r)(undefined); return r; },
+            clear() { rows.clear(); writes.push(live => live.get(name).rows.clear()); const r = request(); settle(r)(undefined); return r; },
+            get(key) { const r = request(); settle(r)(structuredClone(rows.get(key))); return r; },
+            getAll() { const r = request(); settle(r)([...rows.values()].map(row => structuredClone(row))); return r; },
+            index(indexName) {
+              return {
+                getAll(key) { const r = request(); settle(r)(indexed(indexName, key).map(row => structuredClone(row))); return r; },
+                openCursor(key) {
+                  const r = request();
+                  const matches = indexed(indexName, key);
+                  let position = 0;
+                  const step = () => {
+                    open += 1;
+                    later(() => {
+                      const row = matches[position++];
+                      r.result = row ? {
+                        value: structuredClone(row),
+                        delete() {
+                          rows.delete(row[store.keyPath]);
+                          writes.push(live => live.get(name).rows.delete(row[store.keyPath]));
+                        },
+                        continue() { step(); }
+                      } : null;
+                      r.onsuccess?.();
+                      open -= 1;
+                      maybeCommit();
+                    });
+                  };
+                  step();
+                  return r;
+                }
+              };
+            }
+          };
+        };
+        maybeCommit();
+        return tx;
+      }
+    };
+    data.connections.add(connection);
+    return connection;
+  }
+  return {
+    databases,
+    open(name, version) {
+      const r = { ...request(), onupgradeneeded: null, onblocked: null };
+      later(() => {
+        if (!databases.has(name)) databases.set(name, { version: 0, stores: new Map(), connections: new Set() });
+        const data = databases.get(name);
+        const oldVersion = data.version;
+        r.result = openConnection(data);
+        if (oldVersion < version) { data.version = version; r.onupgradeneeded?.({ oldVersion }); }
+        r.onsuccess?.();
+      });
+      return r;
+    },
+    deleteDatabase(name) {
+      const r = request();
+      later(() => {
+        const data = databases.get(name);
+        for (const connection of [...(data?.connections || [])]) connection.onversionchange?.();
+        databases.delete(name);
+        r.onsuccess?.();
+      });
+      return r;
+    }
+  };
+}
+
+function syntheticSource(id, count, tag) {
+  return {
+    id,
+    label: id,
+    conversations: Array.from({ length: count }, (_, index) => ({ id: `c${index}`, title: `${tag} ${index}`, messages: [] }))
+  };
+}
+
+test("a re-save that fails halfway keeps the copy that was already saved", async () => {
+  const OD = await loadRuntime();
+  let failing = false;
+  const indexedDB = fakeIndexedDB({ failPut: record => failing && record.conversation?.id === "c30" });
+  const persistence = OD.persistentLibrary.create({ driver: OD.persistentLibrary._internals.createIndexedDBDriver(indexedDB) });
+
+  await persistence.saveSource(syntheticSource("source-safe", 50, "Old"));
+  failing = true;
+  await assert.rejects(persistence.saveSource(syntheticSource("source-safe", 50, "New")), /full disk/);
+  failing = false;
+
+  const restored = await persistence.restore();
+  assert.equal(restored.sources.length, 1, "the source is still there after the failed save");
+  assert.equal(restored.sources[0].conversations.length, 50);
+  assert.ok(restored.sources[0].conversations.every(conversation => conversation.title.startsWith("Old")));
+  assert.equal((await persistence.audit()).conversationRecords, 50, "the partial new rows are tidied away");
+
+  await persistence.saveSource(syntheticSource("source-safe", 3, "Newer"));
+  const resaved = await persistence.restore();
+  assert.equal(resaved.sources[0].conversations.map(conversation => conversation.title).join("|"), "Newer 0|Newer 1|Newer 2");
+  assert.equal((await persistence.audit()).conversationRecords, 3, "a successful save leaves no old rows behind");
+});
+
+test("rows saved before generations existed still restore, and the next save replaces them", async () => {
+  const OD = await loadRuntime();
+  const driver = OD.persistentLibrary._internals.createMemoryDriver({
+    version: 1,
+    sources: [{ id: "source-legacy", label: "Legacy", state: "ready", conversationCount: 1, savedAt: "2026-08-16T00:00:00.000Z" }],
+    conversations: [{
+      key: "source-legacy\u0000one",
+      sourceId: "source-legacy",
+      order: 0,
+      conversation: { id: "one", title: "Legacy record", messages: [] }
+    }]
+  });
+  const persistence = OD.persistentLibrary.create({ driver });
+  assert.equal((await persistence.restore()).sources[0].conversations[0].title, "Legacy record");
+  await persistence.saveSource(syntheticSource("source-legacy", 2, "Fresh"));
+  const restored = await persistence.restore();
+  assert.deepEqual(restored.sources[0].conversations.map(conversation => conversation.title).join("|"), "Fresh 0|Fresh 1");
+  assert.equal(driver.inspect().conversations.length, 2);
+});
+
+test("removing or clearing a source while it is still being saved keeps it removed", async () => {
+  const OD = await loadRuntime();
+  for (const action of ["remove", "clear"]) {
+    const persistence = OD.persistentLibrary.create({
+      driver: OD.persistentLibrary._internals.createIndexedDBDriver(fakeIndexedDB())
+    });
+    await persistence.open();
+    const saving = persistence.saveSource(syntheticSource("source-busy", 100, "Busy"));
+    await new Promise(resolve => setTimeout(resolve, 3));
+    if (action === "remove") await persistence.removeSource("source-busy");
+    else await persistence.clearSources();
+    await saving;
+    assert.equal((await persistence.restore()).sources.length, 0, `${action} wins over the save in flight`);
+    assert.equal((await persistence.audit()).conversationRecords, 0, `${action} leaves no orphaned rows`);
+  }
+});
+
+test("a tab whose library was reset from another tab reconnects instead of failing", async () => {
+  const OD = await loadRuntime();
+  const indexedDB = fakeIndexedDB();
+  const { createIndexedDBDriver } = OD.persistentLibrary._internals;
+  const tabA = OD.persistentLibrary.create({ driver: createIndexedDBDriver(indexedDB) });
+  const tabB = OD.persistentLibrary.create({ driver: createIndexedDBDriver(indexedDB) });
+  await tabA.saveSource(syntheticSource("source-shared", 2, "Shared"));
+  assert.equal((await tabB.restore()).sources.length, 1);
+
+  await tabA.reset();
+  assert.equal((await tabB.restore()).sources.length, 0);
+  await tabB.saveSource(syntheticSource("source-after", 1, "After"));
+  assert.equal((await tabB.restore()).sources[0].id, "source-after");
+});
