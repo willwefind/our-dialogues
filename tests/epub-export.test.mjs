@@ -110,3 +110,11 @@ test("the zip writer produces byte-accurate STORE entries the reader can trust",
   assert.equal(await zip.readText("a.txt"), "hello");
   assert.equal(await zip.readText("dir/中文名.txt"), "内容", "UTF-8 names and bodies survive the round trip");
 });
+
+test("control characters in a message never make a chapter invalid XML", async () => {
+  const runtime = await loadRuntime();
+  const { escapeXML } = runtime.OD.epub._internals;
+  // A stray terminal colour code, a vertical tab and a NUL, as pasted logs carry.
+  assert.equal(escapeXML("done\u001b[0m\u000b\u0000 & <ok>"), "done�[0m�� &amp; &lt;ok&gt;");
+  assert.equal(escapeXML("行一\n行二\t缩进\r"), "行一\n行二\t缩进\r", "tab and line breaks are ordinary text");
+});

@@ -75,3 +75,24 @@ test("blank queries and missing conversations return no hits", async () => {
   assert.equal(search.searchConversation({ id: "c", messages: [] }, "   ").hits.length, 0);
   assert.equal(search.searchLibrary(null, "词").hits.length, 0);
 });
+
+test("snippets stay aligned after letters that lower-case longer, and never split an emoji", async () => {
+  const search = await loadMessageSearch();
+  const conversation = {
+    id: "c1",
+    messages: [
+      { id: "m1", role: "assistant", content: "İstanbul 的猫说喵喵" },
+      { id: "m2", role: "assistant", content: `${"字".repeat(21)}😀关键${"😀".repeat(30)}` }
+    ]
+  };
+  const turkish = search.searchConversation(conversation, "喵喵").hits[0];
+  assert.equal(turkish.match, "喵喵");
+  assert.equal(turkish.before, "İstanbul 的猫说");
+  assert.equal(search.searchConversation(conversation, "STANBUL").hits[0].match, "stanbul");
+
+  const emoji = search.searchConversation(conversation, "关键").hits[0];
+  const lone = /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/;
+  assert.doesNotMatch(emoji.before, lone);
+  assert.doesNotMatch(emoji.after, lone);
+  assert.ok(emoji.before.endsWith("😀"));
+});

@@ -134,3 +134,16 @@ test("production highlighter CSS maps stored colors to the approved assets witho
   assert.match(short, /var\(--hl-full\)/, "short marks compress the single full stroke");
   assert.match(short, /no-repeat/, "the full stroke never repeats");
 });
+
+test("a highlight across a Windows line break finds its text again", async () => {
+  const annotations = await loadAnnotations();
+  // The page shows "\r\n" as one break, so the selection was stored with "\n".
+  const text = "第一行日记\r\n第二行日记";
+  const annotation = annotations.create({
+    conversationId: "c1", messageId: "m1", selectedText: "日记\n第二", contextBefore: "第一行", contextAfter: "行日记"
+  });
+  const position = annotations.locate(text, annotation);
+  assert.deepEqual({ ...position }, { start: 3, end: 9 });
+  assert.equal(text.slice(position.start, position.end), "日记\r\n第二");
+  assert.match(annotations.markupText(text, [annotation]), /<mark[^>]*>日记\r\n第二<\/mark>/);
+});

@@ -90,6 +90,18 @@ test("载荷整体：text/title/source/date 上纸，context 留阅读器侧", a
   });
 });
 
+test("文档标记在阅读器里放在 context.sourceMetadata 上，也认得出来", async () => {
+  const { studio } = await loadShijuEmbed();
+  assert.equal(
+    studio.sourceLine({
+      conversation: { context: { sourceMetadata: { contentKind: "personal-document" } } },
+      message: { role: "other", speaker: "半夏" },
+      source: chatgptSource,
+    }),
+    "半夏",
+    "文档署名只写作者，不加平台尾巴");
+});
+
 test("日期：ISO → 拾句风格；没有时间戳给空，绝不盖今天的章", async () => {
   const { studio } = await loadShijuEmbed();
   // 不带时区的 ISO 按本地时间解析——测试在哪个时区跑都是同一天

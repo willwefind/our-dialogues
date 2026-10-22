@@ -93,9 +93,16 @@ window.OD = window.OD || {};
     return OD.i18n?.currentLocale?.() || "zh-CN";
   }
 
+  /* A bare date ("2014-11-02") is a calendar day, not midnight in London:
+     read it as local midnight so it shows as that day everywhere. */
+  function displayDate(value) {
+    const parts = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(value ?? "").trim());
+    return parts ? new Date(Number(parts[1]), Number(parts[2]) - 1, Number(parts[3])) : new Date(value);
+  }
+
   function fmtDateOnly(value) {
     if (!value) return "";
-    const d = new Date(value);
+    const d = displayDate(value);
     if (Number.isNaN(d.getTime())) return String(value);
     const locale = uiLocaleTag();
     try {
@@ -1409,7 +1416,7 @@ window.OD = window.OD || {};
      last in both directions, 日期不详 lands at the bottom naturally. Pinned
      greetings render before any heading so the pin stays visibly first. */
   function conversationYear(conversation) {
-    const time = Date.parse(conversation?.createdAt ?? "");
+    const time = displayDate(conversation?.createdAt ?? "").getTime();
     return Number.isFinite(time) ? String(new Date(time).getFullYear()) : null;
   }
 
@@ -2647,7 +2654,10 @@ window.OD = window.OD || {};
       setStatus(t("export.emptyList"), true);
       return null;
     }
-    const stamp = new Date().toISOString().slice(0, 10);
+    // Today as the reader's calendar has it, not as UTC does.
+    const today = new Date();
+    const stamp = [today.getFullYear(), today.getMonth() + 1, today.getDate()]
+      .map((part, index) => String(part).padStart(index ? 2 : 4, "0")).join("-");
     const listName = extension =>
       OD.exporter.safeFilename(t("export.listFilename", { stamp, count: state.filtered.length }), extension);
     if (kind === "list-markdown") {

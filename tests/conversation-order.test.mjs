@@ -2250,3 +2250,15 @@ test("a dismissed reconnect picker does not turn the next import into a reconnec
   await input.dispatch("change");
   assert.equal(runtime.OD.app.getState().sources.length, 2, "the chosen file arrives as a new source");
 });
+
+test("a bare calendar date belongs to that day and year in every time zone", async () => {
+  const { runtime, elements } = await loadAppRuntime("asc");
+  runtime.OD.app.loadArchive({
+    conversations: Array.from({ length: 12 }, (_, i) => ({
+      id: `d${i}`, title: `对话 ${i}`, createdAt: i ? `2026-0${(i % 9) + 1}-15` : "2026-01-01",
+      messages: [{ id: `d${i}-1`, role: "assistant", content: "正文" }]
+    }))
+  }, "DateOnly");
+  // New Year's Day read as UTC midnight was still 2025 west of London.
+  assert.doesNotMatch(elements.get("conversationList").innerHTML, /year-heading/);
+});
