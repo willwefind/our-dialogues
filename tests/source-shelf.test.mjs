@@ -68,7 +68,7 @@ test("renaming a group refuses an empty name, and dissolving sends every source 
   assert.equal(shelf.groupOf(state, "source-b").name, "客户");
 
   state = shelf.dissolveGroup(state, groupId);
-  assert.deepEqual(plain(state), { names: {}, groups: [], members: {} });
+  assert.deepEqual(plain(state), { names: {}, groups: [], members: {}, conversations: {} });
 });
 
 test("arrange keeps library order and seats each group where its first source stood", async () => {
@@ -99,9 +99,10 @@ test("normalize drops broken records and memberships that point nowhere", async 
   assert.deepEqual(plain(state), {
     names: { "source-a": "小 C" },
     groups: [{ id: "g1", name: "一" }],
-    members: { "source-a": "g1" }
+    members: { "source-a": "g1" },
+    conversations: {}
   });
-  assert.deepEqual(plain(shelf.normalize("nonsense")), { names: {}, groups: [], members: {} });
+  assert.deepEqual(plain(shelf.normalize("nonsense")), { names: {}, groups: [], members: {}, conversations: {} });
 });
 
 test("several sources move into a group, a new group, or out, in one step", async () => {
@@ -117,6 +118,37 @@ test("several sources move into a group, a new group, or out, in one step", asyn
   state = shelf.assign(state, ["a", "b"], made.groupId);
   assert.equal(state.groups.length, 1, "the emptied group disappears");
   state = shelf.assign(state, ["a", "b", "c"], null);
-  assert.deepEqual(plain(state), { names: {}, groups: [], members: {} });
+  assert.deepEqual(plain(state), { names: {}, groups: [], members: {}, conversations: {} });
   assert.equal(shelf.assignToNewGroup(state, [], "空").groupId, null, "an empty selection creates nothing");
+});
+
+test("a group holds single conversations from different sources beside whole sources", async () => {
+  const shelf = await loadShelf();
+  const sources = [
+    { id: "mufy", conversations: [{ id: "mufy:1" }, { id: "mufy:2" }, { id: "mufy:3" }] },
+    { id: "st", conversations: [{ id: "st:1" }, { id: "st:2" }] },
+    { id: "gpt", conversations: [{ id: "gpt:1" }] }
+  ];
+  let { shelf: state, groupId } = shelf.fileToNewGroup(null, { conversations: ["st:2", "mufy:1", "gpt:1", "mufy:1"] }, "混在一起");
+  assert.equal(shelf.groupOfConversation(state, "st:2").id, groupId);
+  assert.equal(shelf.groupOfConversation(state, "mufy:2"), null);
+
+  let rows = plain(shelf.arrange(state, sources).map(row => row.type === "source"
+    ? row.source.id
+    : `${row.group.name}[${row.sources.map(s => s.id).join(",")}|${row.conversations.map(item => `${item.source.id}>${item.conversation.id}`).join(",")}]`));
+  assert.deepEqual(rows, ["mufy", "混在一起[|mufy>mufy:1,st>st:2,gpt>gpt:1]", "st", "gpt"],
+    "the group sits where its first item's source stood, and still lets its sources show");
+
+  state = shelf.file(state, { sources: ["gpt"] }, groupId);
+  rows = plain(shelf.arrange(state, sources).map(row => row.type === "source" ? row.source.id : `group:${row.sources.map(s => s.id).join(",")}`));
+  assert.deepEqual(rows, ["mufy", "group:gpt", "st"]);
+
+  state = shelf.file(state, { conversations: ["mufy:1", "st:2", "gpt:1"] }, null);
+  assert.equal(state.groups.length, 1, "the whole source still holds the group");
+  state = shelf.dissolveGroup(shelf.file(state, { conversations: ["st:1"] }, groupId), groupId);
+  assert.deepEqual(plain(state), { names: {}, groups: [], members: {}, conversations: {} }, "dissolving lets conversations go too");
+
+  assert.equal(shelf.availableGroupName({ groups: [{ id: "a", name: "新分组" }, { id: "b", name: "新分组 2" }] }, "新分组"), "新分组 3");
+  assert.equal(shelf.availableGroupName(null, "新分组"), "新分组");
+  assert.deepEqual(plain(shelf.normalize({ groups: [{ id: "g", name: "x" }], conversations: { "c1": "g", "c2": "nope" } }).conversations), { c1: "g" });
 });

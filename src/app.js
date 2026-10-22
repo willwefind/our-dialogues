@@ -43,7 +43,8 @@ window.OD = window.OD || {};
     // 整理 mode: several sources picked at once, moved together. Not persisted.
     shelfSelecting: false,
     shelfSelection: [],
-    shelfDragIds: null,
+    shelfConversationSelection: [],
+    shelfDragItems: null,
     favoritesOnly: false,
     tagFilter: "",
     // Memorial card: which companions the reader keeps at hand, which it last
@@ -529,7 +530,7 @@ window.OD = window.OD || {};
     return entry.percent > 0 ? t("progress.readTo", { percent: entry.percent }) : "";
   }
 
-  function conversationMarkup(c) {
+  function conversationMarkup(c, { provenance = "" } = {}) {
     const active = state.current?.id === c.id ? " on" : "";
     const documentRow = isDocumentConversation(c);
     const progress = progressLabel(state.readingProgress[c.id]);
@@ -545,10 +546,19 @@ window.OD = window.OD || {};
       metaBits.push(esc(documentRow ? fmtDateOnly(c.createdAt) : fmtDate(c.createdAt)));
     }
     if (progress) metaBits.push(`<span class="conv-progress">${esc(progress)}</span>`);
-    return `<div class="conv${active}" data-id="${esc(c.id)}">
+    return `<div class="conv${active}" data-id="${esc(c.id)}" draggable="true">
+      ${provenance ? `<div class="conv-provenance">${esc(provenance)}</div>` : ""}
       <div class="conv-title">${favorite}${esc(displayConversationTitle(c))}</div>
       <div class="conv-meta">${metaBits.join(" · ")}${tagChips ? ` ${tagChips}` : ""}</div>
     </div>`;
+  }
+
+  /* "Source · character" for a conversation shown away from its source. */
+  function conversationProvenance(conversation, source) {
+    if (!source) return "";
+    const bits = [sourceName(source)];
+    if (groupsByCharacter(source)) bits.push(mufyCharacter(conversation).name);
+    return bits.filter(Boolean).join(" · ");
   }
 
   function mufyCharacter(conversation) {
@@ -1449,7 +1459,8 @@ window.OD = window.OD || {};
     if (!filter || filter === "all") return sources;
     if (filter.startsWith(SHELF_GROUP_FILTER)) {
       const groupId = filter.slice(SHELF_GROUP_FILTER.length);
-      return sources.filter(source => OD.sourceShelf.groupOf(state.sourceShelf, source.id)?.id === groupId);
+      return sources.filter(source => OD.sourceShelf.groupOf(state.sourceShelf, source.id)?.id === groupId ||
+        source.conversations.some(conversation => conversationGroup(conversation.id)?.id === groupId));
     }
     return sources.filter(source => source.id === filter);
   }
@@ -1485,33 +1496,77 @@ window.OD = window.OD || {};
     return list.map(id => state.library.get(id)).filter(source => source && !seen.has(source.id) && seen.add(source.id));
   }
 
-  function movedStatus(sources, group) {
-    if (sources.length === 1) {
+  function presentConversations(conversationIds) {
+    const wanted = new Set((Array.isArray(conversationIds) ? conversationIds : [conversationIds]).map(String));
+    if (!wanted.size) return [];
+    return state.library.sources().flatMap(source => source.conversations.filter(conversation => wanted.has(conversation.id)));
+  }
+
+  function conversationGroup(conversationId) {
+    return OD.sourceShelf.groupOfConversation(state.sourceShelf, conversationId);
+  }
+
+  /* An item list is { sources: [ids], conversations: [ids] }; only what is
+     in the library right now is kept. */
+  function presentItems(items) {
+    return {
+      sources: presentSources(items?.sources || []),
+      conversations: presentConversations(items?.conversations || [])
+    };
+  }
+
+  function movedStatus({ sources, conversations }, group) {
+    const count = sources.length + conversations.length;
+    if (count === 1 && sources.length) {
       return group
         ? t("shelf.movedInto", { name: sourceName(sources[0]), group: group.name })
         : t("shelf.movedOut", { name: sourceName(sources[0]) });
     }
-    return group
-      ? t("shelf.movedManyInto", { count: sources.length, group: group.name })
-      : t("shelf.movedManyOut", { count: sources.length });
+    if (count === 1) {
+      const name = displayConversationTitle(conversations[0]);
+      return group ? t("shelf.movedInto", { name, group: group.name }) : t("shelf.conversationMovedBack", { name });
+    }
+    if (!conversations.length) {
+      return group
+        ? t("shelf.movedManyInto", { count, group: group.name })
+        : t("shelf.movedManyOut", { count });
+    }
+    return group ? t("shelf.movedItemsInto", { count, group: group.name }) : t("shelf.movedItemsOut", { count });
   }
 
-  /* One source ID or a list; null or "" takes them out of any group. */
+  /* null or "" takes the items out of any group — a source to the top
+     level, a conversation back under its own source. */
+  function fileShelfItems(items, groupId) {
+    const present = presentItems(items);
+    if (!present.sources.length && !present.conversations.length) return null;
+    const next = OD.sourceShelf.file(state.sourceShelf, {
+      sources: present.sources.map(source => source.id),
+      conversations: present.conversations.map(conversation => conversation.id)
+    }, groupId || null);
+    const group = groupId ? next.groups.find(item => item.id === String(groupId)) || null : null;
+    if (group) state.groupState.sources[`${SHELF_GROUP_OPEN_KEY}${group.id}`] = true;
+    return changeSourceShelf(next, movedStatus(present, group));
+  }
+
+  function fileShelfItemsToNewGroup(items, groupName, status) {
+    const present = presentItems(items);
+    if ((!present.sources.length && !present.conversations.length) || !OD.sourceShelf._internals.cleanName(groupName)) return null;
+    const { shelf, groupId } = OD.sourceShelf.fileToNewGroup(state.sourceShelf, {
+      sources: present.sources.map(source => source.id),
+      conversations: present.conversations.map(conversation => conversation.id)
+    }, groupName);
+    state.groupState.sources[`${SHELF_GROUP_OPEN_KEY}${groupId}`] = true;
+    const group = shelf.groups.find(item => item.id === groupId);
+    changeSourceShelf(shelf, status ? status(group) : movedStatus(present, group));
+    return groupId;
+  }
+
   function moveSourcesToGroup(sourceIds, groupId) {
-    const sources = presentSources(sourceIds);
-    if (!sources.length) return null;
-    const ids = sources.map(source => source.id);
-    const next = OD.sourceShelf.assign(state.sourceShelf, ids, groupId || null);
-    if (groupId) state.groupState.sources[`${SHELF_GROUP_OPEN_KEY}${groupId}`] = true;
-    return changeSourceShelf(next, movedStatus(sources, OD.sourceShelf.groupOf(next, ids[0])));
+    return fileShelfItems({ sources: Array.isArray(sourceIds) ? sourceIds : [sourceIds] }, groupId);
   }
 
   function moveSourcesToNewGroup(sourceIds, groupName) {
-    const sources = presentSources(sourceIds);
-    if (!sources.length || !OD.sourceShelf._internals.cleanName(groupName)) return null;
-    const { shelf, groupId } = OD.sourceShelf.assignToNewGroup(state.sourceShelf, sources.map(source => source.id), groupName);
-    state.groupState.sources[`${SHELF_GROUP_OPEN_KEY}${groupId}`] = true;
-    return changeSourceShelf(shelf, movedStatus(sources, shelf.groups.find(item => item.id === groupId)));
+    return fileShelfItemsToNewGroup({ sources: Array.isArray(sourceIds) ? sourceIds : [sourceIds] }, groupName) ? state.sourceShelf : null;
   }
 
   function setSourceGroup(sourceId, groupId) {
@@ -1522,10 +1577,27 @@ window.OD = window.OD || {};
     return moveSourcesToNewGroup([sourceId], groupName);
   }
 
-  /* ── 整理 mode: pick several sources, move them together ── */
+  /* Opens a group's own menu with its name selected, for a group that was
+     just made by a drop and still carries a placeholder name. */
+  function openShelfGroupRename(groupId) {
+    const list = $("conversationList");
+    if (typeof list?.querySelectorAll !== "function") return;
+    const group = [...(list.querySelectorAll("details.shelf-group") || [])].find(el => el.dataset.shelfGroup === String(groupId));
+    if (!group) return;
+    group.open = true;
+    const menu = group.querySelector?.(".shelf-group-menu");
+    if (menu) menu.hidden = false;
+    const input = menu?.querySelector?.("[data-shelf-group-name-input]");
+    input?.focus?.({ preventScroll: true });
+    input?.select?.();
+    group.scrollIntoView?.({ block: "nearest" });
+  }
+
+  /* ── 整理 mode: pick sources and single conversations, move them together ── */
   function setShelfSelecting(on) {
     state.shelfSelecting = !!on;
     state.shelfSelection = [];
+    state.shelfConversationSelection = [];
     // Each round starts from the first existing group, not last round's choice.
     if ($("shelfSelectTarget")) $("shelfSelectTarget").value = "";
     renderList();
@@ -1538,17 +1610,36 @@ window.OD = window.OD || {};
     return state.shelfSelection.includes(String(sourceId));
   }
 
-  /* Toggles one source, or — for a group — all of its sources at once. */
+  function isConversationPicked(conversationId) {
+    return state.shelfConversationSelection.includes(String(conversationId));
+  }
+
+  /* Toggles one source, or several at once: all off if all were on. */
   function toggleShelfSelection(sourceIds) {
-    const ids = presentSources(sourceIds).map(source => source.id);
-    if (!ids.length) return state.shelfSelection;
-    const allSelected = ids.every(isShelfSelected);
-    state.shelfSelection = allSelected
-      ? state.shelfSelection.filter(id => !ids.includes(id))
-      : [...state.shelfSelection, ...ids.filter(id => !isShelfSelected(id))];
-    syncShelfSelectionMarks();
-    renderShelfSelectBar();
-    return state.shelfSelection;
+    return toggleShelfItems({ sources: Array.isArray(sourceIds) ? sourceIds : [sourceIds] }).sources;
+  }
+
+  function toggleShelfConversations(conversationIds) {
+    return toggleShelfItems({ conversations: Array.isArray(conversationIds) ? conversationIds : [conversationIds] }).conversations;
+  }
+
+  /* A group or character toggles everything in it the same way. */
+  function toggleShelfItems(items) {
+    const sources = presentSources(items?.sources || []).map(source => source.id);
+    const conversations = presentConversations(items?.conversations || []).map(conversation => conversation.id);
+    if (sources.length || conversations.length) {
+      const allPicked = sources.every(isShelfSelected) && conversations.every(isConversationPicked);
+      if (allPicked) {
+        state.shelfSelection = state.shelfSelection.filter(id => !sources.includes(id));
+        state.shelfConversationSelection = state.shelfConversationSelection.filter(id => !conversations.includes(id));
+      } else {
+        state.shelfSelection = [...state.shelfSelection, ...sources.filter(id => !isShelfSelected(id))];
+        state.shelfConversationSelection = [...state.shelfConversationSelection, ...conversations.filter(id => !isConversationPicked(id))];
+      }
+      syncShelfSelectionMarks();
+      renderShelfSelectBar();
+    }
+    return { sources: [...state.shelfSelection], conversations: [...state.shelfConversationSelection] };
   }
 
   /* Marks the picked rows in place, so a click never rebuilds the catalog. */
@@ -1560,12 +1651,25 @@ window.OD = window.OD || {};
       el.classList.toggle("is-shelf-selected", selected);
       el.querySelector?.("summary")?.setAttribute?.("aria-checked", String(selected));
     });
-    [...(list.querySelectorAll("details.shelf-group") || [])].forEach(el => {
-      const members = [...(el.querySelectorAll?.("details.source-group") || [])].map(item => item.dataset.sourceId);
-      const picked = members.filter(isShelfSelected).length;
-      el.classList.toggle("is-shelf-selected", members.length > 0 && picked === members.length);
-      el.classList.toggle("is-shelf-partial", picked > 0 && picked < members.length);
+    [...(list.querySelectorAll(".conv") || [])].forEach(el => {
+      el.classList.toggle("is-shelf-selected", state.shelfSelecting && isConversationPicked(el.dataset.id));
     });
+    const markHeading = (el, items) => {
+      const picks = [...items.sources.map(isShelfSelected), ...items.conversations.map(isConversationPicked)];
+      const picked = picks.filter(Boolean).length;
+      el.classList.toggle("is-shelf-selected", picks.length > 0 && picked === picks.length);
+      el.classList.toggle("is-shelf-partial", picked > 0 && picked < picks.length);
+    };
+    [...(list.querySelectorAll("details.character-group") || [])].forEach(el => markHeading(el, { sources: [], conversations: [...(el.querySelectorAll?.(".conv") || [])].map(item => item.dataset.id) }));
+    [...(list.querySelectorAll("details.shelf-group") || [])].forEach(el => markHeading(el, shelfGroupItems(el)));
+  }
+
+  /* A group's own items: its whole sources and its loose conversations. */
+  function shelfGroupItems(el) {
+    return {
+      sources: [...(el.querySelectorAll?.("details.source-group") || [])].map(item => item.dataset.sourceId),
+      conversations: [...(el.querySelectorAll?.(".shelf-group-loose .conv") || [])].map(item => item.dataset.id)
+    };
   }
 
   function renderShelfSelectBar() {
@@ -1577,8 +1681,13 @@ window.OD = window.OD || {};
     bar.hidden = !state.shelfSelecting;
     if (!state.shelfSelecting) return;
     state.shelfSelection = presentSources(state.shelfSelection).map(source => source.id);
-    const count = state.shelfSelection.length;
-    if ($("shelfSelectCount")) $("shelfSelectCount").textContent = t("shelf.selectedCount", { count });
+    state.shelfConversationSelection = presentConversations(state.shelfConversationSelection).map(conversation => conversation.id);
+    const count = state.shelfSelection.length + state.shelfConversationSelection.length;
+    if ($("shelfSelectCount")) {
+      $("shelfSelectCount").textContent = state.shelfConversationSelection.length
+        ? t("shelf.selectedItems", { count })
+        : t("shelf.selectedCount", { count });
+    }
     const target = $("shelfSelectTarget");
     if (target) {
       const previous = target.value;
@@ -1596,43 +1705,84 @@ window.OD = window.OD || {};
   }
 
   function applyShelfSelection() {
-    const ids = presentSources(state.shelfSelection).map(source => source.id);
-    if (!ids.length) {
+    const items = { sources: [...state.shelfSelection], conversations: [...state.shelfConversationSelection] };
+    const present = presentItems(items);
+    if (!present.sources.length && !present.conversations.length) {
       setStatus(t("shelf.selectNothing"), true);
       return null;
     }
     const choice = $("shelfSelectTarget")?.value || "__new";
-    let result;
-    if (choice === "__new") {
-      const name = $("shelfSelectNewName")?.value || "";
-      if (!OD.sourceShelf._internals.cleanName(name)) {
-        setStatus(t("shelf.needGroupName"), true);
-        $("shelfSelectNewName")?.focus?.({ preventScroll: true });
-        return null;
-      }
-      state.shelfSelecting = false;
-      state.shelfSelection = [];
-      result = moveSourcesToNewGroup(ids, name);
-    } else {
-      state.shelfSelecting = false;
-      state.shelfSelection = [];
-      result = moveSourcesToGroup(ids, choice === "__out" ? null : choice);
+    const name = $("shelfSelectNewName")?.value || "";
+    if (choice === "__new" && !OD.sourceShelf._internals.cleanName(name)) {
+      setStatus(t("shelf.needGroupName"), true);
+      $("shelfSelectNewName")?.focus?.({ preventScroll: true });
+      return null;
     }
+    state.shelfSelecting = false;
+    state.shelfSelection = [];
+    state.shelfConversationSelection = [];
+    const result = choice === "__new"
+      ? (fileShelfItemsToNewGroup(items, name) ? state.sourceShelf : null)
+      : fileShelfItems(items, choice === "__out" ? null : choice);
     if ($("shelfSelectNewName")) $("shelfSelectNewName").value = "";
     renderShelfSelectBar();
     return result;
   }
 
-  /* Drag a source — or, in 整理 mode, every picked source when one of them
-     is grabbed — onto a group to file it there, or onto the 来源 row to take
-     it out of its group. Desktop pointers only; 整理 covers touch. */
-  function shelfDragIdsFor(sourceId) {
-    return state.shelfSelecting && isShelfSelected(sourceId) ? [...state.shelfSelection] : [String(sourceId)];
+  /* Dragging: a source heading, a character heading (all its conversations),
+     or a single conversation — and in 整理 mode, grabbing anything picked
+     carries every pick. It can land on a group, on the 来源 row (out of
+     groups), or on the strip that appears while dragging, which makes a new
+     group. Desktop pointers only; 整理 covers touch. */
+  function dragItemsFor(items) {
+    const grabbedPicked = state.shelfSelecting && (
+      (items.sources || []).some(isShelfSelected) || (items.conversations || []).some(isConversationPicked)
+    );
+    return grabbedPicked
+      ? { sources: [...state.shelfSelection], conversations: [...state.shelfConversationSelection] }
+      : { sources: [...(items.sources || [])], conversations: [...(items.conversations || [])] };
   }
 
-  function wireShelfDropTarget(el, groupIdOf) {
+  function hasDragItems() {
+    return !!(state.shelfDragItems && (state.shelfDragItems.sources.length || state.shelfDragItems.conversations.length));
+  }
+
+  function startShelfDrag(event, items) {
+    event.stopPropagation?.();
+    state.shelfDragItems = dragItemsFor(items);
+    event.dataTransfer?.setData?.("text/plain", [...state.shelfDragItems.sources, ...state.shelfDragItems.conversations].join("\n"));
+    if (event.dataTransfer) event.dataTransfer.effectAllowed = "move";
+    $("conversationList")?.classList?.add?.("shelf-dragging");
+    $("sourceRow")?.classList?.add?.("shelf-dragging");
+    if ($("shelfNewGroupDrop")) $("shelfNewGroupDrop").hidden = false;
+  }
+
+  function endShelfDrag() {
+    state.shelfDragItems = null;
+    $("conversationList")?.classList?.remove?.("shelf-dragging");
+    $("sourceRow")?.classList?.remove?.("shelf-dragging");
+    $("sourceRow")?.classList?.remove?.("is-drop-target");
+    if ($("shelfNewGroupDrop")) {
+      $("shelfNewGroupDrop").hidden = true;
+      $("shelfNewGroupDrop").classList?.remove?.("is-drop-target");
+    }
+    const list = $("conversationList");
+    if (typeof list?.querySelectorAll === "function") {
+      [...(list.querySelectorAll(".is-drop-target") || [])].forEach(el => el.classList.remove("is-drop-target"));
+    }
+  }
+
+  /* Drops into a fresh group named 新分组 (or 新分组 2 …) and opens its name. */
+  function dropIntoNewGroup(items) {
+    const name = OD.sourceShelf.availableGroupName(state.sourceShelf, t("shelf.defaultGroupName"));
+    const groupId = fileShelfItemsToNewGroup(items, name, group => t("shelf.newGroupDropped", { group: group?.name || name }));
+    if (groupId) openShelfGroupRename(groupId);
+    return groupId;
+  }
+
+  function wireShelfDropTarget(el, groupIdOf, { createsGroup = false } = {}) {
     el.addEventListener("dragover", event => {
-      if (!state.shelfDragIds?.length) return;
+      if (!hasDragItems()) return;
       event.preventDefault?.();
       if (event.dataTransfer) event.dataTransfer.dropEffect = "move";
       el.classList.add("is-drop-target");
@@ -1642,55 +1792,51 @@ window.OD = window.OD || {};
       el.classList.remove("is-drop-target");
     });
     el.addEventListener("drop", event => {
-      if (!state.shelfDragIds?.length) return;
+      if (!hasDragItems()) return;
       event.preventDefault?.();
       event.stopPropagation?.();
-      el.classList.remove("is-drop-target");
-      const ids = state.shelfDragIds;
-      state.shelfDragIds = null;
+      const items = state.shelfDragItems;
+      endShelfDrag();
       if (state.shelfSelecting) {
         state.shelfSelecting = false;
         state.shelfSelection = [];
+        state.shelfConversationSelection = [];
       }
-      moveSourcesToGroup(ids, groupIdOf());
+      if (createsGroup) dropIntoNewGroup(items);
+      else fileShelfItems(items, groupIdOf());
       renderShelfSelectBar();
     });
   }
 
   function wireShelfDragging(scope) {
     if (typeof scope?.querySelectorAll !== "function") return;
+    const pickOnClick = (summary, items) => summary.addEventListener("click", event => {
+      if (!state.shelfSelecting || event.target?.closest?.("button")) return;
+      event.preventDefault?.();
+      toggleShelfItems(items());
+    });
     [...(scope.querySelectorAll("details.source-group > summary") || [])].forEach(summary => {
       const sourceId = summary.parentElement?.dataset?.sourceId;
       if (!sourceId) return;
-      summary.addEventListener("dragstart", event => {
-        state.shelfDragIds = shelfDragIdsFor(sourceId);
-        event.dataTransfer?.setData?.("text/plain", state.shelfDragIds.join("\n"));
-        if (event.dataTransfer) event.dataTransfer.effectAllowed = "move";
-        $("conversationList")?.classList?.add?.("shelf-dragging");
-        $("sourceRow")?.classList?.add?.("shelf-dragging");
-      });
-      summary.addEventListener("dragend", () => {
-        state.shelfDragIds = null;
-        $("conversationList")?.classList?.remove?.("shelf-dragging");
-        $("sourceRow")?.classList?.remove?.("shelf-dragging");
-        [...(scope.querySelectorAll(".is-drop-target") || [])].forEach(el => el.classList.remove("is-drop-target"));
-        $("sourceRow")?.classList?.remove?.("is-drop-target");
-      });
+      summary.addEventListener("dragstart", event => startShelfDrag(event, { sources: [sourceId] }));
+      summary.addEventListener("dragend", endShelfDrag);
       // In 整理 mode a click picks the source instead of folding it.
-      summary.addEventListener("click", event => {
-        if (!state.shelfSelecting || event.target?.closest?.("button")) return;
-        event.preventDefault?.();
-        toggleShelfSelection([sourceId]);
-      });
+      pickOnClick(summary, () => ({ sources: [sourceId] }));
+    });
+    [...(scope.querySelectorAll("details.character-group > summary") || [])].forEach(summary => {
+      const conversationsOf = () => [...(summary.parentElement?.querySelectorAll?.(".conv") || [])].map(item => item.dataset.id);
+      summary.addEventListener("dragstart", event => startShelfDrag(event, { conversations: conversationsOf() }));
+      summary.addEventListener("dragend", endShelfDrag);
+      pickOnClick(summary, () => ({ conversations: conversationsOf() }));
+    });
+    [...(scope.querySelectorAll(".conv") || [])].forEach(item => {
+      item.addEventListener("dragstart", event => startShelfDrag(event, { conversations: [item.dataset.id] }));
+      item.addEventListener("dragend", endShelfDrag);
     });
     [...(scope.querySelectorAll("details.shelf-group") || [])].forEach(group => {
       wireShelfDropTarget(group, () => group.dataset.shelfGroup);
-      group.querySelector?.("summary")?.addEventListener?.("click", event => {
-        if (!state.shelfSelecting || event.target?.closest?.("button")) return;
-        event.preventDefault?.();
-        const members = [...(group.querySelectorAll?.("details.source-group") || [])].map(item => item.dataset.sourceId);
-        toggleShelfSelection(members);
-      });
+      const summary = group.querySelector?.("summary");
+      if (summary) pickOnClick(summary, () => shelfGroupItems(group));
     });
   }
 
@@ -2706,6 +2852,13 @@ window.OD = window.OD || {};
     wireSourceActions(list);
   }
 
+  /* Conversations a group row stands for: its loose ones, plus those of its
+     whole sources that have not been filed somewhere else. */
+  function shelfRowConversationCount(row) {
+    return row.conversations.length + row.sources.reduce((sum, source) =>
+      sum + source.conversations.filter(conversation => !conversationGroup(conversation.id)).length, 0);
+  }
+
   function renderSourceControls() {
     const sources = state.library.sources();
     document.body.classList.toggle("has-library", sources.length > 0);
@@ -2719,7 +2872,7 @@ window.OD = window.OD || {};
       `<option value="all">${esc(t("library.allSourcesCount", { count: sources.length }))}</option>`,
       ...OD.sourceShelf.arrange(state.sourceShelf, sources).map(row => row.type === "source"
         ? sourceOption(row.source)
-        : `<optgroup label="${esc(row.group.name)}"><option value="${esc(`${SHELF_GROUP_FILTER}${row.group.id}`)}">${esc(t("shelf.wholeGroupOption", { group: row.group.name, count: row.sources.reduce((sum, source) => sum + source.conversations.length, 0) }))}</option>${row.sources.map(sourceOption).join("")}</optgroup>`)
+        : `<optgroup label="${esc(row.group.name)}"><option value="${esc(`${SHELF_GROUP_FILTER}${row.group.id}`)}">${esc(t("shelf.wholeGroupOption", { group: row.group.name, count: shelfRowConversationCount(row) }))}</option>${row.sources.map(sourceOption).join("")}</optgroup>`)
     ].join("");
     $("sourceFilter").value = selected;
     $("clearSources").disabled = sources.length === 0;
@@ -2729,7 +2882,17 @@ window.OD = window.OD || {};
   function renderList() {
     const allSources = state.library.sources();
     const visibleSources = sourcesInFilter(allSources, state.sourceFilter);
-    const all = visibleSources.flatMap(source => source.conversations);
+    // A group filter shows exactly what the group holds: its loose
+    // conversations, and its whole sources minus what was filed elsewhere.
+    const groupFilter = String(state.sourceFilter || "").startsWith(SHELF_GROUP_FILTER)
+      ? state.sourceFilter.slice(SHELF_GROUP_FILTER.length)
+      : null;
+    const inGroupView = (conversation, source) => {
+      if (!groupFilter) return true;
+      const filed = conversationGroup(conversation.id);
+      return filed ? filed.id === groupFilter : OD.sourceShelf.groupOf(state.sourceShelf, source.id)?.id === groupFilter;
+    };
+    const all = visibleSources.flatMap(source => source.conversations.filter(conversation => inGroupView(conversation, source)));
     state.titleLabels = OD.mufyTitleResolver.disambiguate(all);
     state.filtered = OD.conversationOrder.filterAndSort(
       all,
@@ -2749,27 +2912,47 @@ window.OD = window.OD || {};
     // The sidebar's visible order doubles as the reading order, so
     // previous/next always move to what the eye sees as the neighbour.
     const readingOrder = [];
+    // A conversation filed in a group is drawn there, not under its source.
     const sourceRow = source => {
       const conversations = OD.conversationOrder.sortConversations(
-        source.conversations.filter(conversation => filteredIds.has(conversation.id)),
+        source.conversations.filter(conversation => filteredIds.has(conversation.id) && !conversationGroup(conversation.id)),
         state.sortMode
       );
       return { html: sourceMarkup(source, conversations, searching, readingOrder), count: conversations.length };
     };
-    $("conversationList").innerHTML = OD.sourceShelf.arrange(state.sourceShelf, visibleSources).map(row => {
+    const looseRow = row => {
+      const sourceOf = new Map(row.conversations.map(item => [item.conversation.id, item.source]));
+      const ordered = OD.conversationOrder.sortConversations(
+        row.conversations.map(item => item.conversation).filter(conversation => filteredIds.has(conversation.id)),
+        state.sortMode
+      );
+      readingOrder.push(...ordered);
+      const html = ordered.map(conversation => conversationMarkup(conversation, { provenance: conversationProvenance(conversation, sourceOf.get(conversation.id)) })).join("");
+      return { html: html ? `<div class="shelf-group-loose">${html}</div>` : "", count: ordered.length };
+    };
+    let rows = OD.sourceShelf.arrange(state.sourceShelf, visibleSources);
+    if (groupFilter) rows = rows.filter(row => row.type === "group" && row.group.id === groupFilter);
+    $("conversationList").innerHTML = rows.map(row => {
       if (row.type === "source") return sourceRow(row.source).html;
+      // Hand-picked conversations first, then whole sources, in that order
+      // for reading too.
+      const loose = looseRow(row);
       const members = row.sources.map(sourceRow);
       return shelfGroupMarkup(
         row.group,
-        members.map(member => member.html).join(""),
-        members.reduce((sum, member) => sum + member.count, 0),
+        loose.html + members.map(member => member.html).join(""),
+        loose.count + members.reduce((sum, member) => sum + member.count, 0),
         searching
       );
     }).join("");
     state.readingOrder = readingOrder;
 
     [...document.querySelectorAll(".conv")].forEach(el => {
-      el.addEventListener("click", () => openConversation(el.dataset.id));
+      el.addEventListener("click", () => {
+        // In 整理 mode a click picks the conversation instead of opening it.
+        if (state.shelfSelecting) toggleShelfConversations([el.dataset.id]);
+        else openConversation(el.dataset.id);
+      });
     });
     [...document.querySelectorAll("#conversationList details.shelf-group, #conversationList details.source-group, #conversationList details.character-group")].forEach(el => {
       el.addEventListener("toggle", () => {
@@ -3839,6 +4022,7 @@ window.OD = window.OD || {};
     if (event.key === "Enter" && !event.isComposing) { event.preventDefault?.(); applyShelfSelection(); }
   });
   if ($("sourceRow")) wireShelfDropTarget($("sourceRow"), () => null);
+  if ($("shelfNewGroupDrop")) wireShelfDropTarget($("shelfNewGroupDrop"), () => null, { createsGroup: true });
   $("sourceFilter").addEventListener("change", event => {
     state.sourceFilter = event.target.value || "all";
     renderList();
@@ -4741,7 +4925,11 @@ window.OD = window.OD || {};
     moveSourcesToNewGroup,
     setShelfSelecting,
     toggleShelfSelection,
+    toggleShelfConversations,
     applyShelfSelection,
+    fileShelfItems,
+    fileShelfItemsToNewGroup,
+    dropIntoNewGroup,
     renameSourceGroup,
     dissolveSourceGroup,
     setFavoritesOnly,
@@ -4770,6 +4958,7 @@ window.OD = window.OD || {};
       sourceShelf: OD.sourceShelf.normalize(state.sourceShelf),
       shelfSelecting: state.shelfSelecting,
       shelfSelection: [...state.shelfSelection],
+      shelfConversationSelection: [...state.shelfConversationSelection],
       favoritesOnly: !!state.favoritesOnly,
       tagFilter: state.tagFilter || "",
       filteredCount: state.filtered.length,

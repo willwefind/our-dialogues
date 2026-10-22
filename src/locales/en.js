@@ -87,7 +87,7 @@ window.OD = window.OD || {};
   "shelf.movedManyOut": "Took {count} sources out of their groups",
   "shelf.selectToggle": "Organize",
   "shelf.selectToggleTitle": "Pick several sources and file them together",
-  "shelf.selectHint": "Click sources (or a whole group) to pick them, then choose where they go; on a computer you can also drag a source onto a group",
+  "shelf.selectHint": "Click sources, characters, or single conversations to pick them — mixing sources is fine — then choose where they go; on a computer you can also drag",
   "shelf.selectedCount": "{count} sources selected",
   "shelf.selectCancel": "Cancel",
   "shelf.selectApply": "Move",
@@ -96,6 +96,13 @@ window.OD = window.OD || {};
   "shelf.moveOutOption": "Out of groups (top level)",
   "shelf.selectNothing": "No sources selected yet",
   "shelf.needGroupName": "Name the new group",
+  "shelf.selectedItems": "{count} items selected",
+  "shelf.movedItemsInto": "Moved {count} items into “{group}”",
+  "shelf.movedItemsOut": "Took {count} items out of their groups",
+  "shelf.conversationMovedBack": "Put “{name}” back under its source",
+  "shelf.defaultGroupName": "New group",
+  "shelf.newGroupDrop": "Drop here to make a new group",
+  "shelf.newGroupDropped": "Made “{group}” — give it a name",
 
   /* ── voice sidecar ── */
   "voice.sidecarAria": "Optional local voice archive",

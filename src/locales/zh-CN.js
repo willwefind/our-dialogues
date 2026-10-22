@@ -86,7 +86,7 @@ window.OD = window.OD || {};
   "shelf.movedManyOut": "{count} 个来源已移出分组",
   "shelf.selectToggle": "整理",
   "shelf.selectToggleTitle": "多选来源，一起放进分组",
-  "shelf.selectHint": "点来源（或整个分组）来选中，再选放到哪里；电脑上也可以直接把来源拖到分组上",
+  "shelf.selectHint": "点来源、角色或单段对话来选中，可以跨来源混着选，再选放到哪里；电脑上也可以直接拖",
   "shelf.selectedCount": "已选 {count} 个来源",
   "shelf.selectCancel": "取消",
   "shelf.selectApply": "放进去",
@@ -95,6 +95,13 @@ window.OD = window.OD || {};
   "shelf.moveOutOption": "移出分组（回到最外层）",
   "shelf.selectNothing": "还没有选中来源",
   "shelf.needGroupName": "给新分组起个名字",
+  "shelf.selectedItems": "已选 {count} 项",
+  "shelf.movedItemsInto": "{count} 项已放进「{group}」",
+  "shelf.movedItemsOut": "{count} 项已移出分组",
+  "shelf.conversationMovedBack": "「{name}」已放回原来的来源",
+  "shelf.defaultGroupName": "新分组",
+  "shelf.newGroupDrop": "拖到这里，新建一个分组",
+  "shelf.newGroupDropped": "已新建「{group}」，给它起个名字吧",
 
   /* ── voice sidecar ── */
   "voice.sidecarAria": "可选的本地语音档案",
