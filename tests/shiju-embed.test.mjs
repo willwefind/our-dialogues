@@ -92,7 +92,8 @@ test("载荷整体：text/title/source/date 上纸，context 留阅读器侧", a
 
 test("日期：ISO → 拾句风格；没有时间戳给空，绝不盖今天的章", async () => {
   const { studio } = await loadShijuEmbed();
-  assert.equal(studio.shijuDate({ createdAt: "2019-02-03T00:10:00+08:00" }), "2019.02.03");
+  // 不带时区的 ISO 按本地时间解析——测试在哪个时区跑都是同一天
+  assert.equal(studio.shijuDate({ createdAt: "2019-02-03T00:10:00" }), "2019.02.03");
   assert.equal(studio.shijuDate({}), "");
   assert.equal(studio.shijuDate({ createdAt: "not-a-date" }), "");
 });

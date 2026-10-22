@@ -1230,7 +1230,7 @@ test("year headings are display-only and appear only past the approved threshold
   runtime.OD.app.clearSources();
   const singleYear = {
     conversations: Array.from({ length: 12 }, (_, i) =>
-      conversation(`c${i}`, `2026-01-${String(i + 1).padStart(2, "0")}T00:00:00.000Z`))
+      conversation(`c${i}`, `2026-06-${String(i + 1).padStart(2, "0")}T12:00:00.000Z`))
   };
   runtime.OD.app.loadArchive(singleYear, "OneYear");
   markup = elements.get("conversationList").innerHTML;
