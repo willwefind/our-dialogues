@@ -103,3 +103,20 @@ test("normalize drops broken records and memberships that point nowhere", async 
   });
   assert.deepEqual(plain(shelf.normalize("nonsense")), { names: {}, groups: [], members: {} });
 });
+
+test("several sources move into a group, a new group, or out, in one step", async () => {
+  const shelf = await loadShelf();
+  let { shelf: state, groupId } = shelf.assignToNewGroup(null, ["a", "b", "a", " ", "c"], "一起");
+  assert.deepEqual(plain(state.members), { a: groupId, b: groupId, c: groupId }, "duplicates and blanks are ignored");
+
+  const made = shelf.assignToNewGroup(state, ["b", "c"], "另一组");
+  state = made.shelf;
+  assert.equal(shelf.groupOf(state, "a").id, groupId);
+  assert.equal(shelf.groupOf(state, "c").id, made.groupId);
+
+  state = shelf.assign(state, ["a", "b"], made.groupId);
+  assert.equal(state.groups.length, 1, "the emptied group disappears");
+  state = shelf.assign(state, ["a", "b", "c"], null);
+  assert.deepEqual(plain(state), { names: {}, groups: [], members: {} });
+  assert.equal(shelf.assignToNewGroup(state, [], "空").groupId, null, "an empty selection creates nothing");
+});

@@ -71,7 +71,7 @@ async function loadAppRuntime(savedSortMode="asc", options={}) {
     "status", "search", "conversationList", "archiveMeta", "welcome", "reader",
     "currentTitle", "readerTitle", "readerMeta", "messages", "main", "fileInput",
     "folderInput", "voiceMappingInput", "voiceArchiveInput", "clearSolVoice",
-    "sourceFilter", "clearSources", "hideUser", "showThinking", "theme", "sidebarToggle", "sidebar",
+    "sourceFilter", "sourceRow", "shelfSelectToggle", "shelfSelectBar", "shelfSelectCount", "shelfSelectDone", "shelfSelectTarget", "shelfSelectApply", "shelfSelectNewName", "clearSources", "hideUser", "showThinking", "theme", "sidebarToggle", "sidebar",
     "directoryPicker", "localLibraryStatus", "clearLocalLibrary", "acceptanceAudit", "runAcceptanceAudit",
     "fontSmaller", "fontLarger", "lineHeight", "contentWidth", "fontFamily", "printPreset",
     "readingMode", "pageLength", "uiLocale", "pageNavigation", "previousPage", "nextPage",
@@ -1883,4 +1883,71 @@ test("sources can be renamed and filed into reader-made groups, and the shelf pe
   runtime.OD.app.renameSource(byPlatform("chatgpt").id, "");
   assert.equal(byPlatform("chatgpt").displayName, "ChatGPT official export");
   assert.deepEqual(Object.keys(mirror().sourceShelf.names), [claudeId]);
+});
+
+test("整理 mode picks several sources and files them together, then lets go", async () => {
+  const { runtime, elements } = await loadAppRuntime("asc");
+  const makeArchive = (platform, id) => ({
+    source: { platform, exporter: `${platform}-synthetic` },
+    conversations: [{
+      id, title: `${platform} title`, createdAt: "2026-08-16T00:00:00.000Z", participants: [],
+      messages: [{ id: `${id}-message`, role: "assistant", content: `${platform} body` }]
+    }]
+  });
+  runtime.OD.app.loadArchive(makeArchive("claude", "claude-chat"), "Claude JSON");
+  runtime.OD.app.loadArchive(makeArchive("chatgpt", "chatgpt-chat"), "ChatGPT");
+  runtime.OD.app.loadArchive(makeArchive("normalized", "plain-chat"), "Normalized JSON");
+  const ids = runtime.OD.app.getState().sources.map(source => source.id);
+  const bar = elements.get("shelfSelectBar");
+  assert.equal(bar.hidden, true);
+
+  elements.get("shelfSelectToggle").click();
+  assert.equal(runtime.OD.app.getState().shelfSelecting, true);
+  assert.equal(bar.hidden, false);
+  assert.equal(elements.get("shelfSelectToggle").getAttribute("aria-pressed"), "true");
+  assert.match(elements.get("conversationList").innerHTML, /role="checkbox" aria-checked="false"/);
+  assert.equal(elements.get("shelfSelectApply").disabled, true, "nothing to move yet");
+  assert.equal(elements.get("shelfSelectTarget").value, "__new", "with no groups yet, the bar offers a new one");
+  assert.equal(elements.get("shelfSelectNewName").hidden, false);
+
+  runtime.OD.app.toggleShelfSelection([ids[0]]);
+  runtime.OD.app.toggleShelfSelection([ids[2]]);
+  assert.deepEqual([...runtime.OD.app.getState().shelfSelection], [ids[0], ids[2]]);
+  assert.match(elements.get("shelfSelectCount").textContent, /已选 2 个来源/);
+
+  // Asking for a new group without a name keeps everything picked.
+  elements.get("shelfSelectApply").click();
+  assert.equal(runtime.OD.app.getState().shelfSelecting, true);
+  elements.get("shelfSelectNewName").value = "外面的人";
+  elements.get("shelfSelectApply").click();
+  let appState = runtime.OD.app.getState();
+  assert.equal(appState.shelfSelecting, false, "moving finishes 整理");
+  assert.equal(bar.hidden, true);
+  const groupId = appState.sourceShelf.groups[0].id;
+  assert.deepEqual({ ...appState.sourceShelf.members }, { [ids[0]]: groupId, [ids[2]]: groupId });
+  assert.match(elements.get("status").textContent, /2 个来源已放进「外面的人」/);
+
+  // A second round: the existing group is offered first; picking a whole
+  // group's sources and the third source moves them all there.
+  runtime.OD.app.setShelfSelecting(true);
+  assert.equal(elements.get("shelfSelectTarget").value, groupId);
+  runtime.OD.app.toggleShelfSelection(ids);
+  assert.equal(runtime.OD.app.getState().shelfSelection.length, 3);
+  runtime.OD.app.toggleShelfSelection([ids[0], ids[2]]);
+  assert.deepEqual([...runtime.OD.app.getState().shelfSelection], [ids[1]], "toggling a fully picked group lets all of it go");
+  runtime.OD.app.applyShelfSelection();
+  appState = runtime.OD.app.getState();
+  assert.equal(Object.values(appState.sourceShelf.members).filter(id => id === groupId).length, 3);
+
+  // Out of groups, and Esc leaves the mode without moving anything.
+  runtime.OD.app.setShelfSelecting(true);
+  runtime.OD.app.toggleShelfSelection(ids);
+  elements.get("shelfSelectTarget").value = "__out";
+  runtime.OD.app.applyShelfSelection();
+  assert.deepEqual({ ...runtime.OD.app.getState().sourceShelf.members }, {});
+  runtime.OD.app.setShelfSelecting(true);
+  runtime.OD.app.toggleShelfSelection([ids[1]]);
+  runtime.OD.app.setShelfSelecting(false);
+  assert.deepEqual([...runtime.OD.app.getState().shelfSelection], []);
+  assert.equal(runtime.OD.app.applyShelfSelection(), null, "with nothing picked there is nothing to apply");
 });

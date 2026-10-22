@@ -40,6 +40,10 @@ window.OD = window.OD || {};
     organization: { favorites: {}, tags: {} },
     // What the reader calls each source, and the groups the reader filed them in.
     sourceShelf: { names: {}, groups: [], members: {} },
+    // 整理 mode: several sources picked at once, moved together. Not persisted.
+    shelfSelecting: false,
+    shelfSelection: [],
+    shelfDragIds: null,
     favoritesOnly: false,
     tagFilter: "",
     // Memorial card: which companions the reader keeps at hand, which it last
@@ -1455,6 +1459,7 @@ window.OD = window.OD || {};
     renderSourceControls();
     renderList();
     renderCurrentSourceMeta();
+    renderShelfSelectBar();
     if (status) setStatus(status);
     void saveReaderState();
     return state.sourceShelf;
@@ -1469,23 +1474,219 @@ window.OD = window.OD || {};
       : t("shelf.restored", { name: source.label }));
   }
 
+  function presentSources(sourceIds) {
+    const list = Array.isArray(sourceIds) ? sourceIds : [sourceIds];
+    const seen = new Set();
+    return list.map(id => state.library.get(id)).filter(source => source && !seen.has(source.id) && seen.add(source.id));
+  }
+
+  function movedStatus(sources, group) {
+    if (sources.length === 1) {
+      return group
+        ? t("shelf.movedInto", { name: sourceName(sources[0]), group: group.name })
+        : t("shelf.movedOut", { name: sourceName(sources[0]) });
+    }
+    return group
+      ? t("shelf.movedManyInto", { count: sources.length, group: group.name })
+      : t("shelf.movedManyOut", { count: sources.length });
+  }
+
+  /* One source ID or a list; null or "" takes them out of any group. */
+  function moveSourcesToGroup(sourceIds, groupId) {
+    const sources = presentSources(sourceIds);
+    if (!sources.length) return null;
+    const ids = sources.map(source => source.id);
+    const next = OD.sourceShelf.assign(state.sourceShelf, ids, groupId || null);
+    if (groupId) state.groupState.sources[`${SHELF_GROUP_OPEN_KEY}${groupId}`] = true;
+    return changeSourceShelf(next, movedStatus(sources, OD.sourceShelf.groupOf(next, ids[0])));
+  }
+
+  function moveSourcesToNewGroup(sourceIds, groupName) {
+    const sources = presentSources(sourceIds);
+    if (!sources.length || !OD.sourceShelf._internals.cleanName(groupName)) return null;
+    const { shelf, groupId } = OD.sourceShelf.assignToNewGroup(state.sourceShelf, sources.map(source => source.id), groupName);
+    state.groupState.sources[`${SHELF_GROUP_OPEN_KEY}${groupId}`] = true;
+    return changeSourceShelf(shelf, movedStatus(sources, shelf.groups.find(item => item.id === groupId)));
+  }
+
   function setSourceGroup(sourceId, groupId) {
-    const source = state.library.get(sourceId);
-    if (!source) return null;
-    const next = OD.sourceShelf.assign(state.sourceShelf, source.id, groupId || null);
-    const group = OD.sourceShelf.groupOf(next, source.id);
-    return changeSourceShelf(next, group
-      ? t("shelf.movedInto", { name: sourceName(source), group: group.name })
-      : t("shelf.movedOut", { name: sourceName(source) }));
+    return moveSourcesToGroup([sourceId], groupId);
   }
 
   function moveSourceToNewGroup(sourceId, groupName) {
-    const source = state.library.get(sourceId);
-    if (!source || !OD.sourceShelf._internals.cleanName(groupName)) return null;
-    const { shelf, groupId } = OD.sourceShelf.assignToNewGroup(state.sourceShelf, source.id, groupName);
-    state.groupState.sources[`${SHELF_GROUP_OPEN_KEY}${groupId}`] = true;
-    const group = shelf.groups.find(item => item.id === groupId);
-    return changeSourceShelf(shelf, t("shelf.movedInto", { name: sourceName(source), group: group?.name || "" }));
+    return moveSourcesToNewGroup([sourceId], groupName);
+  }
+
+  /* ── 整理 mode: pick several sources, move them together ── */
+  function setShelfSelecting(on) {
+    state.shelfSelecting = !!on;
+    state.shelfSelection = [];
+    // Each round starts from the first existing group, not last round's choice.
+    if ($("shelfSelectTarget")) $("shelfSelectTarget").value = "";
+    renderList();
+    renderShelfSelectBar();
+    if (state.shelfSelecting) setStatus(t("shelf.selectHint"));
+    return state.shelfSelecting;
+  }
+
+  function isShelfSelected(sourceId) {
+    return state.shelfSelection.includes(String(sourceId));
+  }
+
+  /* Toggles one source, or — for a group — all of its sources at once. */
+  function toggleShelfSelection(sourceIds) {
+    const ids = presentSources(sourceIds).map(source => source.id);
+    if (!ids.length) return state.shelfSelection;
+    const allSelected = ids.every(isShelfSelected);
+    state.shelfSelection = allSelected
+      ? state.shelfSelection.filter(id => !ids.includes(id))
+      : [...state.shelfSelection, ...ids.filter(id => !isShelfSelected(id))];
+    syncShelfSelectionMarks();
+    renderShelfSelectBar();
+    return state.shelfSelection;
+  }
+
+  /* Marks the picked rows in place, so a click never rebuilds the catalog. */
+  function syncShelfSelectionMarks() {
+    const list = $("conversationList");
+    if (typeof list?.querySelectorAll !== "function") return;
+    [...(list.querySelectorAll("details.source-group") || [])].forEach(el => {
+      const selected = isShelfSelected(el.dataset.sourceId);
+      el.classList.toggle("is-shelf-selected", selected);
+      el.querySelector?.("summary")?.setAttribute?.("aria-checked", String(selected));
+    });
+    [...(list.querySelectorAll("details.shelf-group") || [])].forEach(el => {
+      const members = [...(el.querySelectorAll?.("details.source-group") || [])].map(item => item.dataset.sourceId);
+      const picked = members.filter(isShelfSelected).length;
+      el.classList.toggle("is-shelf-selected", members.length > 0 && picked === members.length);
+      el.classList.toggle("is-shelf-partial", picked > 0 && picked < members.length);
+    });
+  }
+
+  function renderShelfSelectBar() {
+    const bar = $("shelfSelectBar");
+    const toggle = $("shelfSelectToggle");
+    toggle?.setAttribute?.("aria-pressed", String(state.shelfSelecting));
+    $("conversationList")?.classList?.toggle?.("shelf-selecting", state.shelfSelecting);
+    if (!bar) return;
+    bar.hidden = !state.shelfSelecting;
+    if (!state.shelfSelecting) return;
+    state.shelfSelection = presentSources(state.shelfSelection).map(source => source.id);
+    const count = state.shelfSelection.length;
+    if ($("shelfSelectCount")) $("shelfSelectCount").textContent = t("shelf.selectedCount", { count });
+    const target = $("shelfSelectTarget");
+    if (target) {
+      const previous = target.value;
+      const values = [...state.sourceShelf.groups.map(group => group.id), "__new", "__out"];
+      target.innerHTML = [
+        ...state.sourceShelf.groups.map(group => `<option value="${esc(group.id)}">${esc(t("shelf.moveIntoOption", { group: group.name }))}</option>`),
+        `<option value="__new">${esc(t("shelf.newGroupOption"))}</option>`,
+        `<option value="__out">${esc(t("shelf.moveOutOption"))}</option>`
+      ].join("");
+      target.value = values.includes(previous) ? previous : values[0];
+    }
+    const naming = target?.value === "__new";
+    if ($("shelfSelectNewName")) $("shelfSelectNewName").hidden = !naming;
+    if ($("shelfSelectApply")) $("shelfSelectApply").disabled = count === 0;
+  }
+
+  function applyShelfSelection() {
+    const ids = presentSources(state.shelfSelection).map(source => source.id);
+    if (!ids.length) {
+      setStatus(t("shelf.selectNothing"), true);
+      return null;
+    }
+    const choice = $("shelfSelectTarget")?.value || "__new";
+    let result;
+    if (choice === "__new") {
+      const name = $("shelfSelectNewName")?.value || "";
+      if (!OD.sourceShelf._internals.cleanName(name)) {
+        setStatus(t("shelf.needGroupName"), true);
+        $("shelfSelectNewName")?.focus?.({ preventScroll: true });
+        return null;
+      }
+      state.shelfSelecting = false;
+      state.shelfSelection = [];
+      result = moveSourcesToNewGroup(ids, name);
+    } else {
+      state.shelfSelecting = false;
+      state.shelfSelection = [];
+      result = moveSourcesToGroup(ids, choice === "__out" ? null : choice);
+    }
+    if ($("shelfSelectNewName")) $("shelfSelectNewName").value = "";
+    renderShelfSelectBar();
+    return result;
+  }
+
+  /* Drag a source — or, in 整理 mode, every picked source when one of them
+     is grabbed — onto a group to file it there, or onto the 来源 row to take
+     it out of its group. Desktop pointers only; 整理 covers touch. */
+  function shelfDragIdsFor(sourceId) {
+    return state.shelfSelecting && isShelfSelected(sourceId) ? [...state.shelfSelection] : [String(sourceId)];
+  }
+
+  function wireShelfDropTarget(el, groupIdOf) {
+    el.addEventListener("dragover", event => {
+      if (!state.shelfDragIds?.length) return;
+      event.preventDefault?.();
+      if (event.dataTransfer) event.dataTransfer.dropEffect = "move";
+      el.classList.add("is-drop-target");
+    });
+    el.addEventListener("dragleave", event => {
+      if (event.relatedTarget && el.contains?.(event.relatedTarget)) return;
+      el.classList.remove("is-drop-target");
+    });
+    el.addEventListener("drop", event => {
+      if (!state.shelfDragIds?.length) return;
+      event.preventDefault?.();
+      event.stopPropagation?.();
+      el.classList.remove("is-drop-target");
+      const ids = state.shelfDragIds;
+      state.shelfDragIds = null;
+      if (state.shelfSelecting) {
+        state.shelfSelecting = false;
+        state.shelfSelection = [];
+      }
+      moveSourcesToGroup(ids, groupIdOf());
+      renderShelfSelectBar();
+    });
+  }
+
+  function wireShelfDragging(scope) {
+    if (typeof scope?.querySelectorAll !== "function") return;
+    [...(scope.querySelectorAll("details.source-group > summary") || [])].forEach(summary => {
+      const sourceId = summary.parentElement?.dataset?.sourceId;
+      if (!sourceId) return;
+      summary.addEventListener("dragstart", event => {
+        state.shelfDragIds = shelfDragIdsFor(sourceId);
+        event.dataTransfer?.setData?.("text/plain", state.shelfDragIds.join("\n"));
+        if (event.dataTransfer) event.dataTransfer.effectAllowed = "move";
+        $("conversationList")?.classList?.add?.("shelf-dragging");
+        $("sourceRow")?.classList?.add?.("shelf-dragging");
+      });
+      summary.addEventListener("dragend", () => {
+        state.shelfDragIds = null;
+        $("conversationList")?.classList?.remove?.("shelf-dragging");
+        $("sourceRow")?.classList?.remove?.("shelf-dragging");
+        [...(scope.querySelectorAll(".is-drop-target") || [])].forEach(el => el.classList.remove("is-drop-target"));
+        $("sourceRow")?.classList?.remove?.("is-drop-target");
+      });
+      // In 整理 mode a click picks the source instead of folding it.
+      summary.addEventListener("click", event => {
+        if (!state.shelfSelecting || event.target?.closest?.("button")) return;
+        event.preventDefault?.();
+        toggleShelfSelection([sourceId]);
+      });
+    });
+    [...(scope.querySelectorAll("details.shelf-group") || [])].forEach(group => {
+      wireShelfDropTarget(group, () => group.dataset.shelfGroup);
+      group.querySelector?.("summary")?.addEventListener?.("click", event => {
+        if (!state.shelfSelecting || event.target?.closest?.("button")) return;
+        event.preventDefault?.();
+        const members = [...(group.querySelectorAll?.("details.source-group") || [])].map(item => item.dataset.sourceId);
+        toggleShelfSelection(members);
+      });
+    });
   }
 
   function renameSourceGroup(groupId, name) {
@@ -1585,8 +1786,10 @@ window.OD = window.OD || {};
     const storedSource = state.groupState.sources[source.id];
     const sourceOpen = searching || (storedSource === undefined ? true : storedSource !== false);
     const name = sourceName(source);
-    return `<details class="source-group" data-source-id="${esc(source.id)}"${sourceOpen ? " open" : ""}>
-      <summary>
+    const picked = state.shelfSelecting && isShelfSelected(source.id);
+    return `<details class="source-group${picked ? " is-shelf-selected" : ""}" data-source-id="${esc(source.id)}"${sourceOpen ? " open" : ""}>
+      <summary draggable="true"${state.shelfSelecting ? ` role="checkbox" aria-checked="${picked}"` : ""}>
+        <span class="shelf-check" aria-hidden="true"></span>
         <span class="source-summary-label" title="${esc(name === source.label ? name : `${name} · ${source.label}`)}">${esc(name)}</span>
         <span class="source-count">${conversations.length}</span>
         <button class="source-menu-button" type="button" data-source-menu="${esc(source.id)}" title="${esc(t("source.menuTitle"))}" aria-haspopup="true" aria-label="${esc(t("source.menuAria", { label: name }))}">···</button>
@@ -1603,6 +1806,7 @@ window.OD = window.OD || {};
     const open = searching || stored !== false;
     return `<details class="shelf-group" data-shelf-group="${esc(group.id)}"${open ? " open" : ""}>
       <summary>
+        <span class="shelf-check" aria-hidden="true"></span>
         <span class="shelf-group-label">${esc(group.name)}</span>
         <span class="source-count">${conversationCount}</span>
         <button class="source-menu-button" type="button" data-shelf-group-menu="${esc(group.id)}" title="${esc(t("shelf.groupMenuTitle"))}" aria-haspopup="true" aria-label="${esc(t("shelf.groupMenuAria", { group: group.name }))}">···</button>
@@ -2514,6 +2718,7 @@ window.OD = window.OD || {};
     ].join("");
     $("sourceFilter").value = selected;
     $("clearSources").disabled = sources.length === 0;
+    renderShelfSelectBar();
   }
 
   function renderList() {
@@ -2576,6 +2781,8 @@ window.OD = window.OD || {};
     });
     wireSourceActions($("conversationList"));
     wireSourceShelf($("conversationList"));
+    wireShelfDragging($("conversationList"));
+    syncShelfSelectionMarks();
     [...document.querySelectorAll("#conversationList [data-source-menu]")].forEach(button => {
       button.addEventListener("click", event => {
         event.preventDefault();
@@ -3611,6 +3818,17 @@ window.OD = window.OD || {};
     }
     clearSources();
   });
+  $("shelfSelectToggle")?.addEventListener?.("click", () => setShelfSelecting(!state.shelfSelecting));
+  $("shelfSelectDone")?.addEventListener?.("click", () => setShelfSelecting(false));
+  $("shelfSelectTarget")?.addEventListener?.("change", () => {
+    renderShelfSelectBar();
+    if ($("shelfSelectTarget").value === "__new") $("shelfSelectNewName")?.focus?.({ preventScroll: true });
+  });
+  $("shelfSelectApply")?.addEventListener?.("click", () => applyShelfSelection());
+  $("shelfSelectNewName")?.addEventListener?.("keydown", event => {
+    if (event.key === "Enter" && !event.isComposing) { event.preventDefault?.(); applyShelfSelection(); }
+  });
+  if ($("sourceRow")) wireShelfDropTarget($("sourceRow"), () => null);
   $("sourceFilter").addEventListener("change", event => {
     state.sourceFilter = event.target.value || "all";
     renderList();
@@ -4420,6 +4638,7 @@ window.OD = window.OD || {};
       if (OD.shijuStudio?.isOpen?.()) return;
       const nameEditor = $("memorialNameEditor");
       if (nameEditor && !nameEditor.hidden) { closeMemorialNameEditor(); return; }
+      if (state.shelfSelecting) { setShelfSelecting(false); return; }
       const dateEditor = $("memorialDateEditor");
       if (dateEditor && !dateEditor.hidden) { closeMemorialDateEditor(); return; }
       const memorialMenuOpen = $("memorialMenu");
@@ -4508,6 +4727,11 @@ window.OD = window.OD || {};
     renameSource,
     setSourceGroup,
     moveSourceToNewGroup,
+    moveSourcesToGroup,
+    moveSourcesToNewGroup,
+    setShelfSelecting,
+    toggleShelfSelection,
+    applyShelfSelection,
     renameSourceGroup,
     dissolveSourceGroup,
     setFavoritesOnly,
@@ -4534,6 +4758,8 @@ window.OD = window.OD || {};
       voiceAudioFileCount: state.solVoiceAudioFiles.length,
       organization: OD.organization.normalize(state.organization),
       sourceShelf: OD.sourceShelf.normalize(state.sourceShelf),
+      shelfSelecting: state.shelfSelecting,
+      shelfSelection: [...state.shelfSelection],
       favoritesOnly: !!state.favoritesOnly,
       tagFilter: state.tagFilter || "",
       filteredCount: state.filtered.length,

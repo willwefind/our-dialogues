@@ -50,9 +50,22 @@
         </div>
       </div>
 
-      <div class="od-source-row">
+      <div id="sourceRow" class="od-source-row">
         <span class="od-source-row-label" data-i18n="source.label">来源</span>
+        <button id="shelfSelectToggle" class="shelf-select-toggle" type="button" aria-pressed="false" title="多选来源，一起放进分组" data-i18n="shelf.selectToggle" data-i18n-title="shelf.selectToggleTitle">整理</button>
         <button id="sourceAddToggle" type="button" aria-label="添加来源或管理来源" aria-haspopup="true" title="导入 ChatGPT 文件夹、JSON / ZIP，连接语音档案，管理已连接来源" data-i18n-aria-label="source.addAria" data-i18n-title="source.addTitle">＋</button>
+      </div>
+
+      <div id="shelfSelectBar" class="shelf-select-bar" hidden>
+        <div class="shelf-select-head">
+          <span id="shelfSelectCount">已选 0 个来源</span>
+          <button id="shelfSelectDone" type="button" data-i18n="shelf.selectCancel">取消</button>
+        </div>
+        <div class="shelf-select-row">
+          <select id="shelfSelectTarget" aria-label="移到哪里" data-i18n-aria-label="shelf.selectTargetAria"></select>
+          <button id="shelfSelectApply" type="button" data-i18n="shelf.selectApply">放进去</button>
+        </div>
+        <input id="shelfSelectNewName" type="text" maxlength="40" autocomplete="off" placeholder="新分组的名字" aria-label="新分组的名字" data-i18n-placeholder="shelf.newGroupPlaceholder" data-i18n-aria-label="shelf.newGroupPlaceholder" hidden>
       </div>
 
       <div id="sourceAddMenu" class="od-menu" hidden>

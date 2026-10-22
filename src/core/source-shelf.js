@@ -98,30 +98,41 @@ window.OD = window.OD || {};
     return id;
   }
 
-  /* File a source under groupId; null takes it out of any group. */
-  function assign(shelf, sourceId, groupId) {
+  function sourceKeys(sourceIds) {
+    const keys = [];
+    for (const sourceId of Array.isArray(sourceIds) ? sourceIds : [sourceIds]) {
+      const key = String(sourceId ?? "").trim();
+      if (key && !keys.includes(key)) keys.push(key);
+    }
+    return keys;
+  }
+
+  /* File sources under groupId; null takes them out of any group. Takes one
+     source ID or a list, so a multi-selection moves in one step. */
+  function assign(shelf, sourceIds, groupId) {
     const next = normalize(shelf);
-    const key = String(sourceId ?? "").trim();
-    if (!key) return next;
     const target = String(groupId ?? "").trim();
-    if (target && next.groups.some(group => group.id === target)) next.members[key] = target;
-    else delete next.members[key];
+    const known = target && next.groups.some(group => group.id === target);
+    for (const key of sourceKeys(sourceIds)) {
+      if (known) next.members[key] = target;
+      else delete next.members[key];
+    }
     return prune(next);
   }
 
-  /* File a source under a group by name — reusing a group already called
+  /* File sources under a group by name — reusing a group already called
      that, otherwise creating it. Returns the new shelf and the group's ID. */
-  function assignToNewGroup(shelf, sourceId, name) {
+  function assignToNewGroup(shelf, sourceIds, name) {
     const next = normalize(shelf);
-    const key = String(sourceId ?? "").trim();
+    const keys = sourceKeys(sourceIds);
     const cleaned = cleanName(name);
-    if (!key || !cleaned) return { shelf: next, groupId: null };
+    if (!keys.length || !cleaned) return { shelf: next, groupId: null };
     let group = next.groups.find(item => item.name === cleaned);
     if (!group) {
       group = { id: newGroupId(next.groups), name: cleaned };
       next.groups.push(group);
     }
-    next.members[key] = group.id;
+    for (const key of keys) next.members[key] = group.id;
     return { shelf: prune(next), groupId: group.id };
   }
 
