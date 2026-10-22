@@ -325,6 +325,7 @@ window.OD = window.OD || {};
     root.style?.setProperty?.("--reader-font-size", `${state.readerPrefs.fontSize}px`);
     root.style?.setProperty?.("--reader-line-height", String(state.readerPrefs.lineHeight));
     root.style?.setProperty?.("--cw", `${state.readerPrefs.contentWidth}px`);
+    root.style?.setProperty?.("--reader-gutter", readerGutter(state.readerPrefs.contentWidth));
     root.style?.setProperty?.("--reader-font-family", preset ? preset.family : OD.readerParity.FONT_FAMILIES[state.readerPrefs.fontFamily]);
     root.style?.setProperty?.("--reader-letter-spacing", preset ? preset.letterSpacing : "0");
     root.style?.setProperty?.("--reader-heading-size", preset ? `${preset.headingSize}px` : "27px");
@@ -333,6 +334,7 @@ window.OD = window.OD || {};
     $("theme").value = state.readerPrefs.theme;
     $("lineHeight").value = String(state.readerPrefs.lineHeight);
     $("contentWidth").value = String(state.readerPrefs.contentWidth);
+    renderContentWidthControls(state.readerPrefs.contentWidth);
     $("fontFamily").value = state.readerPrefs.fontFamily;
     const presetControl = $("printPreset");
     if (presetControl) presetControl.value = state.readerPrefs.printPreset || "";
@@ -4080,6 +4082,65 @@ window.OD = window.OD || {};
     else restoreStyleAnchor(position);
     void saveReaderState();
   }
+  /* The default sheet keeps its wide stage margins; asking for more width
+     than the default lets the sheet come closer to the edges so the extra
+     width can actually appear. */
+  function readerGutter(width) {
+    return width > OD.readerParity.DEFAULTS.contentWidth ? "48px" : "144px";
+  }
+
+  /* The widest column this window can really show. Below 1024px the sheet
+     already fills the screen and the setting has nothing to change. */
+  function contentWidthLimit() {
+    const { min, max, step } = OD.readerParity.CONTENT_WIDTH;
+    if (window.matchMedia?.("(max-width: 1023px)")?.matches) return null;
+    const available = Number($("main")?.clientWidth || 0);
+    if (!available) return max;
+    const sheetChrome = 136;
+    return Math.max(min, Math.min(max, Math.floor((available - 48 - sheetChrome) / step) * step));
+  }
+
+  function effectiveContentWidth() {
+    const limit = contentWidthLimit();
+    return limit === null ? state.readerPrefs.contentWidth : Math.min(state.readerPrefs.contentWidth, limit);
+  }
+
+  function renderContentWidthControls(width) {
+    const { min } = OD.readerParity.CONTENT_WIDTH;
+    const limit = contentWidthLimit();
+    const slider = $("contentWidth");
+    const fixed = limit === null;
+    const shown = fixed ? width : Math.min(width, limit);
+    if (slider) {
+      slider.max = String(fixed ? OD.readerParity.CONTENT_WIDTH.max : limit);
+      slider.value = String(shown);
+      slider.disabled = fixed;
+    }
+    if ($("contentWidthValue")) $("contentWidthValue").textContent = fixed ? t("typography.widthFollowsScreen") : t("typography.widthValue", { px: shown });
+    if ($("contentNarrower")) $("contentNarrower").disabled = fixed || shown <= min;
+    if ($("contentWider")) $("contentWider").disabled = fixed || shown >= limit;
+  }
+
+  function previewContentWidth(value) {
+    if (!state.widthDragAnchor) state.widthDragAnchor = readerSettings().readingPosition;
+    const width = OD.readerParity.normalizePreferences({ ...state.readerPrefs, contentWidth: value }).contentWidth;
+    document.documentElement.style?.setProperty?.("--cw", `${width}px`);
+    document.documentElement.style?.setProperty?.("--reader-gutter", readerGutter(width));
+    renderContentWidthControls(width);
+  }
+
+  function setContentWidth(value) {
+    const position = state.widthDragAnchor || readerSettings().readingPosition;
+    state.widthDragAnchor = null;
+    const limit = contentWidthLimit();
+    const wanted = Number(value);
+    state.readerPrefs = OD.readerParity.normalizePreferences({ ...state.readerPrefs, contentWidth: limit === null ? wanted : Math.min(wanted, limit) });
+    applyReaderPreferences();
+    restoreStyleAnchor(position);
+    void saveReaderState();
+    return state.readerPrefs.contentWidth;
+  }
+
   function setPrintPreset(key) {
     const position = readerSettings().readingPosition;
     const preset = key ? OD.readerParity.PRINT_PRESETS[key] : null;
@@ -4098,7 +4159,15 @@ window.OD = window.OD || {};
   $("fontSmaller").addEventListener("click", () => updateReaderPreference("fontSize", state.readerPrefs.fontSize - 1, { rerender: false }));
   $("fontLarger").addEventListener("click", () => updateReaderPreference("fontSize", state.readerPrefs.fontSize + 1, { rerender: false }));
   $("lineHeight").addEventListener("change", event => updateReaderPreference("lineHeight", event.target.value, { rerender: false }));
-  $("contentWidth").addEventListener("change", event => updateReaderPreference("contentWidth", event.target.value, { rerender: false }));
+  // Dragging previews the column live; letting go saves it once, back at the
+  // message that was on screen when the drag began.
+  $("contentWidth").addEventListener("input", event => previewContentWidth(event.target.value));
+  $("contentWidth").addEventListener("change", event => setContentWidth(event.target.value));
+  // Steps start from what the window shows, so a width saved on a bigger
+  // screen never makes the first few presses look dead.
+  $("contentNarrower")?.addEventListener?.("click", () => setContentWidth(effectiveContentWidth() - OD.readerParity.CONTENT_WIDTH.buttonStep));
+  $("contentWider")?.addEventListener?.("click", () => setContentWidth(effectiveContentWidth() + OD.readerParity.CONTENT_WIDTH.buttonStep));
+  window.addEventListener?.("resize", () => renderContentWidthControls(state.readerPrefs.contentWidth));
   $("printPreset")?.addEventListener?.("change", event => setPrintPreset(event.target.value || null));
   /* Aa cards (real-browser layer over the hidden selects) */
   [...(document.querySelectorAll?.("[data-theme-card]") || [])].forEach(card => {
@@ -4957,6 +5026,8 @@ window.OD = window.OD || {};
     setFavoritesOnly,
     setTagFilter,
     setPrintPreset,
+    setContentWidth,
+    previewContentWidth,
     loadDemoLibrary,
     buildExport,
     exportAs,

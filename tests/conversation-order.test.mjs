@@ -73,7 +73,7 @@ async function loadAppRuntime(savedSortMode="asc", options={}) {
     "folderInput", "voiceMappingInput", "voiceArchiveInput", "clearSolVoice",
     "sourceFilter", "sourceRow", "shelfSelectToggle", "shelfSelectBar", "shelfSelectCount", "shelfSelectDone", "shelfSelectTarget", "shelfSelectApply", "shelfSelectNewName", "shelfNewGroupDrop", "clearSources", "hideUser", "showThinking", "theme", "sidebarToggle", "sidebar",
     "directoryPicker", "localLibraryStatus", "clearLocalLibrary", "acceptanceAudit", "runAcceptanceAudit",
-    "fontSmaller", "fontLarger", "lineHeight", "contentWidth", "fontFamily", "printPreset",
+    "fontSmaller", "fontLarger", "lineHeight", "contentWidth", "contentNarrower", "contentWider", "contentWidthValue", "fontFamily", "printPreset",
     "readingMode", "pageLength", "uiLocale", "pageNavigation", "previousPage", "nextPage",
     "pageIndicator", "pageJump", "pageCount", "toTop", "toEnd",
     "readerToolbar", "readerMoreToggle", "readerMoreMenu", "voiceStatusLine", "readingProgressLabel",
@@ -2039,4 +2039,63 @@ test("conversations from different sources share one group and leave their sourc
   runtime.OD.app.dissolveSourceGroup(groupId);
   assert.equal(Object.values(runtime.OD.app.getState().sourceShelf.conversations).includes(groupId), false);
   assert.equal(runtime.OD.app.getState().archive.conversations.length, 6, "nothing is removed");
+});
+
+test("text width moves freely: the slider previews live, − and ＋ step, the ends hold", async () => {
+  const { runtime, elements, stored, rootStyle } = await loadAppRuntime("asc");
+  const width = () => runtime.OD.app.getState().readerPreferences.contentWidth;
+  const saved = () => JSON.parse(stored.get("our-dialogues.reader-state.v1") || "{}").contentWidth;
+  assert.equal(width(), 800);
+  assert.equal(elements.get("contentWidthValue").textContent, "800 px");
+
+  elements.get("contentWider").click();
+  assert.equal(width(), 840);
+  assert.equal(elements.get("contentWidth").value, "840");
+  assert.equal(elements.get("contentWidthValue").textContent, "840 px");
+  elements.get("contentNarrower").click();
+  elements.get("contentNarrower").click();
+  assert.equal(width(), 760);
+
+  // Dragging previews without saving; letting go saves once.
+  elements.get("contentWidth").value = "1100";
+  elements.get("contentWidth").dispatch("input");
+  assert.equal(elements.get("contentWidthValue").textContent, "1100 px");
+  assert.equal(width(), 760, "a preview is not yet a setting");
+  elements.get("contentWidth").dispatch("change");
+  assert.equal(width(), 1100);
+  assert.equal(saved(), 1100);
+
+  for (let index = 0; index < 10; index += 1) elements.get("contentWider").click();
+  assert.equal(width(), 1280);
+  assert.equal(elements.get("contentWider").disabled, true);
+  assert.equal(elements.get("contentNarrower").disabled, false);
+  runtime.OD.app.setContentWidth(100);
+  assert.equal(width(), 480);
+  assert.equal(elements.get("contentNarrower").disabled, true);
+  if (rootStyle?.getPropertyValue) assert.equal(rootStyle.getPropertyValue("--cw"), "480px");
+});
+
+test("the width slider ends where the window does, and steps back from what is shown", async () => {
+  const { runtime, elements, rootStyle } = await loadAppRuntime("asc");
+  elements.get("main").clientWidth = 1128; // 1440 wide with the sidebar open
+  runtime.OD.app.setContentWidth(1280);
+  const width = () => runtime.OD.app.getState().readerPreferences.contentWidth;
+  assert.equal(width(), 940, "no wider than this window can show");
+  assert.equal(elements.get("contentWidth").max, "940");
+  assert.equal(elements.get("contentWider").disabled, true);
+  if (rootStyle?.getPropertyValue) assert.equal(rootStyle.getPropertyValue("--reader-gutter"), "48px", "past the default, the stage margins give way");
+  elements.get("contentNarrower").click();
+  assert.equal(width(), 900, "one press, one visible step");
+  runtime.OD.app.setContentWidth(800);
+  if (rootStyle?.getPropertyValue) assert.equal(rootStyle.getPropertyValue("--reader-gutter"), "144px", "the default keeps its margins");
+});
+
+test("below 1024px the sheet fills the screen and the width control says so", async () => {
+  const { runtime, elements } = await loadAppRuntime("asc", { matchMedia: query => ({ matches: /max-width:\s*1023px|max-width:\s*760px/.test(query), addEventListener() {}, addListener() {} }) });
+  runtime.OD.app.setContentWidth(960);
+  assert.equal(elements.get("contentWidth").disabled, true);
+  assert.equal(elements.get("contentWidthValue").textContent, "随屏幕");
+  assert.equal(elements.get("contentWider").disabled, true);
+  assert.equal(elements.get("contentNarrower").disabled, true);
+  assert.equal(runtime.OD.app.getState().readerPreferences.contentWidth, 960, "the saved width is kept for a wider screen");
 });
