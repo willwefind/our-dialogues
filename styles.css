@@ -226,6 +226,26 @@ button,input,select{font:inherit}
 .source-row-menu button{margin-right:6px;border:1px solid var(--line);border-radius:var(--radius-xs);background:transparent;color:var(--muted);padding:4px 8px;cursor:pointer;font:10px/1 var(--font-ui)}
 .source-row-menu button:hover{border-color:var(--accent);color:var(--ink)}
 .source-row-menu [data-remove-source]:hover{color:#b33224;border-color:#b33224}
+/* Source shelf: the reader's own groups around sources, and the name / group fields in the ··· menus */
+.shelf-group{margin:0}
+.shelf-group>summary{display:flex;align-items:center;gap:7px;min-height:34px;padding:0 8px 0 10px;cursor:pointer;list-style:none;box-sizing:border-box;font:600 11px/1 var(--font-ui);letter-spacing:.08em;color:var(--muted)}
+.shelf-group>summary::-webkit-details-marker{display:none}
+.shelf-group>summary::before{content:"›";flex:none;transform:rotate(90deg);transition:transform .15s}
+.shelf-group:not([open])>summary::before{transform:none}
+.shelf-group>summary:hover{color:var(--ink)}
+.shelf-group-label{min-width:0;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.shelf-group-sources{margin-left:12px;border-left:1px solid var(--line)}
+.shelf-group-menu{margin:0 12px 6px 16px;padding:8px 10px;border:1px solid var(--line);border-radius:var(--radius-xs);background:var(--panel);font:10px/1.5 var(--font-ui);color:var(--muted)}
+.shelf-group-menu button{margin-right:6px;border:1px solid var(--line);border-radius:var(--radius-xs);background:transparent;color:var(--muted);padding:4px 8px;cursor:pointer;font:10px/1 var(--font-ui)}
+.shelf-group-menu button:hover{border-color:var(--accent);color:var(--ink)}
+.source-row-field{display:flex;flex-direction:column;gap:3px;margin-bottom:6px}
+.source-row-field input,.source-row-field select,.source-row-new-group input{width:100%;box-sizing:border-box;border:1px solid var(--line);border-radius:var(--radius-xs);background:var(--paper);color:var(--ink);padding:5px 7px;font:11.5px/1.3 var(--font-ui);outline:none}
+.source-row-field input:focus,.source-row-field select:focus,.source-row-new-group input:focus{border-color:var(--accent)}
+.source-row-actions{margin-bottom:8px}
+.shelf-group-menu .source-row-actions{margin-bottom:4px}
+.source-row-new-group{display:flex;gap:6px;align-items:center;margin-bottom:8px}
+.source-row-new-group[hidden]{display:none}
+.source-row-new-group button{flex:none;margin-right:0}
 .character-group{margin-left:0}
 .character-group>summary{min-height:36px;padding:0 8px 0 28px;color:var(--accent);font-size:11px}
 .character-identity{display:block;color:var(--muted);font-size:8px;font-weight:400;overflow:hidden;text-overflow:ellipsis}

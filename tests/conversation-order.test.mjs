@@ -222,6 +222,7 @@ async function loadAppRuntime(savedSortMode="asc", options={}) {
     "src/core/message-search.js",
     "src/core/solvoice-sidecar.js",
     "src/core/organization.js",
+    "src/core/source-shelf.js",
     "src/core/companionship.js",
     "src/core/reader-background.js",
     "src/core/export.js",
@@ -1812,4 +1813,74 @@ test("exports carry the reading surface and respect the filtered list", async ()
   const single = runtime.OD.app.buildExport("current-html");
   assert.match(single.filename, /\.html$/);
   assert.doesNotMatch(single.content, /class="toc"/, "a single conversation needs no TOC");
+});
+
+test("sources can be renamed and filed into reader-made groups, and the shelf persists", async () => {
+  const { runtime, elements, stored } = await loadAppRuntime("asc");
+  const makeArchive = (platform, id) => ({
+    source: { platform, exporter: `${platform}-synthetic` },
+    conversations: [{
+      id,
+      title: `${platform} title`,
+      createdAt: "2026-08-16T00:00:00.000Z",
+      participants: [],
+      messages: [{ id: `${id}-message`, role: "assistant", content: `${platform} body` }]
+    }]
+  });
+  const claudeArchive = makeArchive("claude", "claude-chat");
+  runtime.OD.app.loadArchive(claudeArchive, "Claude JSON");
+  runtime.OD.app.loadArchive(makeArchive("chatgpt", "chatgpt-chat"), "ChatGPT official export");
+  runtime.OD.app.loadArchive(makeArchive("normalized", "plain-chat"), "Normalized JSON");
+  const byPlatform = platform => runtime.OD.app.getState().sources.find(source => source.platform === platform);
+  const list = () => elements.get("conversationList").innerHTML;
+  const mirror = () => JSON.parse(stored.get("our-dialogues.reader-state.v1"));
+
+  runtime.OD.app.renameSource(byPlatform("chatgpt").id, "  和 Sol 的对话 ");
+  assert.equal(byPlatform("chatgpt").displayName, "和 Sol 的对话");
+  assert.equal(byPlatform("chatgpt").label, "ChatGPT official export", "the archive label itself is untouched");
+  assert.match(list(), /class="source-summary-label"[^>]*>和 Sol 的对话</);
+  assert.match(list(), /原名 · ChatGPT official export/, "the menu still shows where the source came from");
+  assert.match(elements.get("sourceFilter").innerHTML, /和 Sol 的对话（1）/);
+  assert.equal(mirror().sourceShelf.names[byPlatform("chatgpt").id], "和 Sol 的对话");
+
+  runtime.OD.app.openConversation("chatgpt-chat");
+  assert.match(elements.get("readerMeta").innerHTML, /<span data-source-label>和 Sol 的对话<\/span>/);
+
+  runtime.OD.app.moveSourceToNewGroup(byPlatform("chatgpt").id, "旧日");
+  const groupId = runtime.OD.app.getState().sourceShelf.groups[0].id;
+  runtime.OD.app.setSourceGroup(byPlatform("normalized").id, groupId);
+  const html = list();
+  const groupStart = html.indexOf('class="shelf-group"');
+  assert.ok(groupStart >= 0, "the group is drawn");
+  assert.ok(html.indexOf(byPlatform("claude").id) < groupStart, "an ungrouped source before the group keeps its place");
+  assert.ok(html.indexOf(byPlatform("chatgpt").id) > groupStart && html.indexOf(byPlatform("normalized").id) > groupStart);
+  assert.match(html, /class="shelf-group-label">旧日<\/span>\s*<span class="source-count">2</);
+
+  elements.get("sourceFilter").value = `group:${groupId}`;
+  elements.get("sourceFilter").dispatch("change");
+  assert.deepEqual([...runtime.OD.app.getState().filteredIds].sort(), ["chatgpt-chat", "plain-chat"]);
+  assert.match(elements.get("sourceFilter").innerHTML, /<optgroup label="旧日"><option value="group:[^"]+">整组 · 旧日（2）/);
+
+  runtime.OD.app.renameSourceGroup(groupId, "   ");
+  assert.equal(runtime.OD.app.getState().sourceShelf.groups[0].name, "旧日", "an empty group name is refused");
+  runtime.OD.app.renameSourceGroup(groupId, "Sol 那边");
+  assert.match(list(), /class="shelf-group-label">Sol 那边</);
+
+  // A source removed and imported again comes back under its name and in its group.
+  const claudeId = byPlatform("claude").id;
+  runtime.OD.app.renameSource(claudeId, "小克");
+  runtime.OD.app.setSourceGroup(claudeId, groupId);
+  assert.equal(runtime.OD.app.removeSource(claudeId), true);
+  runtime.OD.app.loadArchive(claudeArchive, "Claude JSON");
+  assert.equal(byPlatform("claude").displayName, "小克");
+  assert.equal(runtime.OD.app.getState().sourceShelf.members[claudeId], groupId);
+
+  runtime.OD.app.dissolveSourceGroup(groupId);
+  assert.doesNotMatch(list(), /shelf-group/);
+  assert.equal(runtime.OD.app.getState().sourceFilter, "all", "a filter on the dissolved group falls back to all");
+  assert.equal(runtime.OD.app.getState().sources.length, 3, "dissolving removes nothing");
+
+  runtime.OD.app.renameSource(byPlatform("chatgpt").id, "");
+  assert.equal(byPlatform("chatgpt").displayName, "ChatGPT official export");
+  assert.deepEqual(Object.keys(mirror().sourceShelf.names), [claudeId]);
 });
