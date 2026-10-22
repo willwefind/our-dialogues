@@ -255,7 +255,6 @@ window.OD = window.OD || {};
   "typography.narrower": "窄一点",
   "typography.wider": "宽一点",
   "typography.widthValue": "{px} px",
-  "typography.widthFollowsScreen": "随屏幕",
   "typography.pagingMode": "翻页方式",
   "typography.readingModeAria": "阅读模式",
   "typography.modeScroll": "滚动",

@@ -63,7 +63,7 @@ window.OD = window.OD || {};
   /* The reading column, in px: dragged on a slider, stepped by the − / ＋
      buttons. The sheet is still capped by the window, so a wide setting on a
      narrow screen simply uses all the room there is. */
-  const CONTENT_WIDTH = { min: 480, max: 1280, step: 20, buttonStep: 40 };
+  const CONTENT_WIDTH = { min: 240, max: 1280, step: 20, buttonStep: 40 };
 
   function boundedNumber(value, fallback, minimum, maximum) {
     const number = Number(value);

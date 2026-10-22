@@ -4089,36 +4089,46 @@ window.OD = window.OD || {};
     return width > OD.readerParity.DEFAULTS.contentWidth ? "48px" : "144px";
   }
 
-  /* The widest column this window can really show. Below 1024px the sheet
-     already fills the screen and the setting has nothing to change. */
+  /* The range this window can really show, measured the way the sheet is
+     laid out: on a desktop the sheet's 68px insets and a 24px stage margin a
+     side; on a tablet (≤1023px) and a phone (≤760px) the sheet already spans
+     the screen, so the column runs from a narrow 240px up to all the room
+     inside the usual margins, in finer steps. */
   function contentWidthLimit() {
-    const { min, max, step } = OD.readerParity.CONTENT_WIDTH;
-    if (window.matchMedia?.("(max-width: 1023px)")?.matches) return null;
+    const { min, max, step, buttonStep } = OD.readerParity.CONTENT_WIDTH;
     const available = Number($("main")?.clientWidth || 0);
-    if (!available) return max;
-    const sheetChrome = 136;
-    return Math.max(min, Math.min(max, Math.floor((available - 48 - sheetChrome) / step) * step));
+    const phone = !!window.matchMedia?.("(max-width: 760px)")?.matches;
+    const tablet = !phone && !!window.matchMedia?.("(max-width: 1023px)")?.matches;
+    if (phone || tablet) {
+      const room = Math.floor(((available || 375) - (phone ? 44 : 160)) / 10) * 10;
+      return { min: Math.min(min, room), max: Math.max(Math.min(min, room), room), step: 10, buttonStep: 20 };
+    }
+    if (!available) return { min: 480, max, step, buttonStep };
+    return { min: 480, max: Math.max(480, Math.min(max, Math.floor((available - 48 - 136) / step) * step)), step, buttonStep };
+  }
+
+  function clampToLimit(width, limit = contentWidthLimit()) {
+    return Math.max(limit.min, Math.min(limit.max, width));
   }
 
   function effectiveContentWidth() {
-    const limit = contentWidthLimit();
-    return limit === null ? state.readerPrefs.contentWidth : Math.min(state.readerPrefs.contentWidth, limit);
+    return clampToLimit(state.readerPrefs.contentWidth);
   }
 
   function renderContentWidthControls(width) {
-    const { min } = OD.readerParity.CONTENT_WIDTH;
     const limit = contentWidthLimit();
+    const shown = clampToLimit(width, limit);
     const slider = $("contentWidth");
-    const fixed = limit === null;
-    const shown = fixed ? width : Math.min(width, limit);
     if (slider) {
-      slider.max = String(fixed ? OD.readerParity.CONTENT_WIDTH.max : limit);
+      slider.min = String(limit.min);
+      slider.max = String(limit.max);
+      slider.step = String(limit.step);
       slider.value = String(shown);
-      slider.disabled = fixed;
+      slider.disabled = false;
     }
-    if ($("contentWidthValue")) $("contentWidthValue").textContent = fixed ? t("typography.widthFollowsScreen") : t("typography.widthValue", { px: shown });
-    if ($("contentNarrower")) $("contentNarrower").disabled = fixed || shown <= min;
-    if ($("contentWider")) $("contentWider").disabled = fixed || shown >= limit;
+    if ($("contentWidthValue")) $("contentWidthValue").textContent = t("typography.widthValue", { px: shown });
+    if ($("contentNarrower")) $("contentNarrower").disabled = shown <= limit.min;
+    if ($("contentWider")) $("contentWider").disabled = shown >= limit.max;
   }
 
   function previewContentWidth(value) {
@@ -4132,9 +4142,8 @@ window.OD = window.OD || {};
   function setContentWidth(value) {
     const position = state.widthDragAnchor || readerSettings().readingPosition;
     state.widthDragAnchor = null;
-    const limit = contentWidthLimit();
     const wanted = Number(value);
-    state.readerPrefs = OD.readerParity.normalizePreferences({ ...state.readerPrefs, contentWidth: limit === null ? wanted : Math.min(wanted, limit) });
+    state.readerPrefs = OD.readerParity.normalizePreferences({ ...state.readerPrefs, contentWidth: Number.isFinite(wanted) ? clampToLimit(wanted) : wanted });
     applyReaderPreferences();
     restoreStyleAnchor(position);
     void saveReaderState();
@@ -4165,8 +4174,8 @@ window.OD = window.OD || {};
   $("contentWidth").addEventListener("change", event => setContentWidth(event.target.value));
   // Steps start from what the window shows, so a width saved on a bigger
   // screen never makes the first few presses look dead.
-  $("contentNarrower")?.addEventListener?.("click", () => setContentWidth(effectiveContentWidth() - OD.readerParity.CONTENT_WIDTH.buttonStep));
-  $("contentWider")?.addEventListener?.("click", () => setContentWidth(effectiveContentWidth() + OD.readerParity.CONTENT_WIDTH.buttonStep));
+  $("contentNarrower")?.addEventListener?.("click", () => setContentWidth(effectiveContentWidth() - contentWidthLimit().buttonStep));
+  $("contentWider")?.addEventListener?.("click", () => setContentWidth(effectiveContentWidth() + contentWidthLimit().buttonStep));
   window.addEventListener?.("resize", () => renderContentWidthControls(state.readerPrefs.contentWidth));
   $("printPreset")?.addEventListener?.("change", event => setPrintPreset(event.target.value || null));
   /* Aa cards (real-browser layer over the hidden selects) */

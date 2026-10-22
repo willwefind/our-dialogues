@@ -162,6 +162,12 @@ button,input,select{font:inherit}
 .od-icon-bookmark{--od-nav-mask:url("assets/reader/icons/bookmark.svg")}
 .od-icon-search{--od-nav-mask:url("assets/reader/icons/search.svg")}
 .od-mode-pane{display:flex;flex-direction:column;flex:1 1 auto;min-height:0}
+/* On a short phone screen the pane's rows plus the list's minimum can be
+   taller than the pane; it then scrolls within itself instead of letting the
+   list spill over the status line beneath it. On a tall screen nothing
+   overflows, so nothing changes. */
+#libraryPane{overflow-y:auto}
+#libraryPane>#shelfSelectBar,#libraryPane>#shelfNewGroupDrop{flex:none}
 .od-status{flex:none;padding:6px 16px 10px;border-top:1px solid var(--line);margin-top:0}
 
 /* ── Library-pane rows and in-place menus ── */
@@ -514,7 +520,9 @@ body:not(.show-thinking) .message.reasoning-only{display:none}
   #sidebar.closed{margin-left:0;transform:translateX(-105%)}
 }
 @media (max-width:1023px){
-  .reader{width:calc(100% - 64px);padding:40px 48px 80px}
+  /* The column is the chosen width or the room there is, whichever is
+     less; whatever is left becomes even side margins. */
+  .reader{width:calc(100% - 64px);padding:40px max(48px, calc((100% - 64px - var(--cw)) / 2)) 80px}
 }
 @media (max-width:760px){
   #sidebar{width:min(86vw,340px)}
@@ -522,7 +530,7 @@ body:not(.show-thinking) .message.reasoning-only{display:none}
   .current-title{min-width:0;font-size:13px}
   .ghost{padding:7px 9px}
   .icon-button{width:44px;height:44px}
-  .reader{width:100%;margin:0;border:0;border-radius:0;box-shadow:none;padding:32px 22px calc(128px + env(safe-area-inset-bottom))}
+  .reader{width:100%;margin:0;border:0;border-radius:0;box-shadow:none;padding:32px max(22px, calc((100% - var(--cw)) / 2)) calc(128px + env(safe-area-inset-bottom))}
   .message[data-role="user"]::before{left:-13px}
   .welcome{padding:18px}.welcome-card{padding:26px 20px}.welcome-card h2{font-size:20px}
   .conv{padding:8px 10px 8px 40px}

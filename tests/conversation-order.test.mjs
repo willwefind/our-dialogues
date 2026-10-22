@@ -2090,12 +2090,21 @@ test("the width slider ends where the window does, and steps back from what is s
   if (rootStyle?.getPropertyValue) assert.equal(rootStyle.getPropertyValue("--reader-gutter"), "144px", "the default keeps its margins");
 });
 
-test("below 1024px the sheet fills the screen and the width control says so", async () => {
+test("on a phone the width control narrows the column within the screen, in finer steps", async () => {
   const { runtime, elements } = await loadAppRuntime("asc", { matchMedia: query => ({ matches: /max-width:\s*1023px|max-width:\s*760px/.test(query), addEventListener() {}, addListener() {} }) });
-  runtime.OD.app.setContentWidth(960);
-  assert.equal(elements.get("contentWidth").disabled, true);
-  assert.equal(elements.get("contentWidthValue").textContent, "随屏幕");
+  elements.get("main").clientWidth = 375;
+  runtime.OD.app.setContentWidth(800);
+  const width = () => runtime.OD.app.getState().readerPreferences.contentWidth;
+  assert.equal(elements.get("contentWidth").disabled, false);
+  assert.equal(elements.get("contentWidth").max, "330", "all the room inside the 22px margins");
+  assert.equal(elements.get("contentWidth").min, "240");
+  assert.equal(elements.get("contentWidth").step, "10");
+  assert.equal(width(), 330);
   assert.equal(elements.get("contentWider").disabled, true);
+  elements.get("contentNarrower").click();
+  assert.equal(width(), 310, "a press is 20px on a phone");
+  assert.equal(elements.get("contentWidthValue").textContent, "310 px");
+  runtime.OD.app.setContentWidth(100);
+  assert.equal(width(), 240);
   assert.equal(elements.get("contentNarrower").disabled, true);
-  assert.equal(runtime.OD.app.getState().readerPreferences.contentWidth, 960, "the saved width is kept for a wider screen");
 });
