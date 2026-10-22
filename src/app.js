@@ -38,6 +38,8 @@ window.OD = window.OD || {};
     annotations: [],
     annotationColor: "yellow",
     organization: { favorites: {}, tags: {} },
+    // What the reader calls each source, and the groups the reader filed them in.
+    sourceShelf: { names: {}, groups: [], members: {} },
     favoritesOnly: false,
     tagFilter: "",
     // Memorial card: which companions the reader keeps at hand, which it last
@@ -265,6 +267,7 @@ window.OD = window.OD || {};
       searchSourceId: state.searchSourceId,
       toolTab: state.toolTab,
       organization: OD.organization.normalize(state.organization),
+      sourceShelf: OD.sourceShelf.normalize(state.sourceShelf),
       companionshipPinned: [...state.companionshipPinned],
       companionshipRecent: [...state.companionshipRecent],
       companionshipOverrides: OD.companionship.normalizeOverrides(state.companionshipOverrides),
@@ -892,14 +895,14 @@ window.OD = window.OD || {};
           entries.push({
             key: OD.companionship.companionKey(source.id, character.key),
             name: character.name,
-            sourceLabel: source.label || "",
+            sourceLabel: sourceName(source),
             conversations: character.conversations
           });
         }
       } else if (conversations.length) {
         entries.push({
           key: OD.companionship.companionKey(source.id, null),
-          name: source.label || "",
+          name: sourceName(source),
           sourceLabel: "",
           conversations
         });
@@ -1398,7 +1401,7 @@ window.OD = window.OD || {};
       if (!groups.has(collectionId)) {
         groups.set(collectionId, {
           id: collectionId,
-          name: conversation.context?.sourceMetadata?.collectionName || collectionId || source.label,
+          name: conversation.context?.sourceMetadata?.collectionName || collectionId || sourceName(source),
           type: conversation.context?.sourceMetadata?.documentType || "other",
           conversations: []
         });
@@ -1425,10 +1428,118 @@ window.OD = window.OD || {};
     }).join("");
   }
 
+  /* ── Source shelf: the reader's names and groups for sources ── */
+  function sourceName(source) {
+    return OD.sourceShelf.displayName(state.sourceShelf, source);
+  }
+
+  const SHELF_GROUP_FILTER = "group:";
+  const SHELF_GROUP_OPEN_KEY = "shelf-group:";
+
+  function sourcesInFilter(sources, filter) {
+    if (!filter || filter === "all") return sources;
+    if (filter.startsWith(SHELF_GROUP_FILTER)) {
+      const groupId = filter.slice(SHELF_GROUP_FILTER.length);
+      return sources.filter(source => OD.sourceShelf.groupOf(state.sourceShelf, source.id)?.id === groupId);
+    }
+    return sources.filter(source => source.id === filter);
+  }
+
+  function isKnownSourceFilter(filter, sources = state.library.sources()) {
+    if (!filter || filter === "all") return false;
+    return sourcesInFilter(sources, filter).length > 0;
+  }
+
+  function changeSourceShelf(next, status) {
+    state.sourceShelf = OD.sourceShelf.normalize(next);
+    renderSourceControls();
+    renderList();
+    renderCurrentSourceMeta();
+    if (status) setStatus(status);
+    void saveReaderState();
+    return state.sourceShelf;
+  }
+
+  function renameSource(sourceId, name) {
+    const source = state.library.get(sourceId);
+    if (!source) return null;
+    const next = OD.sourceShelf.rename(state.sourceShelf, source.id, name, source.label);
+    return changeSourceShelf(next, OD.sourceShelf.hasCustomName(next, source.id)
+      ? t("shelf.renamed", { name: OD.sourceShelf.displayName(next, source) })
+      : t("shelf.restored", { name: source.label }));
+  }
+
+  function setSourceGroup(sourceId, groupId) {
+    const source = state.library.get(sourceId);
+    if (!source) return null;
+    const next = OD.sourceShelf.assign(state.sourceShelf, source.id, groupId || null);
+    const group = OD.sourceShelf.groupOf(next, source.id);
+    return changeSourceShelf(next, group
+      ? t("shelf.movedInto", { name: sourceName(source), group: group.name })
+      : t("shelf.movedOut", { name: sourceName(source) }));
+  }
+
+  function moveSourceToNewGroup(sourceId, groupName) {
+    const source = state.library.get(sourceId);
+    if (!source || !OD.sourceShelf._internals.cleanName(groupName)) return null;
+    const { shelf, groupId } = OD.sourceShelf.assignToNewGroup(state.sourceShelf, source.id, groupName);
+    state.groupState.sources[`${SHELF_GROUP_OPEN_KEY}${groupId}`] = true;
+    const group = shelf.groups.find(item => item.id === groupId);
+    return changeSourceShelf(shelf, t("shelf.movedInto", { name: sourceName(source), group: group?.name || "" }));
+  }
+
+  function renameSourceGroup(groupId, name) {
+    if (!OD.sourceShelf._internals.cleanName(name)) return null;
+    return changeSourceShelf(OD.sourceShelf.renameGroup(state.sourceShelf, groupId, name));
+  }
+
+  function dissolveSourceGroup(groupId) {
+    const group = state.sourceShelf.groups.find(item => item.id === String(groupId));
+    if (!group) return null;
+    if (state.sourceFilter === `${SHELF_GROUP_FILTER}${group.id}`) state.sourceFilter = "all";
+    delete state.groupState.sources[`${SHELF_GROUP_OPEN_KEY}${group.id}`];
+    return changeSourceShelf(OD.sourceShelf.dissolveGroup(state.sourceShelf, group.id), t("shelf.dissolved", { group: group.name }));
+  }
+
+  /* Keeps the reading header's source label in step with a rename. */
+  function renderCurrentSourceMeta() {
+    if (!state.current) return;
+    const source = state.library.sourceForConversation(state.current);
+    const label = $("readerMeta")?.querySelector?.("[data-source-label]");
+    if (source && label) label.textContent = sourceName(source);
+  }
+
+  function shelfGroupOptionsMarkup(source) {
+    const current = OD.sourceShelf.groupOf(state.sourceShelf, source.id);
+    return [
+      `<option value=""${current ? "" : " selected"}>${esc(t("shelf.noGroup"))}</option>`,
+      ...state.sourceShelf.groups.map(group => `<option value="${esc(group.id)}"${current?.id === group.id ? " selected" : ""}>${esc(group.name)}</option>`),
+      `<option value="__new">${esc(t("shelf.newGroupOption"))}</option>`
+    ].join("");
+  }
+
   function sourceRowMenuMarkup(source, conversationCount) {
     const canReconnect = source.assetMode === "local-reconnect" || source.directoryHandle;
+    const renamed = OD.sourceShelf.hasCustomName(state.sourceShelf, source.id);
     return `<div class="source-row-menu" hidden>
       <div class="source-row-details">${esc(t("source.conversationCount", { count: conversationCount }))}${source.importDetails ? ` · ${esc(source.importDetails)}` : ""}</div>
+      <label class="source-row-field">
+        <span>${esc(t("shelf.nameLabel"))}</span>
+        <input type="text" data-source-name-input="${esc(source.id)}" value="${esc(sourceName(source))}" placeholder="${esc(source.label)}" maxlength="${OD.sourceShelf.NAME_MAX_LENGTH}" autocomplete="off">
+      </label>
+      ${renamed ? `<div class="source-row-details">${esc(t("shelf.archiveName", { name: source.label }))}</div>` : ""}
+      <div class="source-row-actions">
+        <button type="button" data-source-name-save="${esc(source.id)}">${esc(t("shelf.saveName"))}</button>
+        ${renamed ? `<button type="button" data-source-name-restore="${esc(source.id)}">${esc(t("shelf.restoreName"))}</button>` : ""}
+      </div>
+      <label class="source-row-field">
+        <span>${esc(t("shelf.groupLabel"))}</span>
+        <select data-source-group="${esc(source.id)}">${shelfGroupOptionsMarkup(source)}</select>
+      </label>
+      <div class="source-row-new-group" hidden>
+        <input type="text" data-source-new-group-input="${esc(source.id)}" placeholder="${esc(t("shelf.newGroupPlaceholder"))}" maxlength="${OD.sourceShelf.NAME_MAX_LENGTH}" autocomplete="off" aria-label="${esc(t("shelf.newGroupPlaceholder"))}">
+        <button type="button" data-source-new-group-save="${esc(source.id)}">${esc(t("shelf.newGroupCreate"))}</button>
+      </div>
       ${canReconnect ? `<button type="button" data-reconnect-source-row="${esc(source.id)}">${esc(t("source.reconnect"))}</button>` : ""}
       <button type="button" data-remove-source="${esc(source.id)}" class="od-danger-quiet">${esc(t("source.removeThis"))}</button>
     </div>`;
@@ -1473,15 +1584,95 @@ window.OD = window.OD || {};
     }
     const storedSource = state.groupState.sources[source.id];
     const sourceOpen = searching || (storedSource === undefined ? true : storedSource !== false);
+    const name = sourceName(source);
     return `<details class="source-group" data-source-id="${esc(source.id)}"${sourceOpen ? " open" : ""}>
       <summary>
-        <span class="source-summary-label">${esc(source.label)}</span>
+        <span class="source-summary-label" title="${esc(name === source.label ? name : `${name} · ${source.label}`)}">${esc(name)}</span>
         <span class="source-count">${conversations.length}</span>
-        <button class="source-menu-button" type="button" data-source-menu="${esc(source.id)}" title="${esc(t("source.menuTitle"))}" aria-haspopup="true" aria-label="${esc(t("source.menuAria", { label: source.label }))}">···</button>
+        <button class="source-menu-button" type="button" data-source-menu="${esc(source.id)}" title="${esc(t("source.menuTitle"))}" aria-haspopup="true" aria-label="${esc(t("source.menuAria", { label: name }))}">···</button>
       </summary>
       ${sourceRowMenuMarkup(source, conversations.length)}
       ${children}
     </details>`;
+  }
+
+  /* A reader-made group around its sources. Its open state shares the
+     sources' store under a "shelf-group:" key, which no source ID can take. */
+  function shelfGroupMarkup(group, innerHTML, conversationCount, searching) {
+    const stored = state.groupState.sources[`${SHELF_GROUP_OPEN_KEY}${group.id}`];
+    const open = searching || stored !== false;
+    return `<details class="shelf-group" data-shelf-group="${esc(group.id)}"${open ? " open" : ""}>
+      <summary>
+        <span class="shelf-group-label">${esc(group.name)}</span>
+        <span class="source-count">${conversationCount}</span>
+        <button class="source-menu-button" type="button" data-shelf-group-menu="${esc(group.id)}" title="${esc(t("shelf.groupMenuTitle"))}" aria-haspopup="true" aria-label="${esc(t("shelf.groupMenuAria", { group: group.name }))}">···</button>
+      </summary>
+      <div class="shelf-group-menu" hidden>
+        <label class="source-row-field">
+          <span>${esc(t("shelf.groupNameLabel"))}</span>
+          <input type="text" data-shelf-group-name-input="${esc(group.id)}" value="${esc(group.name)}" maxlength="${OD.sourceShelf.NAME_MAX_LENGTH}" autocomplete="off">
+        </label>
+        <div class="source-row-actions">
+          <button type="button" data-shelf-group-name-save="${esc(group.id)}">${esc(t("shelf.saveName"))}</button>
+          <button type="button" data-shelf-group-dissolve="${esc(group.id)}">${esc(t("shelf.dissolve"))}</button>
+        </div>
+        <div class="source-row-details">${esc(t("shelf.dissolveHint"))}</div>
+      </div>
+      <div class="shelf-group-sources">${innerHTML}</div>
+    </details>`;
+  }
+
+  function wireSourceShelf(scope) {
+    if (typeof scope?.querySelectorAll !== "function") return;
+    const each = (selector, bind) => [...(scope.querySelectorAll(selector) || [])].forEach(bind);
+    const quiet = event => { event.preventDefault?.(); event.stopPropagation?.(); };
+    const siblingInput = (button, selector) => button.closest?.(".source-row-menu, .shelf-group-menu")?.querySelector?.(selector);
+    each("[data-source-name-save]", button => button.addEventListener("click", event => {
+      quiet(event);
+      const input = siblingInput(button, "[data-source-name-input]");
+      if (input) renameSource(button.dataset.sourceNameSave, input.value);
+    }));
+    each("[data-source-name-restore]", button => button.addEventListener("click", event => {
+      quiet(event);
+      renameSource(button.dataset.sourceNameRestore, "");
+    }));
+    each("[data-source-name-input]", input => input.addEventListener("keydown", event => {
+      if (event.key === "Enter" && !event.isComposing) { quiet(event); renameSource(input.dataset.sourceNameInput, input.value); }
+    }));
+    each("[data-source-group]", select => select.addEventListener("change", () => {
+      const sourceId = select.dataset.sourceGroup;
+      if (select.value !== "__new") { setSourceGroup(sourceId, select.value || null); return; }
+      const row = select.closest?.(".source-row-menu")?.querySelector?.(".source-row-new-group");
+      if (row) {
+        row.hidden = false;
+        row.querySelector?.("input")?.focus?.({ preventScroll: true });
+      }
+    }));
+    each("[data-source-new-group-save]", button => button.addEventListener("click", event => {
+      quiet(event);
+      const input = siblingInput(button, "[data-source-new-group-input]");
+      if (input) moveSourceToNewGroup(button.dataset.sourceNewGroupSave, input.value);
+    }));
+    each("[data-source-new-group-input]", input => input.addEventListener("keydown", event => {
+      if (event.key === "Enter" && !event.isComposing) { quiet(event); moveSourceToNewGroup(input.dataset.sourceNewGroupInput, input.value); }
+    }));
+    each("[data-shelf-group-menu]", button => button.addEventListener("click", event => {
+      quiet(event);
+      const menu = button.closest?.(".shelf-group")?.querySelector?.(".shelf-group-menu");
+      if (menu) menu.hidden = !menu.hidden;
+    }));
+    each("[data-shelf-group-name-save]", button => button.addEventListener("click", event => {
+      quiet(event);
+      const input = siblingInput(button, "[data-shelf-group-name-input]");
+      if (input) renameSourceGroup(button.dataset.shelfGroupNameSave, input.value);
+    }));
+    each("[data-shelf-group-name-input]", input => input.addEventListener("keydown", event => {
+      if (event.key === "Enter" && !event.isComposing) { quiet(event); renameSourceGroup(input.dataset.shelfGroupNameInput, input.value); }
+    }));
+    each("[data-shelf-group-dissolve]", button => button.addEventListener("click", event => {
+      quiet(event);
+      dissolveSourceGroup(button.dataset.shelfGroupDissolve);
+    }));
   }
 
   function bookmarkSnippet(conversation, messageId) {
@@ -1498,7 +1689,7 @@ window.OD = window.OD || {};
     const messageId = messageAnchor();
     const bookmark = OD.bookmarks.create({
       sourceId: source?.id ?? null,
-      sourceLabel: source?.label || "",
+      sourceLabel: source ? sourceName(source) : "",
       conversationId: state.current.id,
       conversationTitle: displayConversationTitle(state.current),
       messageId,
@@ -1679,7 +1870,7 @@ window.OD = window.OD || {};
       color: state.annotationColor,
       ...fields,
       sourceId: source?.id ?? null,
-      sourceLabel: source?.label || "",
+      sourceLabel: source ? sourceName(source) : "",
       conversationId: state.current.id,
       conversationTitle: displayConversationTitle(state.current)
     });
@@ -1845,12 +2036,12 @@ window.OD = window.OD || {};
         const documentCard = isDocumentConversation(conversation);
         const continueMeta = documentCard
           ? [
-              conversation.context?.sourceMetadata?.collectionName || source?.label || "",
+              conversation.context?.sourceMetadata?.collectionName || (source ? sourceName(source) : ""),
               conversation.createdAt && conversation.context?.sourceMetadata?.titleSource !== "date"
                 ? fmtDateOnly(conversation.createdAt)
                 : ""
             ].filter(Boolean).map(esc).join(" · ")
-          : `${esc(source?.label || "")}${conversation.createdAt ? ` · ${esc(fmtDate(conversation.createdAt))}` : ""} · ${esc(t("home.segmentPosition", { index, total }))}`;
+          : `${esc(source ? sourceName(source) : "")}${conversation.createdAt ? ` · ${esc(fmtDate(conversation.createdAt))}` : ""} · ${esc(t("home.segmentPosition", { index, total }))}`;
         card.innerHTML = `<div class="continue-card" data-home-open="${esc(conversation.id)}" role="link" tabindex="0" aria-label="${esc(t("home.continueAria", { title: displayConversationTitle(conversation) }))}">
           <div class="continue-eyebrow">${esc(t("home.lastRead", { time: fmtRelative(entry.updatedAt) }))}</div>
           <div class="continue-title">${esc(displayConversationTitle(conversation))}</div>
@@ -1874,12 +2065,12 @@ window.OD = window.OD || {};
         const documentCard = isDocumentConversation(conversation);
         const additionMeta = documentCard
           ? [
-              conversation.context?.sourceMetadata?.collectionName || source?.label || "",
+              conversation.context?.sourceMetadata?.collectionName || (source ? sourceName(source) : ""),
               conversation.createdAt && conversation.context?.sourceMetadata?.titleSource !== "date"
                 ? fmtDateOnly(conversation.createdAt)
                 : ""
             ].filter(Boolean).map(esc).join(" · ")
-          : `${esc(source?.label || "")}${conversation.createdAt ? ` · ${esc(fmtDate(conversation.createdAt))}` : ""} · ${esc(t("conv.segmentCount", { count: conversation.messages.length }))}`;
+          : `${esc(source ? sourceName(source) : "")}${conversation.createdAt ? ` · ${esc(fmtDate(conversation.createdAt))}` : ""} · ${esc(t("conv.segmentCount", { count: conversation.messages.length }))}`;
         return `<div class="home-addition" data-home-open="${esc(conversation.id)}" role="link" tabindex="0">
           <div class="home-addition-title">${esc(displayConversationTitle(conversation))}</div>
           <div class="home-addition-meta">${additionMeta}</div>
@@ -2257,7 +2448,7 @@ window.OD = window.OD || {};
     }
     control.innerHTML = [
       `<option value="all">${esc(t("library.allSources"))}</option>`,
-      ...sources.map(source => `<option value="${esc(source.id)}">${esc(t("library.sourceOption", { label: source.label, count: source.conversations.length }))}</option>`)
+      ...sources.map(source => `<option value="${esc(source.id)}">${esc(t("library.sourceOption", { label: sourceName(source), count: source.conversations.length }))}</option>`)
     ].join("");
     control.value = state.searchSourceId;
   }
@@ -2294,7 +2485,7 @@ window.OD = window.OD || {};
       const canReconnect = source.assetMode === "local-reconnect" || source.directoryHandle;
       return `<div class="source-manage-row">
         <div class="source-manage-copy">
-          <div class="source-manage-label">${esc(source.label)}</div>
+          <div class="source-manage-label">${esc(sourceName(source))}</div>
           <small>${esc(t("conv.segmentCount", { count: source.conversations.length }))}${source.importDetails ? ` · ${esc(source.importDetails)}` : ""}</small>
         </div>
         <span class="source-manage-actions">
@@ -2312,11 +2503,14 @@ window.OD = window.OD || {};
     syncImportPanel();
     renderSearchSourceControl();
     if ($("sourceManagePanel")?.hidden === false) renderSourceManageList();
-    const selected = sources.some(source => source.id === state.sourceFilter) ? state.sourceFilter : "all";
+    const selected = isKnownSourceFilter(state.sourceFilter, sources) ? state.sourceFilter : "all";
     state.sourceFilter = selected;
+    const sourceOption = source => `<option value="${esc(source.id)}">${esc(t("library.sourceOption", { label: sourceName(source), count: source.conversations.length }))}</option>`;
     $("sourceFilter").innerHTML = [
       `<option value="all">${esc(t("library.allSourcesCount", { count: sources.length }))}</option>`,
-      ...sources.map(source => `<option value="${esc(source.id)}">${esc(t("library.sourceOption", { label: source.label, count: source.conversations.length }))}</option>`)
+      ...OD.sourceShelf.arrange(state.sourceShelf, sources).map(row => row.type === "source"
+        ? sourceOption(row.source)
+        : `<optgroup label="${esc(row.group.name)}"><option value="${esc(`${SHELF_GROUP_FILTER}${row.group.id}`)}">${esc(t("shelf.wholeGroupOption", { group: row.group.name, count: row.sources.reduce((sum, source) => sum + source.conversations.length, 0) }))}</option>${row.sources.map(sourceOption).join("")}</optgroup>`)
     ].join("");
     $("sourceFilter").value = selected;
     $("clearSources").disabled = sources.length === 0;
@@ -2324,9 +2518,7 @@ window.OD = window.OD || {};
 
   function renderList() {
     const allSources = state.library.sources();
-    const visibleSources = state.sourceFilter === "all"
-      ? allSources
-      : allSources.filter(source => source.id === state.sourceFilter);
+    const visibleSources = sourcesInFilter(allSources, state.sourceFilter);
     const all = visibleSources.flatMap(source => source.conversations);
     state.titleLabels = OD.mufyTitleResolver.disambiguate(all);
     state.filtered = OD.conversationOrder.filterAndSort(
@@ -2347,24 +2539,34 @@ window.OD = window.OD || {};
     // The sidebar's visible order doubles as the reading order, so
     // previous/next always move to what the eye sees as the neighbour.
     const readingOrder = [];
-    $("conversationList").innerHTML = visibleSources.map(source => sourceMarkup(
-      source,
-      OD.conversationOrder.sortConversations(
+    const sourceRow = source => {
+      const conversations = OD.conversationOrder.sortConversations(
         source.conversations.filter(conversation => filteredIds.has(conversation.id)),
         state.sortMode
-      ),
-      searching,
-      readingOrder
-    )).join("");
+      );
+      return { html: sourceMarkup(source, conversations, searching, readingOrder), count: conversations.length };
+    };
+    $("conversationList").innerHTML = OD.sourceShelf.arrange(state.sourceShelf, visibleSources).map(row => {
+      if (row.type === "source") return sourceRow(row.source).html;
+      const members = row.sources.map(sourceRow);
+      return shelfGroupMarkup(
+        row.group,
+        members.map(member => member.html).join(""),
+        members.reduce((sum, member) => sum + member.count, 0),
+        searching
+      );
+    }).join("");
     state.readingOrder = readingOrder;
 
     [...document.querySelectorAll(".conv")].forEach(el => {
       el.addEventListener("click", () => openConversation(el.dataset.id));
     });
-    [...document.querySelectorAll("#conversationList details.source-group, #conversationList details.character-group")].forEach(el => {
+    [...document.querySelectorAll("#conversationList details.shelf-group, #conversationList details.source-group, #conversationList details.character-group")].forEach(el => {
       el.addEventListener("toggle", () => {
         if (state.searchForcedOpen) return;
-        if (el.classList.contains("source-group")) {
+        if (el.classList.contains("shelf-group")) {
+          state.groupState.sources[`${SHELF_GROUP_OPEN_KEY}${el.dataset.shelfGroup}`] = el.open;
+        } else if (el.classList.contains("source-group")) {
           state.groupState.sources[el.dataset.sourceId] = el.open;
         } else if (el.dataset.characterKey) {
           state.groupState.characters[el.dataset.characterKey] = el.open;
@@ -2373,6 +2575,7 @@ window.OD = window.OD || {};
       });
     });
     wireSourceActions($("conversationList"));
+    wireSourceShelf($("conversationList"));
     [...document.querySelectorAll("#conversationList [data-source-menu]")].forEach(button => {
       button.addEventListener("click", event => {
         event.preventDefault();
@@ -2807,6 +3010,7 @@ window.OD = window.OD || {};
     const documentMode = isDocumentConversation(c);
     document.body.classList.toggle("document-mode", documentMode);
     const bits = [];
+    let sourceBit = -1;
     if (documentMode) {
       /* A personal document reads as a page: collection · author (· date
          when the title itself is not already the date). No segment count —
@@ -2816,12 +3020,12 @@ window.OD = window.OD || {};
       if (sourceMetadata.authorName) bits.push(sourceMetadata.authorName);
       if (c.createdAt && sourceMetadata.titleSource !== "date") bits.push(fmtDateOnly(c.createdAt));
     } else {
-      if (source?.label) bits.push(source.label);
+      if (source && sourceName(source)) sourceBit = bits.push(sourceName(source)) - 1;
       if (c.context?.room?.name) bits.push(c.context.room.name);
       if (c.createdAt) bits.push(fmtDate(c.createdAt));
       bits.push(t("conv.segmentCount", { count: c.messages.length }));
     }
-    $("readerMeta").innerHTML = bits.map(x => `<span>${esc(x)}</span>`).join('<span class="meta-dot" aria-hidden="true"> · </span>');
+    $("readerMeta").innerHTML = bits.map((x, index) => `<span${index === sourceBit ? " data-source-label" : ""}>${esc(x)}</span>`).join('<span class="meta-dot" aria-hidden="true"> · </span>');
 
     state.pages = OD.readerParity.paginateMessages(c.messages, {
       mode: state.readerPrefs.readingMode,
@@ -3005,7 +3209,7 @@ window.OD = window.OD || {};
       ? archive.source.personalImport
       : null;
     if (added.reconnected) {
-      setArchiveStatus("status.reconnected", { label: added.source.label });
+      setArchiveStatus("status.reconnected", { label: sourceName(added.source) });
     } else if (added.duplicate) {
       setArchiveStatus("status.duplicate", { label: adapterLabel, count: state.library.size });
     } else if (personalImport) {
@@ -3066,7 +3270,7 @@ window.OD = window.OD || {};
     const first = OD.conversationOrder.sortConversations(state.archive?.conversations || [], state.sortMode)[0];
     if (first) openConversation(first.id);
     else showEmptyLibrary();
-    if (state.library.size) setArchiveStatus("status.removed", { label: source.label, count: state.library.size });
+    if (state.library.size) setArchiveStatus("status.removed", { label: sourceName(source), count: state.library.size });
     else setArchiveStatus("status.clearedEmpty");
     void saveReaderState();
     return true;
@@ -3245,6 +3449,9 @@ window.OD = window.OD || {};
     if (settings.organization && typeof settings.organization === "object") {
       state.organization = OD.organization.normalize(settings.organization);
     }
+    if (settings.sourceShelf && typeof settings.sourceShelf === "object") {
+      state.sourceShelf = OD.sourceShelf.normalize(settings.sourceShelf);
+    }
     if (Array.isArray(settings.companionshipPinned)) {
       state.companionshipPinned = companionKeyList(settings.companionshipPinned);
     }
@@ -3288,7 +3495,7 @@ window.OD = window.OD || {};
       state.lastSavedAt = restored.savedAt;
       state.archive = state.library.size ? state.library.archive() : null;
       const requestedFilter = settings?.sourceFilter || mirror?.sourceFilter || "all";
-      state.sourceFilter = state.library.get(requestedFilter) ? requestedFilter : "all";
+      state.sourceFilter = isKnownSourceFilter(requestedFilter) ? requestedFilter : "all";
       renderSortControl();
       renderSourceControls();
       renderList();
@@ -4298,6 +4505,11 @@ window.OD = window.OD || {};
     jumpToSearchHit,
     toggleFavorite,
     setConversationTags,
+    renameSource,
+    setSourceGroup,
+    moveSourceToNewGroup,
+    renameSourceGroup,
+    dissolveSourceGroup,
     setFavoritesOnly,
     setTagFilter,
     setPrintPreset,
@@ -4310,6 +4522,7 @@ window.OD = window.OD || {};
       sources: state.library.sources().map(source => ({
         id: source.id,
         label: source.label,
+        displayName: sourceName(source),
         platform: source.source?.platform || "unknown",
         conversationCount: source.conversations.length
       })),
@@ -4320,6 +4533,7 @@ window.OD = window.OD || {};
       solVoiceStats: state.solVoiceSession?.stats || null,
       voiceAudioFileCount: state.solVoiceAudioFiles.length,
       organization: OD.organization.normalize(state.organization),
+      sourceShelf: OD.sourceShelf.normalize(state.sourceShelf),
       favoritesOnly: !!state.favoritesOnly,
       tagFilter: state.tagFilter || "",
       filteredCount: state.filtered.length,
