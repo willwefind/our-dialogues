@@ -97,6 +97,7 @@ window.OD = window.OD || {};
   "shelf.selectNothing": "No sources selected yet",
   "shelf.needGroupName": "Name the new group",
   "shelf.selectedItems": "{count} items selected",
+  "shelf.pickAria": "Pick “{name}”",
   "shelf.movedItemsInto": "Moved {count} items into “{group}”",
   "shelf.movedItemsOut": "Took {count} items out of their groups",
   "shelf.conversationMovedBack": "Put “{name}” back under its source",

@@ -262,9 +262,9 @@ button,input,select{font:inherit}
 .shelf-select-bar button{flex:none;border:1px solid var(--line);border-radius:var(--radius-xs);background:transparent;color:var(--muted);padding:5px 9px;cursor:pointer;font:10.5px/1 var(--font-ui)}
 .shelf-select-bar button:hover:not(:disabled){border-color:var(--accent);color:var(--ink)}
 .shelf-select-bar button:disabled{opacity:.45;cursor:default}
-.shelf-check{display:none;flex:none;width:12px;height:12px;box-sizing:border-box;border:1px solid var(--muted);border-radius:3px;background:var(--paper)}
+.shelf-check{display:none;flex:none;width:14px;height:14px;box-sizing:border-box;border:1px solid var(--muted);border-radius:3px;background:var(--paper);background-clip:content-box;cursor:pointer;outline-offset:2px;position:relative}
+.shelf-check::after{content:"";position:absolute;inset:-7px}
 .shelf-selecting .shelf-check{display:inline-block}
-.shelf-selecting .source-group>summary::before,.shelf-selecting .shelf-group>summary::before{display:none}
 .shelf-selecting .source-menu-button{visibility:hidden}
 .shelf-selecting .is-shelf-selected>summary>.shelf-check{border-color:var(--accent);background:var(--accent);box-shadow:inset 0 0 0 2px var(--paper)}
 .shelf-selecting .is-shelf-partial>summary>.shelf-check{border-color:var(--accent);background:linear-gradient(var(--paper) 40%,var(--accent) 40% 60%,var(--paper) 60%)}
@@ -279,7 +279,6 @@ button,input,select{font:inherit}
 .shelf-selecting .conv::before{content:"";position:absolute;left:22px;top:50%;width:12px;height:12px;margin-top:-6px;box-sizing:border-box;border:1px solid var(--muted);border-radius:3px;background:var(--paper)}
 .shelf-selecting .conv.is-shelf-selected::before{border-color:var(--accent);background:var(--accent);box-shadow:inset 0 0 0 2px var(--paper)}
 .shelf-selecting .conv.is-shelf-selected{background:var(--panel)}
-.shelf-selecting .character-group>summary>.shelf-check,.shelf-selecting .character-group>summary::before{display:none}
 .shelf-selecting .character-group.is-shelf-selected>summary,.shelf-selecting .character-group.is-shelf-partial>summary{color:var(--accent)}
 .shelf-new-group-drop{margin:2px 12px 8px 16px;padding:10px;border:1px dashed var(--accent);border-radius:var(--radius-xs);text-align:center;font:11px/1.4 var(--font-ui);color:var(--muted);background:var(--panel)}
 .shelf-new-group-drop[hidden]{display:none}

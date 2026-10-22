@@ -96,6 +96,7 @@ window.OD = window.OD || {};
   "shelf.selectNothing": "还没有选中来源",
   "shelf.needGroupName": "给新分组起个名字",
   "shelf.selectedItems": "已选 {count} 项",
+  "shelf.pickAria": "选中「{name}」",
   "shelf.movedItemsInto": "{count} 项已放进「{group}」",
   "shelf.movedItemsOut": "{count} 项已移出分组",
   "shelf.conversationMovedBack": "「{name}」已放回原来的来源",

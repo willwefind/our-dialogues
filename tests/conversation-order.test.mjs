@@ -1905,7 +1905,7 @@ test("整理 mode picks several sources and files them together, then lets go", 
   assert.equal(runtime.OD.app.getState().shelfSelecting, true);
   assert.equal(bar.hidden, false);
   assert.equal(elements.get("shelfSelectToggle").getAttribute("aria-pressed"), "true");
-  assert.match(elements.get("conversationList").innerHTML, /role="checkbox" aria-checked="false"/);
+  assert.match(elements.get("conversationList").innerHTML, /class="shelf-check" role="checkbox"[^>]*aria-checked="false"/);
   assert.equal(elements.get("shelfSelectApply").disabled, true, "nothing to move yet");
   assert.equal(elements.get("shelfSelectTarget").value, "__new", "with no groups yet, the bar offers a new one");
   assert.equal(elements.get("shelfSelectNewName").hidden, false);

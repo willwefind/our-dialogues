@@ -1438,7 +1438,8 @@ window.OD = window.OD || {};
       const containsCurrent = group.conversations.some(conversation => conversation.id === state.current?.id);
       const open = searching || (stored === undefined ? containsCurrent : stored === true);
       return `<details class="character-group" data-character-key="${esc(collectionKey)}"${open ? " open" : ""}>
-        <summary>
+        <summary draggable="true">
+          ${shelfCheckMarkup(false, group.name)}
           <span class="character-summary-label" title="${esc(t(`personal.type.${group.type}`))}">${esc(group.name)}</span>
           <span class="character-count">${group.conversations.length}</span>
         </summary>
@@ -1649,7 +1650,7 @@ window.OD = window.OD || {};
     [...(list.querySelectorAll("details.source-group") || [])].forEach(el => {
       const selected = isShelfSelected(el.dataset.sourceId);
       el.classList.toggle("is-shelf-selected", selected);
-      el.querySelector?.("summary")?.setAttribute?.("aria-checked", String(selected));
+      el.querySelector?.("summary > .shelf-check")?.setAttribute?.("aria-checked", String(selected));
     });
     [...(list.querySelectorAll(".conv") || [])].forEach(el => {
       el.classList.toggle("is-shelf-selected", state.shelfSelecting && isConversationPicked(el.dataset.id));
@@ -1659,6 +1660,7 @@ window.OD = window.OD || {};
       const picked = picks.filter(Boolean).length;
       el.classList.toggle("is-shelf-selected", picks.length > 0 && picked === picks.length);
       el.classList.toggle("is-shelf-partial", picked > 0 && picked < picks.length);
+      el.querySelector?.("summary > .shelf-check")?.setAttribute?.("aria-checked", picked === 0 ? "false" : picked === picks.length ? "true" : "mixed");
     };
     [...(list.querySelectorAll("details.character-group") || [])].forEach(el => markHeading(el, { sources: [], conversations: [...(el.querySelectorAll?.(".conv") || [])].map(item => item.dataset.id) }));
     [...(list.querySelectorAll("details.shelf-group") || [])].forEach(el => markHeading(el, shelfGroupItems(el)));
@@ -1810,11 +1812,22 @@ window.OD = window.OD || {};
 
   function wireShelfDragging(scope) {
     if (typeof scope?.querySelectorAll !== "function") return;
-    const pickOnClick = (summary, items) => summary.addEventListener("click", event => {
-      if (!state.shelfSelecting || event.target?.closest?.("button")) return;
-      event.preventDefault?.();
-      toggleShelfItems(items());
-    });
+    // In 整理 mode the checkbox picks; the rest of a heading still folds and
+    // unfolds, so a closed source can be opened to pick inside it.
+    const pickOnClick = (summary, items) => {
+      summary.addEventListener("click", event => {
+        if (!state.shelfSelecting || !event.target?.closest?.(".shelf-check")) return;
+        event.preventDefault?.();
+        event.stopPropagation?.();
+        toggleShelfItems(items());
+      });
+      summary.querySelector?.(".shelf-check")?.addEventListener?.("keydown", event => {
+        if (!state.shelfSelecting || (event.key !== " " && event.key !== "Enter")) return;
+        event.preventDefault?.();
+        event.stopPropagation?.();
+        toggleShelfItems(items());
+      });
+    };
     [...(scope.querySelectorAll("details.source-group > summary") || [])].forEach(summary => {
       const sourceId = summary.parentElement?.dataset?.sourceId;
       if (!sourceId) return;
@@ -1859,6 +1872,14 @@ window.OD = window.OD || {};
     const source = state.library.sourceForConversation(state.current);
     const label = $("readerMeta")?.querySelector?.("[data-source-label]");
     if (source && label) label.textContent = sourceName(source);
+  }
+
+  /* The 整理 checkbox at the head of a source, character, or group row. It is
+     the only part of the heading that picks; the heading itself still folds. */
+  function shelfCheckMarkup(picked, label) {
+    return state.shelfSelecting
+      ? `<span class="shelf-check" role="checkbox" tabindex="0" aria-checked="${picked ? "true" : "false"}" aria-label="${esc(t("shelf.pickAria", { name: label }))}"></span>`
+      : `<span class="shelf-check" aria-hidden="true"></span>`;
   }
 
   function shelfGroupOptionsMarkup(source) {
@@ -1921,7 +1942,8 @@ window.OD = window.OD || {};
         const open = searching || (stored === undefined ? containsCurrent : stored === true);
         const pinnedCount = ordered.filter(isGreetingConversation).length;
         return `<details class="character-group" data-character-key="${esc(characterKey)}"${open ? " open" : ""}>
-        <summary>
+        <summary draggable="true">
+          ${shelfCheckMarkup(false, character.name)}
           <span class="character-summary-label">${esc(character.name)}${character.id && source.source?.platform === "mufy" ? `<small class="character-identity">${esc(character.id)}</small>` : ""}</span>
           <span class="character-count">${character.conversations.length}</span>
         </summary>
@@ -1939,8 +1961,8 @@ window.OD = window.OD || {};
     const name = sourceName(source);
     const picked = state.shelfSelecting && isShelfSelected(source.id);
     return `<details class="source-group${picked ? " is-shelf-selected" : ""}" data-source-id="${esc(source.id)}"${sourceOpen ? " open" : ""}>
-      <summary draggable="true"${state.shelfSelecting ? ` role="checkbox" aria-checked="${picked}"` : ""}>
-        <span class="shelf-check" aria-hidden="true"></span>
+      <summary draggable="true">
+        ${shelfCheckMarkup(picked, name)}
         <span class="source-summary-label" title="${esc(name === source.label ? name : `${name} · ${source.label}`)}">${esc(name)}</span>
         <span class="source-count">${conversations.length}</span>
         <button class="source-menu-button" type="button" data-source-menu="${esc(source.id)}" title="${esc(t("source.menuTitle"))}" aria-haspopup="true" aria-label="${esc(t("source.menuAria", { label: name }))}">···</button>
@@ -1957,7 +1979,7 @@ window.OD = window.OD || {};
     const open = searching || stored !== false;
     return `<details class="shelf-group" data-shelf-group="${esc(group.id)}"${open ? " open" : ""}>
       <summary>
-        <span class="shelf-check" aria-hidden="true"></span>
+        ${shelfCheckMarkup(false, group.name)}
         <span class="shelf-group-label">${esc(group.name)}</span>
         <span class="source-count">${conversationCount}</span>
         <button class="source-menu-button" type="button" data-shelf-group-menu="${esc(group.id)}" title="${esc(t("shelf.groupMenuTitle"))}" aria-haspopup="true" aria-label="${esc(t("shelf.groupMenuAria", { group: group.name }))}">···</button>
