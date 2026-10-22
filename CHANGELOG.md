@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## v0.5.2 — 2026-10-22 · 手机修正 / phone fixes
+
 - On phones, 整理 / Organize no longer lays its bar over the hint at the bottom of the drawer: on a short screen the library pane now scrolls within itself instead of letting the list spill over the status line, and changes nothing on a tall one. The text width control works on tablets and phones too, where it used to rest at 随屏幕: the column is the chosen width or the room inside the usual margins, whichever is less, with the rest as even side margins, from 240px in 10px steps (20px a press). The default still fills the screen, and the desktop sheet is unchanged. Tests 241 → 241 (the fits-screen test became a phone-range test).
 
 ## v0.5.1 — 2026-10-22 · 正文宽度 / the text width slider
