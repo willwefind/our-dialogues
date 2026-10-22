@@ -316,12 +316,11 @@
             <option value="2.2" data-i18n="typography.lineLoose">松</option>
           </select>
         </div>
-        <div class="pref-row"><span class="pref-label" data-i18n="typography.contentWidth">正文宽度</span>
-          <select id="contentWidth" aria-label="正文宽度" data-i18n-aria-label="typography.contentWidthAria">
-            <option value="640" data-i18n="typography.widthNarrow">窄</option>
-            <option value="800" selected data-i18n="typography.widthMedium">中</option>
-            <option value="960" data-i18n="typography.widthWide">宽</option>
-          </select>
+        <div class="pref-row width-row"><span class="pref-label" data-i18n="typography.contentWidth">正文宽度</span>
+          <button id="contentNarrower" class="ghost width-step" type="button" title="窄一点" aria-label="窄一点" data-i18n-title="typography.narrower" data-i18n-aria-label="typography.narrower">−</button>
+          <input id="contentWidth" type="range" min="480" max="1280" step="20" value="800" aria-label="正文宽度" data-i18n-aria-label="typography.contentWidthAria">
+          <button id="contentWider" class="ghost width-step" type="button" title="宽一点" aria-label="宽一点" data-i18n-title="typography.wider" data-i18n-aria-label="typography.wider">＋</button>
+          <span id="contentWidthValue" class="bg-value" aria-hidden="true"></span>
         </div>
         <div class="pref-row"><span class="pref-label" data-i18n="typography.pagingMode">翻页方式</span>
           <select id="readingMode" aria-label="阅读模式" data-i18n-aria-label="typography.readingModeAria">

@@ -60,6 +60,11 @@ window.OD = window.OD || {};
     return allowed.includes(value) ? value : fallback;
   }
 
+  /* The reading column, in px: dragged on a slider, stepped by the − / ＋
+     buttons. The sheet is still capped by the window, so a wide setting on a
+     narrow screen simply uses all the room there is. */
+  const CONTENT_WIDTH = { min: 480, max: 1280, step: 20, buttonStep: 40 };
+
   function boundedNumber(value, fallback, minimum, maximum) {
     const number = Number(value);
     return Number.isFinite(number) ? Math.max(minimum, Math.min(maximum, number)) : fallback;
@@ -69,7 +74,7 @@ window.OD = window.OD || {};
     return {
       fontSize: Math.round(boundedNumber(value.fontSize, DEFAULTS.fontSize, 14, 30)),
       lineHeight: boundedNumber(value.lineHeight, DEFAULTS.lineHeight, 1.5, 2.5),
-      contentWidth: Math.round(boundedNumber(value.contentWidth, DEFAULTS.contentWidth, 560, 1040)),
+      contentWidth: Math.round(boundedNumber(value.contentWidth, DEFAULTS.contentWidth, CONTENT_WIDTH.min, CONTENT_WIDTH.max)),
       fontFamily: oneOf(value.fontFamily, Object.keys(FONT_FAMILIES), DEFAULTS.fontFamily),
       theme: oneOf(value.theme, ["paper", "night", "mist"], DEFAULTS.theme),
       readingMode: oneOf(value.readingMode, ["scroll", "page"], DEFAULTS.readingMode),
@@ -127,6 +132,7 @@ window.OD = window.OD || {};
   }
 
   OD.readerParity = {
+    CONTENT_WIDTH,
     PAGE_CHARS,
     DEFAULTS,
     FONT_FAMILIES,

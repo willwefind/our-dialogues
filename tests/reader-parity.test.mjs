@@ -57,7 +57,7 @@ test("reader preferences normalize persisted values conservatively", async () =>
   })), JSON.stringify({
     fontSize: 30,
     lineHeight: 1.5,
-    contentWidth: 560,
+    contentWidth: 480,
     fontFamily: "serif",
     theme: "paper",
     readingMode: "page",
