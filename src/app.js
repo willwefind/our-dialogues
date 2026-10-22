@@ -3,7 +3,17 @@ window.OD = window.OD || {};
 (function(OD){
   const $ = id => document.getElementById(id);
   const t = (key, params) => OD.i18n ? OD.i18n.t(key, params) : String(key);
+  /* Enter or Esc that confirms or cancels a Chinese IME candidate belongs to
+     the IME. Safari reports it with keyCode 229 rather than isComposing. */
+  const composing = event => !!(event?.isComposing || event?.keyCode === 229);
   const SETTINGS_MIRROR_KEY = "our-dialogues.reader-state.v1";
+  /* With site data blocked, some browsers throw on merely touching
+     localStorage; the Reader then still opens and simply remembers less. */
+  const storage = {
+    area() { try { return window.localStorage || null; } catch (_) { return null; } },
+    get(key) { try { return this.area()?.getItem(key) ?? null; } catch (_) { return null; } },
+    set(key, value) { try { this.area()?.setItem(key, value); } catch (_) {} }
+  };
   const state = {
     library: OD.sourceLibrary.create(),
     persistence: OD.persistentLibrary?.create?.() || null,
@@ -11,7 +21,7 @@ window.OD = window.OD || {};
     filtered: [],
     current: null,
     sourceFilter: "all",
-    sortMode: OD.conversationOrder.readStoredMode(window.localStorage),
+    sortMode: OD.conversationOrder.readStoredMode(storage.area()),
     assetSession: null,
     solVoiceSession: null,
     solVoiceMapping: null,
@@ -224,7 +234,7 @@ window.OD = window.OD || {};
 
   function readSettingsMirror() {
     try {
-      const value = JSON.parse(localStorage.getItem(SETTINGS_MIRROR_KEY) || "null");
+      const value = JSON.parse(storage.get(SETTINGS_MIRROR_KEY) || "null");
       return value && typeof value === "object" ? value : null;
     } catch (_) {
       return null;
@@ -242,6 +252,28 @@ window.OD = window.OD || {};
     return messageAnchorElement()?.dataset?.messageId || null;
   }
 
+  /* While the library home covers the reader, its hidden messages all
+     measure 0 from the top, so any scroll would anchor to the last one.
+     The place in the conversation underneath is the one last seen. */
+  function readerHidden() {
+    return $("reader")?.classList?.contains?.("hidden") === true;
+  }
+
+  function currentReadingPosition() {
+    if (!state.current) return null;
+    const last = state.lastReadingPosition;
+    if (readerHidden() && last?.conversationId === state.current.id) return { ...last };
+    const position = {
+      conversationId: state.current.id,
+      messageId: messageAnchor(),
+      page: state.pageIndex,
+      scrollTop: Number($("main").scrollTop || 0),
+      timestamp: new Date().toISOString()
+    };
+    if (!readerHidden()) state.lastReadingPosition = position;
+    return position;
+  }
+
   function readerSettings() {
     return {
       sourceFilter: state.sourceFilter,
@@ -252,13 +284,7 @@ window.OD = window.OD || {};
       ...state.readerPrefs,
       theme: $("theme").value || state.readerPrefs.theme,
       recentConversationId: state.current?.id || null,
-      readingPosition: state.current ? {
-        conversationId: state.current.id,
-        messageId: messageAnchor(),
-        page: state.pageIndex,
-        scrollTop: Number($("main").scrollTop || 0),
-        timestamp: new Date().toISOString()
-      } : null,
+      readingPosition: currentReadingPosition(),
       groupState: {
         sources: { ...state.groupState.sources },
         characters: { ...state.groupState.characters }
@@ -368,7 +394,7 @@ window.OD = window.OD || {};
      first, then page and scroll — the pattern proven per character in the
      standalone Mufy reader. */
   function recordReadingProgress() {
-    if (!state.current) return;
+    if (!state.current || readerHidden()) return;
     const source = state.library.sourceForConversation(state.current);
     const anchor = messageAnchorElement();
     const messageId = anchor?.dataset?.messageId || null;
@@ -397,7 +423,7 @@ window.OD = window.OD || {};
     recordReadingProgress();
     const settings = readerSettings();
     updateAcceptanceReadingPosition(settings.readingPosition);
-    try { localStorage.setItem(SETTINGS_MIRROR_KEY, JSON.stringify(settings)); } catch (_) {}
+    storage.set(SETTINGS_MIRROR_KEY, JSON.stringify(settings));
     if (!state.persistence?.supported) return Promise.resolve();
     const write = async () => {
       state.saveTimer = null;
@@ -593,7 +619,15 @@ window.OD = window.OD || {};
     return OD.readerBackground.normalize(state.background);
   }
 
+  // Bumped whenever the picture is let go, so a load still in flight for
+  // the old picture knows not to bring it back.
+  let backgroundGeneration = 0;
+  let backgroundLoading = null;
+  let backgroundApplyToken = 0;
+
   function releaseBackgroundUrl() {
+    backgroundGeneration += 1;
+    backgroundLoading = null;
     if (!state.backgroundUrl) return;
     try { URL.revokeObjectURL(state.backgroundUrl); } catch (_) {}
     state.backgroundUrl = null;
@@ -603,18 +637,31 @@ window.OD = window.OD || {};
     // One live URL per asset: created when the image is first needed and
     // revoked whenever it is replaced or removed, never per render.
     if (state.backgroundUrl) return state.backgroundUrl;
-    const record = await state.persistence?.loadAsset?.(OD.readerBackground.ASSET_KEY);
-    if (!record?.blob) return null;
-    // The picture's own pixels travel with the URL: the panel needs them to
-    // say how far this screen is stretching it.
-    state.backgroundPixels = { width: record.width, height: record.height };
-    state.backgroundUrl = URL.createObjectURL(record.blob);
-    return state.backgroundUrl;
+    // Callers that ask at the same moment share one load and one URL.
+    if (backgroundLoading) return backgroundLoading;
+    const generation = backgroundGeneration;
+    const loading = (async () => {
+      const record = await state.persistence?.loadAsset?.(OD.readerBackground.ASSET_KEY);
+      if (generation !== backgroundGeneration) return state.backgroundUrl;
+      if (!record?.blob) return null;
+      // The picture's own pixels travel with the URL: the panel needs them to
+      // say how far this screen is stretching it.
+      state.backgroundPixels = { width: record.width, height: record.height };
+      state.backgroundUrl = URL.createObjectURL(record.blob);
+      return state.backgroundUrl;
+    })();
+    backgroundLoading = loading;
+    try {
+      return await loading;
+    } finally {
+      if (backgroundLoading === loading) backgroundLoading = null;
+    }
   }
 
   async function applyBackground() {
     const layer = $("customBackground");
     if (!layer) return;
+    const token = ++backgroundApplyToken;
     const settings = backgroundSettings();
     document.body?.classList?.toggle?.("has-custom-background", OD.readerBackground.isActive(settings));
     if (!OD.readerBackground.isActive(settings)) {
@@ -625,6 +672,8 @@ window.OD = window.OD || {};
       return;
     }
     const url = await backgroundObjectUrl();
+    // A later call (the picture removed or replaced meanwhile) has the say.
+    if (token !== backgroundApplyToken) return;
     if (!url) {
       // The settings remember an image the database no longer holds.
       layer.hidden = true;
@@ -1201,6 +1250,8 @@ window.OD = window.OD || {};
     const editor = $("memorialDateEditor");
     const entry = companionEntries().find(item => item.key === key);
     if (!editor || !entry) return;
+    // The two editors share one key; only one of them is open at a time.
+    closeMemorialNameEditor();
     memorialEditorKey = key;
     state.memorialEditorReturn = trigger || null;
     const summary = companionSummary(entry);
@@ -1243,6 +1294,7 @@ window.OD = window.OD || {};
     const editor = $("memorialNameEditor");
     const entry = companionEntries().find(item => item.key === key);
     if (!editor || !entry) return;
+    closeMemorialDateEditor();
     memorialEditorKey = key;
     state.memorialEditorReturn = trigger || null;
     const custom = OD.companionship.nameFor(state.companionshipOverrides, key);
@@ -2016,7 +2068,7 @@ window.OD = window.OD || {};
       renameSource(button.dataset.sourceNameRestore, "");
     }));
     each("[data-source-name-input]", input => input.addEventListener("keydown", event => {
-      if (event.key === "Enter" && !event.isComposing) { quiet(event); renameSource(input.dataset.sourceNameInput, input.value); }
+      if (event.key === "Enter" && !composing(event)) { quiet(event); renameSource(input.dataset.sourceNameInput, input.value); }
     }));
     each("[data-source-group]", select => select.addEventListener("change", () => {
       const sourceId = select.dataset.sourceGroup;
@@ -2033,7 +2085,7 @@ window.OD = window.OD || {};
       if (input) moveSourceToNewGroup(button.dataset.sourceNewGroupSave, input.value);
     }));
     each("[data-source-new-group-input]", input => input.addEventListener("keydown", event => {
-      if (event.key === "Enter" && !event.isComposing) { quiet(event); moveSourceToNewGroup(input.dataset.sourceNewGroupInput, input.value); }
+      if (event.key === "Enter" && !composing(event)) { quiet(event); moveSourceToNewGroup(input.dataset.sourceNewGroupInput, input.value); }
     }));
     each("[data-shelf-group-menu]", button => button.addEventListener("click", event => {
       quiet(event);
@@ -2046,7 +2098,7 @@ window.OD = window.OD || {};
       if (input) renameSourceGroup(button.dataset.shelfGroupNameSave, input.value);
     }));
     each("[data-shelf-group-name-input]", input => input.addEventListener("keydown", event => {
-      if (event.key === "Enter" && !event.isComposing) { quiet(event); renameSourceGroup(input.dataset.shelfGroupNameInput, input.value); }
+      if (event.key === "Enter" && !composing(event)) { quiet(event); renameSourceGroup(input.dataset.shelfGroupNameInput, input.value); }
     }));
     each("[data-shelf-group-dissolve]", button => button.addEventListener("click", event => {
       quiet(event);
@@ -2164,8 +2216,11 @@ window.OD = window.OD || {};
     [...document.querySelectorAll("[data-bookmark-rename]")].forEach(input => {
       input.addEventListener("click", event => event.stopPropagation());
       input.addEventListener("keydown", event => {
+        if (composing(event)) return;
         if (event.key === "Enter") renameBookmark(input.dataset.bookmarkRename, input.value);
         if (event.key === "Escape") {
+          // The rename is what Esc cancels here, not the drawer around it.
+          event.stopPropagation?.();
           state.editingBookmarkId = null;
           renderBookmarks();
         }
@@ -2196,7 +2251,9 @@ window.OD = window.OD || {};
     OD.i18n?.applyStatic?.(document);
     renderAnnotationSwatches();
     renderSourceControls();
-    if (state.current) {
+    // On the library home the conversation underneath stays put: changing
+    // language there must not open it.
+    if (state.current && !libraryHomeVisible()) {
       openConversation(state.current.id, { restorePosition: position });
     } else {
       renderList();
@@ -3022,7 +3079,7 @@ window.OD = window.OD || {};
   }
 
   function setSortMode(mode) {
-    state.sortMode = OD.conversationOrder.persistMode(window.localStorage, mode);
+    state.sortMode = OD.conversationOrder.persistMode(storage.area(), mode);
     renderSortControl();
     renderList();
     void saveReaderState();
@@ -3850,7 +3907,7 @@ window.OD = window.OD || {};
     document.body.classList.toggle("hide-user", !!settings.hideUser);
     document.body.classList.toggle("show-thinking", !!settings.showThinking);
     applyReaderPreferences({ ...state.readerPrefs, ...settings });
-    localStorage.setItem("our-dialogues.theme", state.readerPrefs.theme);
+    storage.set("our-dialogues.theme", state.readerPrefs.theme);
     state.restoredPosition = settings.readingPosition || null;
     const groupState = settings.groupState;
     if (groupState && typeof groupState === "object") {
@@ -3926,7 +3983,9 @@ window.OD = window.OD || {};
       const recentId = settings?.recentConversationId || mirror?.recentConversationId || null;
       const recent = conversations.find(conversation => conversation.id === recentId) ||
         OD.conversationOrder.sortConversations(conversations, state.sortMode)[0] || null;
-      if (recent) {
+      // A conversation opened while the library was still restoring (say,
+      // from a file imported meanwhile) stays open.
+      if (recent && !state.current) {
         const position = (settings?.readingPosition || mirror?.readingPosition)?.conversationId === recent.id
           ? (settings?.readingPosition || mirror?.readingPosition)
           : null;
@@ -3980,6 +4039,17 @@ window.OD = window.OD || {};
       event.target.value = "";
     }
   });
+
+  /* A reconnect waits for its picker. If that picker is dismissed, or the
+     reader opens the same picker herself to add something new, the wait is
+     over — the next file chosen is an import, not a reconnect. */
+  for (const id of ["fileInput", "folderInput"]) {
+    const input = $(id);
+    input?.addEventListener?.("cancel", () => { state.pendingReconnectSourceId = null; });
+    input?.closest?.("label")?.addEventListener?.("click", event => {
+      if (event.target !== input) state.pendingReconnectSourceId = null;
+    });
+  }
 
   if ($("directoryPicker") && typeof window.showDirectoryPicker === "function") {
     $("directoryPicker").hidden = false;
@@ -4043,7 +4113,7 @@ window.OD = window.OD || {};
   });
   $("shelfSelectApply")?.addEventListener?.("click", () => applyShelfSelection());
   $("shelfSelectNewName")?.addEventListener?.("keydown", event => {
-    if (event.key === "Enter" && !event.isComposing) { event.preventDefault?.(); applyShelfSelection(); }
+    if (event.key === "Enter" && !composing(event)) { event.preventDefault?.(); applyShelfSelection(); }
   });
   if ($("sourceRow")) wireShelfDropTarget($("sourceRow"), () => null);
   if ($("shelfNewGroupDrop")) wireShelfDropTarget($("shelfNewGroupDrop"), () => null, { createsGroup: true });
@@ -4070,7 +4140,7 @@ window.OD = window.OD || {};
   $("theme").addEventListener("change", event => {
     state.readerPrefs = OD.readerParity.normalizePreferences({ ...state.readerPrefs, theme: event.target.value });
     applyReaderPreferences();
-    localStorage.setItem("our-dialogues.theme", event.target.value);
+    storage.set("our-dialogues.theme", event.target.value);
     void saveReaderState();
   });
   $("uiLocale")?.addEventListener?.("change", event => setUiLocale(event.target.value));
@@ -4183,7 +4253,7 @@ window.OD = window.OD || {};
     card.addEventListener("click", () => {
       state.readerPrefs = OD.readerParity.normalizePreferences({ ...state.readerPrefs, theme: card.dataset.themeCard });
       applyReaderPreferences();
-      localStorage.setItem("our-dialogues.theme", state.readerPrefs.theme);
+      storage.set("our-dialogues.theme", state.readerPrefs.theme);
       void saveReaderState();
     });
   });
@@ -4206,7 +4276,7 @@ window.OD = window.OD || {};
     document.body.classList.toggle("hide-user", false);
     document.body.classList.toggle("show-thinking", false);
     applyReaderPreferences();
-    localStorage.setItem("our-dialogues.theme", state.readerPrefs.theme);
+    storage.set("our-dialogues.theme", state.readerPrefs.theme);
     if (state.current) openConversation(state.current.id, { restorePosition: position });
     void saveReaderState();
   });
@@ -4250,7 +4320,14 @@ window.OD = window.OD || {};
      near the top, on toolbar focus, or when any toolbar-owned popover opens.
      Frozen while text is selected, a note is being edited, audio plays, or a
      popover is open — reading chrome must never fight those states. */
-  const toolbarHide = { downAccum: 0, upAccum: 0, lastTop: 0, hidden: false, audioPlaying: 0 };
+  const toolbarHide = { downAccum: 0, upAccum: 0, lastTop: 0, hidden: false };
+  /* Asked of the page each time rather than counted: a player removed by a
+     re-render pauses without its pause ever reaching the document, and a
+     count would then keep the bars pinned for the rest of the visit. */
+  function mediaPlaying() {
+    return [...(document.querySelectorAll?.("audio, video") || [])]
+      .some(media => media.paused === false && media.ended !== true);
+  }
   function anyToolbarPopoverOpen() {
     return ["readerPrefsPanel", "exportMenu", "tagEditor", "readerMoreMenu"].some(id => {
       const panel = $(id);
@@ -4262,7 +4339,7 @@ window.OD = window.OD || {};
     const editor = $("annotationEditor");
     if (editor && !editor.hidden) return true;
     if (OD.shijuStudio?.isOpen?.()) return true;
-    if (toolbarHide.audioPlaying > 0) return true;
+    if (mediaPlaying()) return true;
     if (anyToolbarPopoverOpen()) return true;
     return false;
   }
@@ -4317,15 +4394,8 @@ window.OD = window.OD || {};
       if (toolbarHide.upAccum >= revealThreshold) setToolbarHidden(false);
     }
   }
-  // Media events don't bubble, so listen in the capture phase; ended fires
-  // pause as well, keeping the counter balanced.
-  document.addEventListener?.("play", () => {
-    toolbarHide.audioPlaying += 1;
-    setToolbarHidden(false);
-  }, true);
-  document.addEventListener?.("pause", () => {
-    toolbarHide.audioPlaying = Math.max(0, toolbarHide.audioPlaying - 1);
-  }, true);
+  // Media events don't bubble, so listen in the capture phase.
+  document.addEventListener?.("play", () => setToolbarHidden(false), true);
   $("readerToolbar")?.addEventListener?.("focusin", () => setToolbarHidden(false));
   /* Phone: a deliberate tap on blank reading surface toggles both bars —
      but never a tap on links, media, marks, editors, or while text is
@@ -4555,7 +4625,7 @@ window.OD = window.OD || {};
     }
   });
   $("tagInput").addEventListener("keydown", event => {
-    if (event.key !== "Enter") return;
+    if (event.key !== "Enter" || composing(event)) return;
     event.preventDefault?.();
     const value = String($("tagInput").value || "").trim();
     if (!value || !state.current) return;
@@ -4570,7 +4640,7 @@ window.OD = window.OD || {};
     $("demoImport").addEventListener("click", () => void loadDemoLibrary());
   }
   $("searchQuery").addEventListener("keydown", event => {
-    if (event.key === "Enter") {
+    if (event.key === "Enter" && !composing(event)) {
       event.preventDefault?.();
       performSearch();
     }
@@ -4861,7 +4931,7 @@ window.OD = window.OD || {};
   $("memorialNameSave")?.addEventListener?.("click", () => saveMemorialName());
   $("memorialNameRestore")?.addEventListener?.("click", () => clearMemorialName());
   $("memorialNameInput")?.addEventListener?.("keydown", event => {
-    if (event?.key === "Enter") saveMemorialName();
+    if (event?.key === "Enter" && !composing(event)) saveMemorialName();
   });
   $("memorialDateClose")?.addEventListener?.("click", () => closeMemorialDateEditor());
   $("memorialCancel")?.addEventListener?.("click", () => closeMemorialDateEditor());
@@ -4927,6 +4997,8 @@ window.OD = window.OD || {};
     void saveReaderState();
   });
   document.addEventListener?.("keydown", event => {
+    // Esc that only cancels an IME candidate must not also close a panel.
+    if (composing(event)) return;
     if (event.key === "Escape") {
       // 拾句 Studio 开着时它自己的 Esc 收面板，阅读器这层按兵不动
       if (OD.shijuStudio?.isOpen?.()) return;
@@ -4979,6 +5051,10 @@ window.OD = window.OD || {};
       : event.target);
     const tag = String(origin?.tagName || "").toLowerCase();
     if (["input", "textarea", "select"].includes(tag) || origin?.isContentEditable) return;
+    // Alt+← is the browser's Back and Shift+arrows extend a selection; arrows
+    // on a focused player seek it rather than turn the page.
+    if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
+    if (["audio", "video"].includes(tag) || origin?.closest?.("audio, video")) return;
     if (event.key === "ArrowLeft") goPrevious();
     else if (event.key === "ArrowRight") goNext();
     else if (event.key === "Home") { event.preventDefault(); scrollMain("top"); }
@@ -4989,8 +5065,12 @@ window.OD = window.OD || {};
   });
   window.addEventListener("beforeunload", () => {
     void saveReaderState({ immediate: true });
-    releaseArchiveAssets();
-  }, { once: true });
+  });
+  // A page kept for the Back button comes back exactly as it was left, so
+  // its library and files are only let go when the page is really gone.
+  window.addEventListener("pagehide", event => {
+    if (!event?.persisted) releaseArchiveAssets();
+  });
 
   // Small public seam for browser smoke tests; import data remains in memory only.
   OD.app = {
@@ -5095,7 +5175,7 @@ window.OD = window.OD || {};
     if (localeControl) localeControl.value = state.locale;
   }
 
-  const savedTheme = localStorage.getItem("our-dialogues.theme");
+  const savedTheme = storage.get("our-dialogues.theme");
   if (savedTheme) {
     state.readerPrefs = OD.readerParity.normalizePreferences({ ...state.readerPrefs, theme: savedTheme });
   }

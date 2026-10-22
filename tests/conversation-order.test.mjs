@@ -49,7 +49,7 @@ function fakeElement(id="") {
     addEventListener(type, listener) { listeners.set(type, listener); },
     // A real click carries the deepest element as its target, not the element
     // the listener sits on — delegation tests need to say which one.
-    dispatch(type, target) { return listeners.get(type)?.({ target: target || this }); },
+    dispatch(type, target, details = {}) { return listeners.get(type)?.({ target: target || this, ...details }); },
     click() { return listeners.get("click")?.({ target: this }); },
     setAttribute(name, value) { this.attributes.set(name, String(value)); },
     getAttribute(name) { return this.attributes.get(name) ?? null; },
@@ -204,6 +204,12 @@ async function loadAppRuntime(savedSortMode="asc", options={}) {
   runtime.window = runtime;
   runtime.addEventListener = () => {};
   if (options.matchMedia) runtime.matchMedia = options.matchMedia;
+  // Site data blocked: Chrome and Safari throw on merely reading the property.
+  if (options.blockedStorage) {
+    Object.defineProperty(runtime, "localStorage", {
+      get() { throw new DOMException("The operation is insecure.", "SecurityError"); }
+    });
+  }
   runtime.OD = {
     schema: {
       textOf(content) { return typeof content === "string" ? content : ""; }
@@ -250,8 +256,8 @@ async function loadAppRuntime(savedSortMode="asc", options={}) {
     sortAscending,
     sortDescending,
     rootStyle,
-    dispatchDocument(type, target) {
-      return documentListeners.get(type)?.({ target: target || runtime.document });
+    dispatchDocument(type, target, details = {}) {
+      return documentListeners.get(type)?.({ target: target || runtime.document, ...details });
     }
   };
 }
@@ -2107,4 +2113,140 @@ test("on a phone the width control narrows the column within the screen, in fine
   runtime.OD.app.setContentWidth(100);
   assert.equal(width(), 240);
   assert.equal(elements.get("contentNarrower").disabled, true);
+});
+
+test("the Reader still opens and works when the browser blocks site storage", async () => {
+  const { runtime, elements } = await loadAppRuntime("asc", { blockedStorage: true });
+  runtime.OD.app.loadArchive({
+    conversations: [{ id: "only", title: "对话", messages: [{ id: "m1", role: "assistant", content: "正文" }] }]
+  }, "Blocked");
+  runtime.OD.app.openConversation("only");
+  assert.equal(runtime.OD.app.getState().current.id, "only");
+  elements.get("sortDescending").click();
+  assert.equal(runtime.OD.app.getState().sortMode, "desc", "sorting still works, it just isn't remembered");
+});
+
+test("scrolling the library home leaves the conversation underneath where it was", async () => {
+  const { runtime, elements } = await loadAppRuntime("asc");
+  const messages = Array.from({ length: 10 }, (_, i) => ({ id: `m${i + 1}`, role: "assistant", content: `line ${i + 1}` }));
+  runtime.OD.app.loadArchive({ conversations: [{ id: "alpha", title: "A", createdAt: "2025-01-01T00:00:00.000Z", messages }] }, "Synthetic");
+  runtime.OD.app.openConversation("alpha");
+  elements.get("main").scrollTop = 250;
+  elements.get("main").dispatch("scroll");
+  const before = runtime.OD.app.getState().readingProgress.alpha;
+  assert.equal(before.messageId, "m3");
+
+  elements.get("navLibrary").click();
+  assert.ok(elements.get("reader").classList.contains("hidden"));
+  // In a browser the hidden messages all measure 0 from the top.
+  const list = elements.get("messages");
+  const measure = list.querySelectorAll.bind(list);
+  list.querySelectorAll = selector => measure(selector).map(element => ({ ...element, offsetTop: 0, offsetHeight: 0 }));
+  elements.get("main").scrollTop = 120;
+  elements.get("main").dispatch("scroll");
+
+  const after = runtime.OD.app.getState();
+  assert.equal(after.readingProgress.alpha.messageId, "m3", "the home page's scroll is not reading");
+  assert.equal(after.readingProgress.alpha.percent, before.percent);
+  assert.equal(after.readingPosition.messageId, "m3", "the saved place is the one last seen");
+});
+
+test("changing language on the library home stays on the library home", async () => {
+  const { runtime, elements } = await loadAppRuntime("asc");
+  runtime.OD.app.loadArchive({
+    conversations: [{ id: "only", title: "对话", messages: [{ id: "m1", role: "assistant", content: "正文" }] }]
+  }, "Home");
+  runtime.OD.app.openConversation("only");
+  elements.get("navLibrary").click();
+  elements.get("uiLocale").value = "en";
+  elements.get("uiLocale").dispatch("change");
+  assert.equal(elements.get("libraryHome").classList.contains("hidden"), false);
+  assert.equal(elements.get("reader").classList.contains("hidden"), true, "the conversation does not pop open");
+});
+
+test("Enter that confirms a Chinese IME candidate never submits the half-typed text", async () => {
+  const { runtime, elements } = await loadTwoCompanions();
+  runtime.OD.app.openConversation(runtime.OD.app.getState().archive.conversations[0].id);
+  const enter = (element, details = {}) => element.dispatch("keydown", element, { key: "Enter", preventDefault() {}, ...details });
+
+  // Tags: the pinyin being composed is not a tag; the confirmed word is.
+  const tagInput = elements.get("tagInput");
+  tagInput.value = "wenxin";
+  enter(tagInput, { isComposing: true });
+  enter(tagInput, { keyCode: 229 });
+  assert.deepEqual([...(runtime.OD.app.getState().current.tags || [])], []);
+  tagInput.value = "温馨";
+  enter(tagInput);
+  assert.match(elements.get("tagChips").innerHTML, /温馨/);
+
+  // The companion's name: composing keeps the editor open and unsaved.
+  const sol = runtime.OD.app.getState().sources.find(source => source.label === "Sol");
+  elements.get("companionList").dispatch("click", clickTarget("companionPick", runtime.OD.companionship.companionKey(sol.id, null)));
+  elements.get("memorialCard").dispatch("click", clickTarget("memorialMenu"));
+  elements.get("memorialRename").click();
+  const nameInput = elements.get("memorialNameInput");
+  nameInput.value = "xiao";
+  enter(nameInput, { isComposing: true });
+  assert.equal(elements.get("memorialNameEditor").hidden, false, "still composing, still editing");
+  assert.doesNotMatch(elements.get("memorialCard").innerHTML, /xiao/);
+  nameInput.value = "小 S";
+  enter(nameInput);
+  assert.equal(elements.get("memorialNameEditor").hidden, true);
+  assert.match(elements.get("memorialCard").innerHTML, /小 S/);
+});
+
+test("page-turn keys leave composing, modified keys, and media players alone", async () => {
+  const { runtime, elements, dispatchDocument } = await loadAppRuntime("asc");
+  const one = id => ({ id, title: id, createdAt: `2025-0${id.length}-01T12:00:00.000Z`, messages: [{ id: `${id}-1`, role: "assistant", content: "正文" }] });
+  runtime.OD.app.loadArchive({ conversations: [one("a"), one("bb")] }, "Keys");
+  runtime.OD.app.openConversation("a");
+  const press = details => dispatchDocument("keydown", details.target || { tagName: "MAIN" }, { preventDefault() {}, ...details });
+
+  press({ key: "ArrowRight", altKey: true });
+  press({ key: "ArrowRight", shiftKey: true });
+  press({ key: "ArrowRight", target: { tagName: "AUDIO" } });
+  assert.equal(runtime.OD.app.getState().current.id, "a");
+  press({ key: "ArrowRight" });
+  assert.equal(runtime.OD.app.getState().current.id, "bb", "a plain arrow still turns to the next conversation");
+
+  // Esc that cancels a candidate does not also close the Aa panel.
+  for (const id of ["memorialNameEditor", "memorialDateEditor", "memorialMenu", "companionPicker",
+    "annotationEditor", "readerMoreMenu", "exportMenu", "tagEditor", "readerPrefsPanel"]) elements.get(id).hidden = true;
+  elements.get("readerPrefsToggle").click();
+  assert.equal(elements.get("readerPrefsPanel").hidden, false);
+  press({ key: "Escape", isComposing: true });
+  assert.equal(elements.get("readerPrefsPanel").hidden, false);
+  press({ key: "Escape" });
+  assert.equal(elements.get("readerPrefsPanel").hidden, true);
+});
+
+test("the memorial name and date editors never share one open key", async () => {
+  const { runtime, elements } = await loadTwoCompanions();
+  const sol = runtime.OD.app.getState().sources.find(source => source.label === "Sol");
+  elements.get("companionList").dispatch("click", clickTarget("companionPick", runtime.OD.companionship.companionKey(sol.id, null)));
+  const card = elements.get("memorialCard");
+  card.dispatch("click", clickTarget("memorialMenu"));
+  elements.get("memorialRename").click();
+  card.dispatch("click", clickTarget("memorialMenu"));
+  elements.get("memorialEditDate").click();
+  assert.equal(elements.get("memorialNameEditor").hidden, true, "opening the date editor closes the name editor");
+  assert.equal(elements.get("memorialDateEditor").hidden, false);
+});
+
+test("a dismissed reconnect picker does not turn the next import into a reconnect", async () => {
+  const { runtime, elements } = await loadAppRuntime("asc");
+  runtime.OD.app.loadArchive({
+    conversations: [{ id: "old", title: "旧", messages: [{ id: "m1", role: "assistant", content: "正文" }] }]
+  }, "Old");
+  const sourceId = runtime.OD.app.getState().sources[0].id;
+  await runtime.OD.app.reconnectSource(sourceId);
+  const input = elements.get("fileInput");
+  input.dispatch("cancel");
+
+  // The adapters are not loaded here; a stand-in recognises the new file.
+  runtime.OD.registry = { async parseJSON(data) { return { archive: data, adapter: { label: "New" } }; } };
+  const fresh = { conversations: [{ id: "new", title: "新", messages: [{ id: "n1", role: "assistant", content: "正文" }] }] };
+  input.files = [new File([JSON.stringify(fresh)], "fresh.json", { type: "application/json" })];
+  await input.dispatch("change");
+  assert.equal(runtime.OD.app.getState().sources.length, 2, "the chosen file arrives as a new source");
 });
