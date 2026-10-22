@@ -118,8 +118,33 @@ window.OD = window.OD || {};
   /* Every occurrence of the selected text is a candidate; the stored context
      picks between repeats. An annotation whose text no longer occurs returns
      null and simply stops rendering — it is never guessed to a nearby spot. */
+  /* The page shows "\r\n" as one line break, so a selection across it was
+     stored with "\n". Search a copy with line breaks made plain and map the
+     positions back to the original text. */
+  function lineView(original) {
+    if (!original.includes("\r")) return { text: original, at: index => index };
+    let text = "";
+    const starts = [];
+    for (let index = 0; index < original.length; index += 1) {
+      starts.push(index);
+      if (original[index] === "\r") {
+        text += "\n";
+        if (original[index + 1] === "\n") index += 1;
+      } else {
+        text += original[index];
+      }
+    }
+    starts.push(original.length);
+    return { text, at: index => starts[index] };
+  }
+
   function locate(text, annotation) {
-    const raw = String(text ?? "");
+    const view = lineView(String(text ?? ""));
+    const position = locateIn(view.text, annotation);
+    return position && { start: view.at(position.start), end: view.at(position.end) };
+  }
+
+  function locateIn(raw, annotation) {
     const needle = annotation.selectedText;
     if (!needle) return null;
     const candidates = [];

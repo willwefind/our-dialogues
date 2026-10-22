@@ -45,7 +45,10 @@
     var conversation = ctx.conversation, message = ctx.message, source = ctx.source;
     var speaker = message && typeof message.speaker === "string" ? message.speaker.trim() : "";
     var label = source && source.label ? String(source.label) : "";
-    if (conversation && conversation.contentKind === "personal-document") {
+    // 阅读器里的对话把标记放在 context.sourceMetadata 上
+    var meta = conversation && conversation.context && conversation.context.sourceMetadata;
+    var kind = (conversation && conversation.contentKind) || (meta && meta.contentKind);
+    if (kind === "personal-document") {
       return speaker || label;
     }
     if (message && message.role === "user") return speaker || label;

@@ -76,37 +76,55 @@ window.OD = window.OD || {};
     });
   }
 
+  /* What a merged conversation already holds, kept beside it as messages
+     arrive, so each new message is checked once rather than against every
+     earlier one again (two overlapping exports of a long chat took half a
+     minute the old way). */
+  const mergeIndexes = new WeakMap();
+  function mergeIndex(target) {
+    let index = mergeIndexes.get(target);
+    if (!index) {
+      index = { fingerprints: new Set(), stableIds: new Set(), ids: new Set() };
+      for (const existing of target.messages) remember(index, existing);
+      mergeIndexes.set(target, index);
+    }
+    return index;
+  }
+  function remember(index, message) {
+    index.fingerprints.add(exactMessageFingerprint(message));
+    const stableId = messageStableId(message);
+    if (stableId) index.stableIds.add(stableId);
+    index.ids.add(String(message.id));
+  }
+
   function appendUniqueMessage(target, message, stats) {
+    const index = mergeIndex(target);
+    const push = value => { target.messages.push(value); remember(index, value); };
     const stableId = messageStableId(message);
     const fingerprint = exactMessageFingerprint(message);
-    const exact = target.messages.find(existing => exactMessageFingerprint(existing) === fingerprint);
-    if (exact) {
+    if (index.fingerprints.has(fingerprint)) {
       stats.duplicateMessageCount += 1;
       return;
     }
 
-    if (stableId) {
-      const sameStableId = target.messages.find(existing => messageStableId(existing) === stableId);
-      if (sameStableId) {
-        stats.conflictingMessageIdCount += 1;
-        const suffix = stats.conflictingMessageIdCount + 1;
-        target.messages.push({
-          ...message,
-          id: `${message.id || stableId}#conflict-${suffix}`,
-          metadata: { ...message.metadata, folderMergeConflict: true }
-        });
-        return;
-      }
+    if (stableId && index.stableIds.has(stableId)) {
+      stats.conflictingMessageIdCount += 1;
+      const suffix = stats.conflictingMessageIdCount + 1;
+      push({
+        ...message,
+        id: `${message.id || stableId}#conflict-${suffix}`,
+        metadata: { ...message.metadata, folderMergeConflict: true }
+      });
+      return;
     }
 
     let id = String(message?.id || `message-${target.messages.length + 1}`);
-    const used = new Set(target.messages.map(existing => String(existing.id)));
-    if (used.has(id)) {
+    if (index.ids.has(id)) {
       let suffix = 2;
-      while (used.has(`${id}#${suffix}`)) suffix += 1;
+      while (index.ids.has(`${id}#${suffix}`)) suffix += 1;
       id = `${id}#${suffix}`;
     }
-    target.messages.push(id === message.id ? message : { ...message, id });
+    push(id === message.id ? message : { ...message, id });
   }
 
   function stableConversationIdentity(conversation) {

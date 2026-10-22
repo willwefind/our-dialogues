@@ -13,24 +13,53 @@ window.OD = window.OD || {};
   const BEFORE_CONTEXT = 22;
   const AFTER_CONTEXT = 42;
 
+  /* Lower-casing can change a string's length ("İ" becomes two units), so
+     positions found in the folded copy are mapped back to the original;
+     the common case, where nothing changes length, skips the map. */
+  function folded(raw) {
+    const lower = raw.toLowerCase();
+    if (lower.length === raw.length) return { lower, at: index => index };
+    let text = "";
+    const positions = [];
+    for (const character of raw) {
+      const start = positions.length ? positions.at(-1).next : 0;
+      const piece = character.toLowerCase();
+      for (let unit = 0; unit < piece.length; unit += 1) positions.push({ start, next: start + character.length });
+      text += piece;
+    }
+    return { lower: text, at: index => index >= positions.length ? raw.length : positions[index].start };
+  }
+
+  // Context edges never cut an emoji (or any surrogate pair) in half.
+  const lowSurrogate = code => code >= 0xDC00 && code <= 0xDFFF;
+  const highSurrogate = code => code >= 0xD800 && code <= 0xDBFF;
+  function contextStart(raw, index) {
+    return index > 0 && lowSurrogate(raw.charCodeAt(index)) ? index + 1 : index;
+  }
+  function contextEnd(raw, index) {
+    return index < raw.length && highSurrogate(raw.charCodeAt(index - 1)) ? index - 1 : index;
+  }
+
   function occurrences(text, query) {
     const raw = String(text ?? "");
     const needle = String(query ?? "");
     if (!needle) return [];
-    const lower = raw.toLowerCase();
+    const { lower, at } = folded(raw);
     const lowerNeedle = needle.toLowerCase();
     const found = [];
     let from = 0;
     for (;;) {
-      const index = lower.indexOf(lowerNeedle, from);
-      if (index < 0) break;
+      const foldedIndex = lower.indexOf(lowerNeedle, from);
+      if (foldedIndex < 0) break;
+      const index = at(foldedIndex);
+      const end = at(foldedIndex + lowerNeedle.length);
       found.push({
         index,
-        before: raw.slice(Math.max(0, index - BEFORE_CONTEXT), index),
-        match: raw.slice(index, index + needle.length),
-        after: raw.slice(index + needle.length, index + needle.length + AFTER_CONTEXT)
+        before: raw.slice(contextStart(raw, Math.max(0, index - BEFORE_CONTEXT)), index),
+        match: raw.slice(index, end),
+        after: raw.slice(end, contextEnd(raw, Math.min(raw.length, end + AFTER_CONTEXT)))
       });
-      from = index + Math.max(1, needle.length);
+      from = foldedIndex + Math.max(1, lowerNeedle.length);
     }
     return found;
   }

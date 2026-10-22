@@ -96,3 +96,11 @@ test("duplicate titles are disambiguated for display without mutating titles", a
   assert.equal(labels.get("three"), "Same · 2026-08-16（2）");
   assert.deepEqual(conversations.map(item => item.title), ["Same", "Same", "Same"]);
 });
+
+test("odd numeric entities and second-based times never break or misdate a title", async () => {
+  const resolver = await loadResolver();
+  const odd = resolver.resolve({ messages: [message("assistant", "Synthetic line &#99999999; long enough text")], index: 0 });
+  assert.match(odd.title, /&#99999999;/, "an impossible character stays as written");
+  const seconds = resolver.resolve({ session: { createdTime: 1735732800 }, index: 0 });
+  assert.equal(seconds.title, "2025-01-01 · 第 1 段");
+});

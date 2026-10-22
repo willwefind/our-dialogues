@@ -581,3 +581,36 @@ test("Claude official tool payloads are capped with the cap reported, never sile
   const small = adapter._internals.cappedTracePayload({ ok: true });
   assert.equal(small.truncated, false);
 });
+
+test("a Claude export without parent links keeps every turn instead of one newest leaf", async () => {
+  const OD = await loadRuntime();
+  const turn = (index, sender) => ({
+    uuid: `synthetic-${index}`,
+    sender,
+    text: `Synthetic turn ${index}`,
+    content: [{ type: "text", text: `Synthetic turn ${index}` }],
+    created_at: `2026-08-16T00:0${index}:00Z`
+  });
+  const source = [{
+    uuid: "synthetic-conversation",
+    name: "Synthetic unlinked",
+    summary: "",
+    created_at: "2026-08-16T00:00:00Z",
+    // Listed out of order on purpose: the thread follows the clock.
+    chat_messages: [turn(2, "human"), turn(1, "assistant"), turn(0, "human"), turn(3, "assistant")]
+  }];
+  const parsed = await OD.registry.parseJSON(source);
+  assert.equal(parsed.adapter.id, "claude-official");
+  const conversation = parsed.archive.conversations[0];
+  assert.deepEqual([...conversation.messages.map(message => OD.schema.textOf(message.content))],
+    ["Synthetic turn 0", "Synthetic turn 1", "Synthetic turn 2", "Synthetic turn 3"]);
+  assert.equal(JSON.stringify(conversation).includes("alternateMessageCount\":3"), false, "nothing is called an alternate branch");
+});
+
+test("object content without text is kept whole, never read as [object Object]", async () => {
+  const OD = await loadRuntime();
+  const [item] = OD.schema.normalizeContent({ type: "image", url: "synthetic.png" });
+  assert.equal(item.type, "image");
+  assert.equal(item.metadata.original.url, "synthetic.png");
+  assert.equal(OD.schema.textOf([item]).includes("[object Object]"), false);
+});

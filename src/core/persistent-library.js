@@ -89,7 +89,16 @@ window.OD = window.OD || {};
     return output;
   }
 
-  function sourceRecords(source, savedAt = new Date().toISOString()) {
+  // Each save writes its rows under a fresh generation and only then swaps the
+  // source record over to it, so a save that fails halfway (quota, a closed
+  // tab) leaves the previous copy whole instead of half-deleted.
+  let generationCounter = 0;
+  function newGeneration(savedAt) {
+    generationCounter += 1;
+    return `${savedAt}#${generationCounter}#${Math.random().toString(36).slice(2, 8)}`;
+  }
+
+  function sourceRecords(source, savedAt = new Date().toISOString(), generation = newGeneration(savedAt)) {
     const metadata = lightweightClone({
       id: source.id,
       fingerprint: source.fingerprint,
@@ -103,18 +112,24 @@ window.OD = window.OD || {};
       directoryHandle: isDirectoryHandle(source.directoryHandle) ? source.directoryHandle : null,
       conversationCount: source.conversations?.length || 0,
       savedAt,
+      generation,
       state: "ready"
     });
     const conversations = (source.conversations || []).map((conversation, order) => ({
-      key: `${source.id}\u0000${conversation.id}`,
+      key: `${source.id}\u0000${generation}\u0000${conversation.id}`,
       sourceId: source.id,
+      generation,
       order,
       conversation: lightweightClone(conversation)
     }));
     return { metadata, conversations };
   }
 
-  function openDatabase(indexedDB, name = DB_NAME, version = DB_VERSION) {
+  // Rows written before generations existed carry none, and match a source
+  // record that carries none.
+  const sameGeneration = (record, metadata) => (record?.generation ?? null) === (metadata?.generation ?? null);
+
+  function openDatabase(indexedDB, name = DB_NAME, version = DB_VERSION, onClosed = () => {}) {
     if (!indexedDB?.open) return Promise.reject(new Error("IndexedDB is unavailable."));
     return new Promise((resolve, reject) => {
       const request = indexedDB.open(name, version);
@@ -131,7 +146,9 @@ window.OD = window.OD || {};
       };
       request.onsuccess = () => {
         const db = request.result;
-        db.onversionchange = () => db.close();
+        // Another tab is resetting or upgrading the library: step aside, and
+        // let the next call here open a fresh connection.
+        db.onversionchange = () => { db.close(); onClosed(); };
         resolve(db);
       };
       request.onerror = () => reject(request.error || new Error("Could not open the local library."));
@@ -141,18 +158,32 @@ window.OD = window.OD || {};
 
   function createIndexedDBDriver(indexedDB, { name = DB_NAME, version = DB_VERSION } = {}) {
     let databasePromise = null;
-    const database = () => databasePromise ||= openDatabase(indexedDB, name, version);
+    const database = () => {
+      if (!databasePromise) {
+        const opening = openDatabase(indexedDB, name, version, () => {
+          if (databasePromise === opening) databasePromise = null;
+        });
+        // A failed or blocked open is not remembered: the next call tries again.
+        opening.catch(() => { if (databasePromise === opening) databasePromise = null; });
+        databasePromise = opening;
+      }
+      return databasePromise;
+    };
 
-    async function deleteConversations(sourceId) {
-      const db = await database();
-      const transaction = db.transaction(CONVERSATION_STORE, "readwrite");
+    function deleteConversationsIn(transaction, sourceId, keep = () => false) {
       const cursorRequest = transaction.objectStore(CONVERSATION_STORE).index("sourceId").openCursor(sourceId);
       cursorRequest.onsuccess = () => {
         const cursor = cursorRequest.result;
         if (!cursor) return;
-        cursor.delete();
+        if (!keep(cursor.value)) cursor.delete();
         cursor.continue();
       };
+    }
+
+    async function deleteConversations(sourceId, keep) {
+      const db = await database();
+      const transaction = db.transaction(CONVERSATION_STORE, "readwrite");
+      deleteConversationsIn(transaction, sourceId, keep);
       await transactionDone(transaction);
     }
 
@@ -160,20 +191,25 @@ window.OD = window.OD || {};
       async open() { await database(); return { name, version }; },
       async replaceSource(metadata, conversations, batchSize = BATCH_SIZE) {
         const db = await database();
-        const started = db.transaction(SOURCE_STORE, "readwrite");
-        started.objectStore(SOURCE_STORE).put({ ...metadata, state: "writing" });
-        await transactionDone(started);
-        await deleteConversations(metadata.id);
-        for (let index = 0; index < conversations.length; index += batchSize) {
-          const transaction = db.transaction(CONVERSATION_STORE, "readwrite");
-          const store = transaction.objectStore(CONVERSATION_STORE);
-          for (const record of conversations.slice(index, index + batchSize)) store.put(record);
-          await transactionDone(transaction);
-          await new Promise(resolve => setTimeout(resolve, 0));
+        try {
+          for (let index = 0; index < conversations.length; index += batchSize) {
+            const transaction = db.transaction(CONVERSATION_STORE, "readwrite");
+            const store = transaction.objectStore(CONVERSATION_STORE);
+            for (const record of conversations.slice(index, index + batchSize)) store.put(record);
+            await transactionDone(transaction);
+            await new Promise(resolve => setTimeout(resolve, 0));
+          }
+          // One transaction points the source at the new rows and drops the
+          // old ones: either both happen or neither does.
+          const finished = db.transaction([SOURCE_STORE, CONVERSATION_STORE], "readwrite");
+          finished.objectStore(SOURCE_STORE).put({ ...metadata, state: "ready" });
+          deleteConversationsIn(finished, metadata.id, record => sameGeneration(record, metadata));
+          await transactionDone(finished);
+        } catch (error) {
+          // Leave the previous copy as it was; tidy away the partial new rows.
+          await deleteConversations(metadata.id, record => !sameGeneration(record, metadata)).catch(() => {});
+          throw error;
         }
-        const finished = db.transaction(SOURCE_STORE, "readwrite");
-        finished.objectStore(SOURCE_STORE).put({ ...metadata, state: "ready" });
-        await transactionDone(finished);
       },
       async listSources() {
         const db = await database();
@@ -310,6 +346,33 @@ window.OD = window.OD || {};
   function create({ driver } = {}) {
     const selectedDriver = driver || (typeof indexedDB !== "undefined" ? createIndexedDBDriver(indexedDB) : null);
     const supported = !!selectedDriver;
+    // Saves of one source run one after another, and a removal waits for the
+    // save in flight; otherwise a source removed while it was still being
+    // written came back on the next visit.
+    const pending = new Map();
+    function queued(sourceId, task) {
+      const run = (pending.get(sourceId) || Promise.resolve()).then(task);
+      const settled = run.catch(() => {});
+      pending.set(sourceId, settled);
+      settled.then(() => { if (pending.get(sourceId) === settled) pending.delete(sourceId); });
+      return run;
+    }
+    async function saveNow(source) {
+      await selectedDriver.open();
+      const records = sourceRecords(source);
+      try {
+        await selectedDriver.replaceSource(records.metadata, records.conversations, BATCH_SIZE);
+        source.directoryHandlePersisted = !!records.metadata.directoryHandle;
+      } catch (error) {
+        if (!records.metadata.directoryHandle) throw error;
+        // Some browsers expose File System Access but cannot structured-clone
+        // a handle into IndexedDB. Text persistence must still succeed.
+        delete records.metadata.directoryHandle;
+        await selectedDriver.replaceSource(records.metadata, records.conversations, BATCH_SIZE);
+        source.directoryHandlePersisted = false;
+      }
+      return records.metadata.savedAt;
+    }
     return {
       supported,
       async open() {
@@ -318,20 +381,7 @@ window.OD = window.OD || {};
       },
       async saveSource(source) {
         if (!selectedDriver) return null;
-        await selectedDriver.open();
-        const records = sourceRecords(source);
-        try {
-          await selectedDriver.replaceSource(records.metadata, records.conversations, BATCH_SIZE);
-          source.directoryHandlePersisted = !!records.metadata.directoryHandle;
-        } catch (error) {
-          if (!records.metadata.directoryHandle) throw error;
-          // Some browsers expose File System Access but cannot structured-clone
-          // a handle into IndexedDB. Text persistence must still succeed.
-          delete records.metadata.directoryHandle;
-          await selectedDriver.replaceSource(records.metadata, records.conversations, BATCH_SIZE);
-          source.directoryHandlePersisted = false;
-        }
-        return records.metadata.savedAt;
+        return queued(String(source.id), () => saveNow(source));
       },
       async restore() {
         if (!selectedDriver) return { sources: [], savedAt: null };
@@ -341,7 +391,9 @@ window.OD = window.OD || {};
           .sort((a, b) => String(a.savedAt || "").localeCompare(String(b.savedAt || "")));
         const sources = [];
         for (const source of metadata) {
-          const records = (await selectedDriver.listConversations(source.id)).sort((a, b) => a.order - b.order);
+          const records = (await selectedDriver.listConversations(source.id))
+            .filter(record => sameGeneration(record, source))
+            .sort((a, b) => a.order - b.order);
           if (records.length !== Number(source.conversationCount || 0)) continue;
           sources.push({ ...source, conversations: records.map(record => record.conversation) });
         }
@@ -350,8 +402,15 @@ window.OD = window.OD || {};
           savedAt: sources.map(source => source.savedAt).filter(Boolean).sort().at(-1) || null
         };
       },
-      async removeSource(sourceId) { if (selectedDriver) await selectedDriver.removeSource(String(sourceId)); },
-      async clearSources() { if (selectedDriver) await selectedDriver.clearSources(); },
+      async removeSource(sourceId) {
+        if (!selectedDriver) return;
+        await queued(String(sourceId), () => selectedDriver.removeSource(String(sourceId)));
+      },
+      async clearSources() {
+        if (!selectedDriver) return;
+        await Promise.all([...pending.values()]);
+        await selectedDriver.clearSources();
+      },
       async loadSettings() { return selectedDriver ? selectedDriver.getSettings() : null; },
       async saveSettings(value) { if (selectedDriver) await selectedDriver.setSettings(value); },
       async loadAsset(assetKey) { return selectedDriver?.getAsset ? selectedDriver.getAsset(assetKey) : null; },

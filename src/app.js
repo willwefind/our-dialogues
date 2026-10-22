@@ -3,7 +3,17 @@ window.OD = window.OD || {};
 (function(OD){
   const $ = id => document.getElementById(id);
   const t = (key, params) => OD.i18n ? OD.i18n.t(key, params) : String(key);
+  /* Enter or Esc that confirms or cancels a Chinese IME candidate belongs to
+     the IME. Safari reports it with keyCode 229 rather than isComposing. */
+  const composing = event => !!(event?.isComposing || event?.keyCode === 229);
   const SETTINGS_MIRROR_KEY = "our-dialogues.reader-state.v1";
+  /* With site data blocked, some browsers throw on merely touching
+     localStorage; the Reader then still opens and simply remembers less. */
+  const storage = {
+    area() { try { return window.localStorage || null; } catch (_) { return null; } },
+    get(key) { try { return this.area()?.getItem(key) ?? null; } catch (_) { return null; } },
+    set(key, value) { try { this.area()?.setItem(key, value); } catch (_) {} }
+  };
   const state = {
     library: OD.sourceLibrary.create(),
     persistence: OD.persistentLibrary?.create?.() || null,
@@ -11,7 +21,7 @@ window.OD = window.OD || {};
     filtered: [],
     current: null,
     sourceFilter: "all",
-    sortMode: OD.conversationOrder.readStoredMode(window.localStorage),
+    sortMode: OD.conversationOrder.readStoredMode(storage.area()),
     assetSession: null,
     solVoiceSession: null,
     solVoiceMapping: null,
@@ -83,9 +93,16 @@ window.OD = window.OD || {};
     return OD.i18n?.currentLocale?.() || "zh-CN";
   }
 
+  /* A bare date ("2014-11-02") is a calendar day, not midnight in London:
+     read it as local midnight so it shows as that day everywhere. */
+  function displayDate(value) {
+    const parts = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(value ?? "").trim());
+    return parts ? new Date(Number(parts[1]), Number(parts[2]) - 1, Number(parts[3])) : new Date(value);
+  }
+
   function fmtDateOnly(value) {
     if (!value) return "";
-    const d = new Date(value);
+    const d = displayDate(value);
     if (Number.isNaN(d.getTime())) return String(value);
     const locale = uiLocaleTag();
     try {
@@ -224,7 +241,7 @@ window.OD = window.OD || {};
 
   function readSettingsMirror() {
     try {
-      const value = JSON.parse(localStorage.getItem(SETTINGS_MIRROR_KEY) || "null");
+      const value = JSON.parse(storage.get(SETTINGS_MIRROR_KEY) || "null");
       return value && typeof value === "object" ? value : null;
     } catch (_) {
       return null;
@@ -242,6 +259,28 @@ window.OD = window.OD || {};
     return messageAnchorElement()?.dataset?.messageId || null;
   }
 
+  /* While the library home covers the reader, its hidden messages all
+     measure 0 from the top, so any scroll would anchor to the last one.
+     The place in the conversation underneath is the one last seen. */
+  function readerHidden() {
+    return $("reader")?.classList?.contains?.("hidden") === true;
+  }
+
+  function currentReadingPosition() {
+    if (!state.current) return null;
+    const last = state.lastReadingPosition;
+    if (readerHidden() && last?.conversationId === state.current.id) return { ...last };
+    const position = {
+      conversationId: state.current.id,
+      messageId: messageAnchor(),
+      page: state.pageIndex,
+      scrollTop: Number($("main").scrollTop || 0),
+      timestamp: new Date().toISOString()
+    };
+    if (!readerHidden()) state.lastReadingPosition = position;
+    return position;
+  }
+
   function readerSettings() {
     return {
       sourceFilter: state.sourceFilter,
@@ -252,13 +291,7 @@ window.OD = window.OD || {};
       ...state.readerPrefs,
       theme: $("theme").value || state.readerPrefs.theme,
       recentConversationId: state.current?.id || null,
-      readingPosition: state.current ? {
-        conversationId: state.current.id,
-        messageId: messageAnchor(),
-        page: state.pageIndex,
-        scrollTop: Number($("main").scrollTop || 0),
-        timestamp: new Date().toISOString()
-      } : null,
+      readingPosition: currentReadingPosition(),
       groupState: {
         sources: { ...state.groupState.sources },
         characters: { ...state.groupState.characters }
@@ -368,7 +401,7 @@ window.OD = window.OD || {};
      first, then page and scroll — the pattern proven per character in the
      standalone Mufy reader. */
   function recordReadingProgress() {
-    if (!state.current) return;
+    if (!state.current || readerHidden()) return;
     const source = state.library.sourceForConversation(state.current);
     const anchor = messageAnchorElement();
     const messageId = anchor?.dataset?.messageId || null;
@@ -397,7 +430,7 @@ window.OD = window.OD || {};
     recordReadingProgress();
     const settings = readerSettings();
     updateAcceptanceReadingPosition(settings.readingPosition);
-    try { localStorage.setItem(SETTINGS_MIRROR_KEY, JSON.stringify(settings)); } catch (_) {}
+    storage.set(SETTINGS_MIRROR_KEY, JSON.stringify(settings));
     if (!state.persistence?.supported) return Promise.resolve();
     const write = async () => {
       state.saveTimer = null;
@@ -548,7 +581,10 @@ window.OD = window.OD || {};
       metaBits.push(esc(documentRow ? fmtDateOnly(c.createdAt) : fmtDate(c.createdAt)));
     }
     if (progress) metaBits.push(`<span class="conv-progress">${esc(progress)}</span>`);
-    return `<div class="conv${active}" data-id="${esc(c.id)}" draggable="true">
+    // Focusable so the keyboard can open it; in 整理 mode it picks instead,
+    // so it says so (syncShelfSelectionMarks keeps aria-checked current).
+    const role = state.shelfSelecting ? `role="checkbox" aria-checked="false"` : `role="link"`;
+    return `<div class="conv${active}" data-id="${esc(c.id)}" draggable="true" tabindex="0" ${role}>
       ${provenance ? `<div class="conv-provenance">${esc(provenance)}</div>` : ""}
       <div class="conv-title">${favorite}${esc(displayConversationTitle(c))}</div>
       <div class="conv-meta">${metaBits.join(" · ")}${tagChips ? ` ${tagChips}` : ""}</div>
@@ -593,7 +629,15 @@ window.OD = window.OD || {};
     return OD.readerBackground.normalize(state.background);
   }
 
+  // Bumped whenever the picture is let go, so a load still in flight for
+  // the old picture knows not to bring it back.
+  let backgroundGeneration = 0;
+  let backgroundLoading = null;
+  let backgroundApplyToken = 0;
+
   function releaseBackgroundUrl() {
+    backgroundGeneration += 1;
+    backgroundLoading = null;
     if (!state.backgroundUrl) return;
     try { URL.revokeObjectURL(state.backgroundUrl); } catch (_) {}
     state.backgroundUrl = null;
@@ -603,18 +647,31 @@ window.OD = window.OD || {};
     // One live URL per asset: created when the image is first needed and
     // revoked whenever it is replaced or removed, never per render.
     if (state.backgroundUrl) return state.backgroundUrl;
-    const record = await state.persistence?.loadAsset?.(OD.readerBackground.ASSET_KEY);
-    if (!record?.blob) return null;
-    // The picture's own pixels travel with the URL: the panel needs them to
-    // say how far this screen is stretching it.
-    state.backgroundPixels = { width: record.width, height: record.height };
-    state.backgroundUrl = URL.createObjectURL(record.blob);
-    return state.backgroundUrl;
+    // Callers that ask at the same moment share one load and one URL.
+    if (backgroundLoading) return backgroundLoading;
+    const generation = backgroundGeneration;
+    const loading = (async () => {
+      const record = await state.persistence?.loadAsset?.(OD.readerBackground.ASSET_KEY);
+      if (generation !== backgroundGeneration) return state.backgroundUrl;
+      if (!record?.blob) return null;
+      // The picture's own pixels travel with the URL: the panel needs them to
+      // say how far this screen is stretching it.
+      state.backgroundPixels = { width: record.width, height: record.height };
+      state.backgroundUrl = URL.createObjectURL(record.blob);
+      return state.backgroundUrl;
+    })();
+    backgroundLoading = loading;
+    try {
+      return await loading;
+    } finally {
+      if (backgroundLoading === loading) backgroundLoading = null;
+    }
   }
 
   async function applyBackground() {
     const layer = $("customBackground");
     if (!layer) return;
+    const token = ++backgroundApplyToken;
     const settings = backgroundSettings();
     document.body?.classList?.toggle?.("has-custom-background", OD.readerBackground.isActive(settings));
     if (!OD.readerBackground.isActive(settings)) {
@@ -625,6 +682,8 @@ window.OD = window.OD || {};
       return;
     }
     const url = await backgroundObjectUrl();
+    // A later call (the picture removed or replaced meanwhile) has the say.
+    if (token !== backgroundApplyToken) return;
     if (!url) {
       // The settings remember an image the database no longer holds.
       layer.hidden = true;
@@ -1201,6 +1260,8 @@ window.OD = window.OD || {};
     const editor = $("memorialDateEditor");
     const entry = companionEntries().find(item => item.key === key);
     if (!editor || !entry) return;
+    // The two editors share one key; only one of them is open at a time.
+    closeMemorialNameEditor();
     memorialEditorKey = key;
     state.memorialEditorReturn = trigger || null;
     const summary = companionSummary(entry);
@@ -1243,6 +1304,7 @@ window.OD = window.OD || {};
     const editor = $("memorialNameEditor");
     const entry = companionEntries().find(item => item.key === key);
     if (!editor || !entry) return;
+    closeMemorialDateEditor();
     memorialEditorKey = key;
     state.memorialEditorReturn = trigger || null;
     const custom = OD.companionship.nameFor(state.companionshipOverrides, key);
@@ -1357,7 +1419,7 @@ window.OD = window.OD || {};
      last in both directions, 日期不详 lands at the bottom naturally. Pinned
      greetings render before any heading so the pin stays visibly first. */
   function conversationYear(conversation) {
-    const time = Date.parse(conversation?.createdAt ?? "");
+    const time = displayDate(conversation?.createdAt ?? "").getTime();
     return Number.isFinite(time) ? String(new Date(time).getFullYear()) : null;
   }
 
@@ -1590,6 +1652,7 @@ window.OD = window.OD || {};
     group.open = true;
     const menu = group.querySelector?.(".shelf-group-menu");
     if (menu) menu.hidden = false;
+    group.querySelector?.("[data-shelf-group-menu]")?.setAttribute?.("aria-expanded", "true");
     const input = menu?.querySelector?.("[data-shelf-group-name-input]");
     input?.focus?.({ preventScroll: true });
     input?.select?.();
@@ -1656,6 +1719,7 @@ window.OD = window.OD || {};
     });
     [...(list.querySelectorAll(".conv") || [])].forEach(el => {
       el.classList.toggle("is-shelf-selected", state.shelfSelecting && isConversationPicked(el.dataset.id));
+      if (state.shelfSelecting) el.setAttribute?.("aria-checked", String(isConversationPicked(el.dataset.id)));
     });
     const markHeading = (el, items) => {
       const picks = [...items.sources.map(isShelfSelected), ...items.conversations.map(isConversationPicked)];
@@ -1967,7 +2031,7 @@ window.OD = window.OD || {};
         ${shelfCheckMarkup(picked, name)}
         <span class="source-summary-label" title="${esc(name === source.label ? name : `${name} · ${source.label}`)}">${esc(name)}</span>
         <span class="source-count">${conversations.length}</span>
-        <button class="source-menu-button" type="button" data-source-menu="${esc(source.id)}" title="${esc(t("source.menuTitle"))}" aria-haspopup="true" aria-label="${esc(t("source.menuAria", { label: name }))}">···</button>
+        <button class="source-menu-button" type="button" data-source-menu="${esc(source.id)}" title="${esc(t("source.menuTitle"))}" aria-haspopup="true" aria-expanded="false" aria-label="${esc(t("source.menuAria", { label: name }))}">···</button>
       </summary>
       ${sourceRowMenuMarkup(source, conversations.length)}
       ${children}
@@ -1984,7 +2048,7 @@ window.OD = window.OD || {};
         ${shelfCheckMarkup(false, group.name)}
         <span class="shelf-group-label">${esc(group.name)}</span>
         <span class="source-count">${conversationCount}</span>
-        <button class="source-menu-button" type="button" data-shelf-group-menu="${esc(group.id)}" title="${esc(t("shelf.groupMenuTitle"))}" aria-haspopup="true" aria-label="${esc(t("shelf.groupMenuAria", { group: group.name }))}">···</button>
+        <button class="source-menu-button" type="button" data-shelf-group-menu="${esc(group.id)}" title="${esc(t("shelf.groupMenuTitle"))}" aria-haspopup="true" aria-expanded="false" aria-label="${esc(t("shelf.groupMenuAria", { group: group.name }))}">···</button>
       </summary>
       <div class="shelf-group-menu" hidden>
         <label class="source-row-field">
@@ -2016,7 +2080,7 @@ window.OD = window.OD || {};
       renameSource(button.dataset.sourceNameRestore, "");
     }));
     each("[data-source-name-input]", input => input.addEventListener("keydown", event => {
-      if (event.key === "Enter" && !event.isComposing) { quiet(event); renameSource(input.dataset.sourceNameInput, input.value); }
+      if (event.key === "Enter" && !composing(event)) { quiet(event); renameSource(input.dataset.sourceNameInput, input.value); }
     }));
     each("[data-source-group]", select => select.addEventListener("change", () => {
       const sourceId = select.dataset.sourceGroup;
@@ -2033,12 +2097,13 @@ window.OD = window.OD || {};
       if (input) moveSourceToNewGroup(button.dataset.sourceNewGroupSave, input.value);
     }));
     each("[data-source-new-group-input]", input => input.addEventListener("keydown", event => {
-      if (event.key === "Enter" && !event.isComposing) { quiet(event); moveSourceToNewGroup(input.dataset.sourceNewGroupInput, input.value); }
+      if (event.key === "Enter" && !composing(event)) { quiet(event); moveSourceToNewGroup(input.dataset.sourceNewGroupInput, input.value); }
     }));
     each("[data-shelf-group-menu]", button => button.addEventListener("click", event => {
       quiet(event);
       const menu = button.closest?.(".shelf-group")?.querySelector?.(".shelf-group-menu");
       if (menu) menu.hidden = !menu.hidden;
+      button.setAttribute?.("aria-expanded", String(menu?.hidden === false));
     }));
     each("[data-shelf-group-name-save]", button => button.addEventListener("click", event => {
       quiet(event);
@@ -2046,7 +2111,7 @@ window.OD = window.OD || {};
       if (input) renameSourceGroup(button.dataset.shelfGroupNameSave, input.value);
     }));
     each("[data-shelf-group-name-input]", input => input.addEventListener("keydown", event => {
-      if (event.key === "Enter" && !event.isComposing) { quiet(event); renameSourceGroup(input.dataset.shelfGroupNameInput, input.value); }
+      if (event.key === "Enter" && !composing(event)) { quiet(event); renameSourceGroup(input.dataset.shelfGroupNameInput, input.value); }
     }));
     each("[data-shelf-group-dissolve]", button => button.addEventListener("click", event => {
       quiet(event);
@@ -2128,7 +2193,7 @@ window.OD = window.OD || {};
       const title = editing
         ? `<input class="bookmark-rename" data-bookmark-rename="${esc(bookmark.id)}" value="${esc(bookmark.label)}" placeholder="${esc(bookmark.conversationTitle)}" aria-label="${esc(t("bookmark.renameAria"))}">`
         : `<div class="bookmark-title">${esc(OD.bookmarks.displayTitle(bookmark))}</div>`;
-      return `<div class="bookmark${missing ? " missing" : ""}" data-bookmark-id="${esc(bookmark.id)}">
+      return `<div class="bookmark${missing ? " missing" : ""}" data-bookmark-id="${esc(bookmark.id)}" tabindex="0">
         <div class="bookmark-head">
           ${title}
           <span class="bookmark-actions">
@@ -2164,8 +2229,11 @@ window.OD = window.OD || {};
     [...document.querySelectorAll("[data-bookmark-rename]")].forEach(input => {
       input.addEventListener("click", event => event.stopPropagation());
       input.addEventListener("keydown", event => {
+        if (composing(event)) return;
         if (event.key === "Enter") renameBookmark(input.dataset.bookmarkRename, input.value);
         if (event.key === "Escape") {
+          // The rename is what Esc cancels here, not the drawer around it.
+          event.stopPropagation?.();
           state.editingBookmarkId = null;
           renderBookmarks();
         }
@@ -2196,7 +2264,9 @@ window.OD = window.OD || {};
     OD.i18n?.applyStatic?.(document);
     renderAnnotationSwatches();
     renderSourceControls();
-    if (state.current) {
+    // On the library home the conversation underneath stays put: changing
+    // language there must not open it.
+    if (state.current && !libraryHomeVisible()) {
       openConversation(state.current.id, { restorePosition: position });
     } else {
       renderList();
@@ -2310,7 +2380,7 @@ window.OD = window.OD || {};
       const excerpt = annotation.selectedText.length > 46
         ? `${annotation.selectedText.slice(0, 46)}…`
         : annotation.selectedText;
-      return `<div class="annotation-item${missing ? " missing" : ""}" data-annotation-item="${esc(annotation.id)}">
+      return `<div class="annotation-item${missing ? " missing" : ""}" data-annotation-item="${esc(annotation.id)}" tabindex="0">
         <div class="bookmark-head">
           <span class="annotation-dot hl-${esc(annotation.color)}" aria-hidden="true"></span>
           <div class="bookmark-title">${esc(excerpt)}</div>
@@ -2366,7 +2436,7 @@ window.OD = window.OD || {};
       const title = conversation ? displayConversationTitle(conversation) : entry.conversationId;
       const finished = OD.readingProgress.isFinished(entry);
       const label = finished ? t("progress.finished") : (entry.percent > 0 ? t("progress.readTo", { percent: entry.percent }) : t("progress.justStarted"));
-      return `<div class="recent-item${missing ? " missing" : ""}" data-recent-id="${esc(entry.conversationId)}">
+      return `<div class="recent-item${missing ? " missing" : ""}" data-recent-id="${esc(entry.conversationId)}" role="link" tabindex="0">
         <div class="bookmark-head">
           <div class="bookmark-title">${esc(title)}</div>
           <span class="recent-progress${finished ? " finished" : ""}">${esc(label)}</span>
@@ -2590,7 +2660,10 @@ window.OD = window.OD || {};
       setStatus(t("export.emptyList"), true);
       return null;
     }
-    const stamp = new Date().toISOString().slice(0, 10);
+    // Today as the reader's calendar has it, not as UTC does.
+    const today = new Date();
+    const stamp = [today.getFullYear(), today.getMonth() + 1, today.getDate()]
+      .map((part, index) => String(part).padStart(index ? 2 : 4, "0")).join("-");
     const listName = extension =>
       OD.exporter.safeFilename(t("export.listFilename", { stamp, count: state.filtered.length }), extension);
     if (kind === "list-markdown") {
@@ -2798,7 +2871,7 @@ window.OD = window.OD || {};
     };
     results.innerHTML = [
       truncated ? `<div class="bookmarks-empty">${esc(t("search.truncated", { limit: OD.messageSearch.DEFAULT_LIMIT }))}</div>` : "",
-      ...hits.map(hit => `<div class="search-hit" data-search-conversation="${esc(hit.conversationId)}" data-search-message="${esc(hit.messageId)}">
+      ...hits.map(hit => `<div class="search-hit" data-search-conversation="${esc(hit.conversationId)}" data-search-message="${esc(hit.messageId)}" role="link" tabindex="0">
         <div class="bookmark-meta">${esc(hitLabel(hit))}</div>
         <div class="search-snippet">${hit.before ? "…" : ""}${esc(hit.before)}<b>${esc(hit.match)}</b>${esc(hit.after)}…</div>
       </div>`)
@@ -2956,6 +3029,9 @@ window.OD = window.OD || {};
     };
     let rows = OD.sourceShelf.arrange(state.sourceShelf, visibleSources);
     if (groupFilter) rows = rows.filter(row => row.type === "group" && row.group.id === groupFilter);
+    // Re-rendering replaces every row; a row that held focus gets it back
+    // below, so opening a conversation from the keyboard does not drop it.
+    const focusedRowId = document.activeElement?.closest?.("#conversationList .conv")?.dataset?.id;
     $("conversationList").innerHTML = rows.map(row => {
       if (row.type === "source") return sourceRow(row.source).html;
       // Hand-picked conversations first, then whole sources, in that order
@@ -2978,6 +3054,9 @@ window.OD = window.OD || {};
         else openConversation(el.dataset.id);
       });
     });
+    if (focusedRowId != null) {
+      [...document.querySelectorAll(".conv")].find(el => el.dataset.id === focusedRowId)?.focus?.({ preventScroll: true });
+    }
     [...document.querySelectorAll("#conversationList details.shelf-group, #conversationList details.source-group, #conversationList details.character-group")].forEach(el => {
       el.addEventListener("toggle", () => {
         if (state.searchForcedOpen) return;
@@ -3004,6 +3083,7 @@ window.OD = window.OD || {};
         const group = button.closest?.(".source-group");
         const menu = group?.querySelector?.(".source-row-menu");
         if (menu) menu.hidden = !menu.hidden;
+        button.setAttribute?.("aria-expanded", String(menu?.hidden === false));
       });
     });
 
@@ -3022,7 +3102,7 @@ window.OD = window.OD || {};
   }
 
   function setSortMode(mode) {
-    state.sortMode = OD.conversationOrder.persistMode(window.localStorage, mode);
+    state.sortMode = OD.conversationOrder.persistMode(storage.area(), mode);
     renderSortControl();
     renderList();
     void saveReaderState();
@@ -3740,14 +3820,15 @@ window.OD = window.OD || {};
       );
     }
     const text = await file.text();
-    // JSON Lines (a SillyTavern chat) reads as the array of its lines.
-    const data = /\.jsonl$/i.test(file.name)
-      ? OD.sillyTavern.parseLines(text).lines
-      : JSON.parse(text.replace(/^\uFEFF/, ""));
+    // JSON Lines (a SillyTavern chat) reads as the array of its lines; damaged
+    // lines are counted and said, as the folder import already does.
+    const lines = /\.jsonl$/i.test(file.name) ? OD.sillyTavern.parseLines(text) : null;
+    const data = lines ? lines.lines : JSON.parse(text.replace(/^\uFEFF/, ""));
+    const details = lines?.invalid ? `${lines.invalid} 行损坏已跳过` : "";
     const result = requireRecognized(await OD.registry.parseJSON(data));
     /* Adapters may name the source themselves (a personal archive shows its
        own archive name instead of the generic adapter label). */
-    return loadArchive(result.archive, result.archive?.source?.sourceLabel || result.adapter.label, null, "", { ...options, reconnectMode: "file" });
+    return loadArchive(result.archive, result.archive?.source?.sourceLabel || result.adapter.label, null, details, { ...options, reconnectMode: "file" });
   }
 
   /*
@@ -3850,7 +3931,7 @@ window.OD = window.OD || {};
     document.body.classList.toggle("hide-user", !!settings.hideUser);
     document.body.classList.toggle("show-thinking", !!settings.showThinking);
     applyReaderPreferences({ ...state.readerPrefs, ...settings });
-    localStorage.setItem("our-dialogues.theme", state.readerPrefs.theme);
+    storage.set("our-dialogues.theme", state.readerPrefs.theme);
     state.restoredPosition = settings.readingPosition || null;
     const groupState = settings.groupState;
     if (groupState && typeof groupState === "object") {
@@ -3926,7 +4007,9 @@ window.OD = window.OD || {};
       const recentId = settings?.recentConversationId || mirror?.recentConversationId || null;
       const recent = conversations.find(conversation => conversation.id === recentId) ||
         OD.conversationOrder.sortConversations(conversations, state.sortMode)[0] || null;
-      if (recent) {
+      // A conversation opened while the library was still restoring (say,
+      // from a file imported meanwhile) stays open.
+      if (recent && !state.current) {
         const position = (settings?.readingPosition || mirror?.readingPosition)?.conversationId === recent.id
           ? (settings?.readingPosition || mirror?.readingPosition)
           : null;
@@ -3980,6 +4063,17 @@ window.OD = window.OD || {};
       event.target.value = "";
     }
   });
+
+  /* A reconnect waits for its picker. If that picker is dismissed, or the
+     reader opens the same picker herself to add something new, the wait is
+     over — the next file chosen is an import, not a reconnect. */
+  for (const id of ["fileInput", "folderInput"]) {
+    const input = $(id);
+    input?.addEventListener?.("cancel", () => { state.pendingReconnectSourceId = null; });
+    input?.closest?.("label")?.addEventListener?.("click", event => {
+      if (event.target !== input) state.pendingReconnectSourceId = null;
+    });
+  }
 
   if ($("directoryPicker") && typeof window.showDirectoryPicker === "function") {
     $("directoryPicker").hidden = false;
@@ -4043,7 +4137,7 @@ window.OD = window.OD || {};
   });
   $("shelfSelectApply")?.addEventListener?.("click", () => applyShelfSelection());
   $("shelfSelectNewName")?.addEventListener?.("keydown", event => {
-    if (event.key === "Enter" && !event.isComposing) { event.preventDefault?.(); applyShelfSelection(); }
+    if (event.key === "Enter" && !composing(event)) { event.preventDefault?.(); applyShelfSelection(); }
   });
   if ($("sourceRow")) wireShelfDropTarget($("sourceRow"), () => null);
   if ($("shelfNewGroupDrop")) wireShelfDropTarget($("shelfNewGroupDrop"), () => null, { createsGroup: true });
@@ -4070,7 +4164,7 @@ window.OD = window.OD || {};
   $("theme").addEventListener("change", event => {
     state.readerPrefs = OD.readerParity.normalizePreferences({ ...state.readerPrefs, theme: event.target.value });
     applyReaderPreferences();
-    localStorage.setItem("our-dialogues.theme", event.target.value);
+    storage.set("our-dialogues.theme", event.target.value);
     void saveReaderState();
   });
   $("uiLocale")?.addEventListener?.("change", event => setUiLocale(event.target.value));
@@ -4183,7 +4277,7 @@ window.OD = window.OD || {};
     card.addEventListener("click", () => {
       state.readerPrefs = OD.readerParity.normalizePreferences({ ...state.readerPrefs, theme: card.dataset.themeCard });
       applyReaderPreferences();
-      localStorage.setItem("our-dialogues.theme", state.readerPrefs.theme);
+      storage.set("our-dialogues.theme", state.readerPrefs.theme);
       void saveReaderState();
     });
   });
@@ -4196,6 +4290,7 @@ window.OD = window.OD || {};
   $("aaDone")?.addEventListener?.("click", () => {
     const panel = $("readerPrefsPanel");
     if (panel) panel.hidden = true;
+    syncPopoverToggles();
     $("readerPrefsToggle")?.focus?.();
   });
   $("resetPrefs")?.addEventListener?.("click", () => {
@@ -4206,7 +4301,7 @@ window.OD = window.OD || {};
     document.body.classList.toggle("hide-user", false);
     document.body.classList.toggle("show-thinking", false);
     applyReaderPreferences();
-    localStorage.setItem("our-dialogues.theme", state.readerPrefs.theme);
+    storage.set("our-dialogues.theme", state.readerPrefs.theme);
     if (state.current) openConversation(state.current.id, { restorePosition: position });
     void saveReaderState();
   });
@@ -4250,7 +4345,14 @@ window.OD = window.OD || {};
      near the top, on toolbar focus, or when any toolbar-owned popover opens.
      Frozen while text is selected, a note is being edited, audio plays, or a
      popover is open — reading chrome must never fight those states. */
-  const toolbarHide = { downAccum: 0, upAccum: 0, lastTop: 0, hidden: false, audioPlaying: 0 };
+  const toolbarHide = { downAccum: 0, upAccum: 0, lastTop: 0, hidden: false };
+  /* Asked of the page each time rather than counted: a player removed by a
+     re-render pauses without its pause ever reaching the document, and a
+     count would then keep the bars pinned for the rest of the visit. */
+  function mediaPlaying() {
+    return [...(document.querySelectorAll?.("audio, video") || [])]
+      .some(media => media.paused === false && media.ended !== true);
+  }
   function anyToolbarPopoverOpen() {
     return ["readerPrefsPanel", "exportMenu", "tagEditor", "readerMoreMenu"].some(id => {
       const panel = $(id);
@@ -4262,7 +4364,7 @@ window.OD = window.OD || {};
     const editor = $("annotationEditor");
     if (editor && !editor.hidden) return true;
     if (OD.shijuStudio?.isOpen?.()) return true;
-    if (toolbarHide.audioPlaying > 0) return true;
+    if (mediaPlaying()) return true;
     if (anyToolbarPopoverOpen()) return true;
     return false;
   }
@@ -4317,15 +4419,8 @@ window.OD = window.OD || {};
       if (toolbarHide.upAccum >= revealThreshold) setToolbarHidden(false);
     }
   }
-  // Media events don't bubble, so listen in the capture phase; ended fires
-  // pause as well, keeping the counter balanced.
-  document.addEventListener?.("play", () => {
-    toolbarHide.audioPlaying += 1;
-    setToolbarHidden(false);
-  }, true);
-  document.addEventListener?.("pause", () => {
-    toolbarHide.audioPlaying = Math.max(0, toolbarHide.audioPlaying - 1);
-  }, true);
+  // Media events don't bubble, so listen in the capture phase.
+  document.addEventListener?.("play", () => setToolbarHidden(false), true);
   $("readerToolbar")?.addEventListener?.("focusin", () => setToolbarHidden(false));
   /* Phone: a deliberate tap on blank reading surface toggles both bars —
      but never a tap on links, media, marks, editors, or while text is
@@ -4356,20 +4451,27 @@ window.OD = window.OD || {};
     if (!touch) return;
     const dx = touch.clientX - drawerSwipe.x;
     const dy = touch.clientY - drawerSwipe.y;
-    if (Math.abs(dx) >= 80 && Math.abs(dx) > Math.abs(dy)) {
-      $("sidebar").classList.add("closed");
-      syncSidebarBackdrop();
-    }
+    if (Math.abs(dx) >= 80 && Math.abs(dx) > Math.abs(dy)) closeDrawer();
   }, { passive: true });
 
+  /* Each toolbar popover's button says whether its panel is open; every
+     path that opens or closes one of them ends by calling this. */
+  function syncPopoverToggles() {
+    const toggles = { readerPrefsPanel: "readerPrefsToggle", readerMoreMenu: "readerMoreToggle", exportMenu: "exportToggle", tagEditor: "tagToggle" };
+    for (const [panelId, toggleId] of Object.entries(toggles)) {
+      $(toggleId)?.setAttribute?.("aria-expanded", String($(panelId)?.hidden === false));
+    }
+  }
   function closeMoreMenu() {
     const menu = $("readerMoreMenu");
     if (menu) menu.hidden = true;
+    syncPopoverToggles();
   }
   $("readerMoreToggle")?.addEventListener?.("click", event => {
     event.stopPropagation?.();
     const menu = $("readerMoreMenu");
     if (menu) menu.hidden = !menu.hidden;
+    syncPopoverToggles();
     setToolbarHidden(false);
   });
   $("toTop").addEventListener("click", () => {
@@ -4391,30 +4493,44 @@ window.OD = window.OD || {};
     return window.matchMedia?.("(max-width: 760px)")?.matches === true;
   }
 
+  /* Every change to the drawer's closed state ends here, so ☰ always says
+     whether the sidebar is showing. */
   function syncSidebarBackdrop() {
+    $("sidebarToggle")?.setAttribute?.("aria-expanded", String(!$("sidebar").classList.contains("closed")));
     const backdrop = $("sidebarBackdrop");
     if (!backdrop) return;
     backdrop.hidden = !isNarrowScreen() || $("sidebar").classList.contains("closed");
   }
 
-  function closeSidebarOnNarrow() {
-    if (!isNarrowScreen()) return;
-    $("sidebar").classList.add("closed");
+  /* A closed drawer is invisible to the keyboard too, so focus that was
+     inside it — or that a re-render inside it just dropped to the page —
+     goes back to ☰. */
+  function closeDrawer() {
+    const sidebar = $("sidebar");
+    const active = document.activeElement;
+    const focusWasInside = (active != null && active === document.body) || sidebar.contains?.(active) === true;
+    sidebar.classList.add("closed");
     syncSidebarBackdrop();
+    if (focusWasInside) $("sidebarToggle")?.focus?.({ preventScroll: true });
   }
 
-  $("sidebarToggle").addEventListener("click", () => {
+  function closeSidebarOnNarrow() {
+    if (!isNarrowScreen()) return;
+    closeDrawer();
+  }
+
+  $("sidebarToggle").addEventListener("click", event => {
+    const opening = $("sidebar").classList.contains("closed");
     $("sidebar").classList.toggle("closed");
     syncSidebarBackdrop();
+    // Over the page, the drawer takes keyboard focus with it, so Tab moves
+    // through the sidebar instead of the text hidden behind the backdrop.
+    // Only for a keyboard press (a click with no pointer, detail 0): a tap or
+    // a mouse click leaves focus, and the look, exactly as it was.
+    if (opening && isNarrowScreen() && event?.detail === 0) $("sidebarClose")?.focus?.({ preventScroll: true });
   });
-  $("sidebarBackdrop")?.addEventListener?.("click", () => {
-    $("sidebar").classList.add("closed");
-    syncSidebarBackdrop();
-  });
-  $("sidebarClose")?.addEventListener?.("click", () => {
-    $("sidebar").classList.add("closed");
-    syncSidebarBackdrop();
-  });
+  $("sidebarBackdrop")?.addEventListener?.("click", () => closeDrawer());
+  $("sidebarClose")?.addEventListener?.("click", () => closeDrawer());
   // Crossing the width breakpoint mid-session must never strand the drawer:
   // entering narrow closes it (☰ would be buried underneath), and leaving
   // narrow retires the backdrop. Both matchMedia change and window resize
@@ -4474,6 +4590,24 @@ window.OD = window.OD || {};
     event.stopPropagation?.();
     syncLibraryMenus({ add: $("sourceAddMenu")?.hidden !== false });
   });
+  /* Rows that open on click answer Enter and Space too, but only when the row
+     itself has focus: a key pressed on a button or input inside it is that
+     control's own. The click it fires runs the row's usual handler. */
+  for (const [listId, rowSelector] of [
+    ["conversationList", ".conv"],
+    ["recentList", ".recent-item"],
+    ["bookmarksList", ".bookmark"],
+    ["annotationsList", ".annotation-item"],
+    ["searchResults", ".search-hit"]
+  ]) {
+    $(listId)?.addEventListener?.("keydown", event => {
+      if ((event.key !== "Enter" && event.key !== " ") || composing(event)) return;
+      const row = event.target;
+      if (row?.matches?.(rowSelector) !== true) return;
+      event.preventDefault?.();
+      row.click?.();
+    });
+  }
   $("sourceManageToggle")?.addEventListener?.("click", event => {
     event.stopPropagation?.();
     renderSourceManageList();
@@ -4484,6 +4618,7 @@ window.OD = window.OD || {};
   $("readerPrefsToggle").addEventListener("click", event => {
     event.stopPropagation?.();
     $("readerPrefsPanel").hidden = !$("readerPrefsPanel").hidden;
+    syncPopoverToggles();
     // The background numbers are read off the viewport, which may have moved
     // while the panel was shut.
     if (!$("readerPrefsPanel").hidden) renderBackgroundControls();
@@ -4528,12 +4663,14 @@ window.OD = window.OD || {};
     if (moreMenu && !moreMenu.hidden && !event?.target?.closest?.("#readerMoreMenu, #readerMoreToggle")) {
       moreMenu.hidden = true;
     }
+    syncPopoverToggles();
   });
   $("exportMenu").hidden = true;
   $("exportToggle").addEventListener("click", event => {
     event.stopPropagation?.();
     closeMoreMenu();
     $("exportMenu").hidden = !$("exportMenu").hidden;
+    syncPopoverToggles();
   });
   $("exportCurrentMd").addEventListener("click", () => exportAs("current-markdown"));
   $("exportCurrentJson").addEventListener("click", () => exportAs("current-json"));
@@ -4543,19 +4680,21 @@ window.OD = window.OD || {};
   $("exportCurrentHtml").addEventListener("click", () => exportAs("current-html"));
   $("exportListHtml").addEventListener("click", () => exportAs("list-html"));
   $("tagEditor").hidden = true;
+  syncPopoverToggles();
   $("favoriteToggle").addEventListener("click", () => toggleFavorite());
   $("tagToggle").addEventListener("click", event => {
     event.stopPropagation?.();
     closeMoreMenu();
     const editor = $("tagEditor");
     editor.hidden = !editor.hidden;
+    syncPopoverToggles();
     if (!editor.hidden) {
       renderTagEditor();
       $("tagInput")?.focus?.();
     }
   });
   $("tagInput").addEventListener("keydown", event => {
-    if (event.key !== "Enter") return;
+    if (event.key !== "Enter" || composing(event)) return;
     event.preventDefault?.();
     const value = String($("tagInput").value || "").trim();
     if (!value || !state.current) return;
@@ -4570,7 +4709,7 @@ window.OD = window.OD || {};
     $("demoImport").addEventListener("click", () => void loadDemoLibrary());
   }
   $("searchQuery").addEventListener("keydown", event => {
-    if (event.key === "Enter") {
+    if (event.key === "Enter" && !composing(event)) {
       event.preventDefault?.();
       performSearch();
     }
@@ -4861,7 +5000,7 @@ window.OD = window.OD || {};
   $("memorialNameSave")?.addEventListener?.("click", () => saveMemorialName());
   $("memorialNameRestore")?.addEventListener?.("click", () => clearMemorialName());
   $("memorialNameInput")?.addEventListener?.("keydown", event => {
-    if (event?.key === "Enter") saveMemorialName();
+    if (event?.key === "Enter" && !composing(event)) saveMemorialName();
   });
   $("memorialDateClose")?.addEventListener?.("click", () => closeMemorialDateEditor());
   $("memorialCancel")?.addEventListener?.("click", () => closeMemorialDateEditor());
@@ -4927,6 +5066,8 @@ window.OD = window.OD || {};
     void saveReaderState();
   });
   document.addEventListener?.("keydown", event => {
+    // Esc that only cancels an IME candidate must not also close a panel.
+    if (composing(event)) return;
     if (event.key === "Escape") {
       // 拾句 Studio 开着时它自己的 Esc 收面板，阅读器这层按兵不动
       if (OD.shijuStudio?.isOpen?.()) return;
@@ -4959,7 +5100,19 @@ window.OD = window.OD || {};
         const panel = $(id);
         if (panel && !panel.hidden) {
           panel.hidden = true;
+          syncPopoverToggles();
           $(FOCUS_RETURN[id])?.focus?.();
+          return;
+        }
+      }
+      // The library pane's own menus fold the same way, back to their buttons
+      // (管理 opens from inside ＋, so it returns to ＋) — while the sidebar
+      // is showing; a menu left open in a closed drawer is not on screen.
+      const LIBRARY_MENU_RETURN = { filterMenu: "filterMenuToggle", sourceAddMenu: "sourceAddToggle", sourceManagePanel: "sourceAddToggle" };
+      for (const [id, toggleId] of Object.entries(LIBRARY_MENU_RETURN)) {
+        if (!$("sidebar").classList.contains("closed") && $(id)?.hidden === false) {
+          syncLibraryMenus({});
+          $(toggleId)?.focus?.();
           return;
         }
       }
@@ -4979,6 +5132,10 @@ window.OD = window.OD || {};
       : event.target);
     const tag = String(origin?.tagName || "").toLowerCase();
     if (["input", "textarea", "select"].includes(tag) || origin?.isContentEditable) return;
+    // Alt+← is the browser's Back and Shift+arrows extend a selection; arrows
+    // on a focused player seek it rather than turn the page.
+    if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
+    if (["audio", "video"].includes(tag) || origin?.closest?.("audio, video")) return;
     if (event.key === "ArrowLeft") goPrevious();
     else if (event.key === "ArrowRight") goNext();
     else if (event.key === "Home") { event.preventDefault(); scrollMain("top"); }
@@ -4989,8 +5146,12 @@ window.OD = window.OD || {};
   });
   window.addEventListener("beforeunload", () => {
     void saveReaderState({ immediate: true });
-    releaseArchiveAssets();
-  }, { once: true });
+  });
+  // A page kept for the Back button comes back exactly as it was left, so
+  // its library and files are only let go when the page is really gone.
+  window.addEventListener("pagehide", event => {
+    if (!event?.persisted) releaseArchiveAssets();
+  });
 
   // Small public seam for browser smoke tests; import data remains in memory only.
   OD.app = {
@@ -5095,7 +5256,7 @@ window.OD = window.OD || {};
     if (localeControl) localeControl.value = state.locale;
   }
 
-  const savedTheme = localStorage.getItem("our-dialogues.theme");
+  const savedTheme = storage.get("our-dialogues.theme");
   if (savedTheme) {
     state.readerPrefs = OD.readerParity.normalizePreferences({ ...state.readerPrefs, theme: savedTheme });
   }

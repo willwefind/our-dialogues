@@ -13,7 +13,9 @@ window.OD = window.OD || {};
       const lower = entity.toLowerCase();
       if (lower[0] === "#") {
         const code = lower[1] === "x" ? parseInt(lower.slice(2), 16) : parseInt(lower.slice(1), 10);
-        return Number.isFinite(code) ? String.fromCodePoint(code) : match;
+        // Out-of-range numbers (&#99999999;) stay as written instead of throwing.
+        if (!Number.isFinite(code) || code < 0 || code > 0x10FFFF) return match;
+        try { return String.fromCodePoint(code); } catch (_) { return match; }
       }
       return named[lower] ?? match;
     });
@@ -118,7 +120,9 @@ window.OD = window.OD || {};
     }
 
     const time = sourceTime(session) || messages.find(message => message?.createdAt)?.createdAt || null;
-    const date = new Date(time || "");
+    // Mufy may count in seconds, as the schema already allows for.
+    const numeric = typeof time === "number" || /^\d+$/.test(String(time ?? "")) ? Number(time) : NaN;
+    const date = new Date(Number.isFinite(numeric) ? (numeric < 1e12 ? numeric * 1000 : numeric) : (time || ""));
     const prefix = Number.isNaN(date.getTime()) ? "" : `${date.toISOString().slice(0, 10)} · `;
     return { title: `${prefix}第 ${index + 1} 段`, titleSource: "fallback" };
   }

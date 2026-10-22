@@ -7,8 +7,12 @@ window.OD = window.OD || {};
   and progress come free once the archive is a real book.
 */
 (function(OD){
+  // XML 1.0 has no place for most control characters (a stray ANSI escape
+  // in pasted terminal output is enough): an e-reader rejects the chapter.
+  const XML_INVALID = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\uFFFE\uFFFF]/g;
+
   function escapeXML(value) {
-    return String(value ?? "").replace(/[&<>"']/g, character => ({
+    return String(value ?? "").replace(XML_INVALID, "\uFFFD").replace(/[&<>"']/g, character => ({
       "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
     })[character]);
   }

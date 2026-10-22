@@ -26,6 +26,9 @@ window.OD = window.OD || {};
       return textItem(item);
     });
     if (value && typeof value === "object" && "text" in value) return [textItem(value.text)];
+    // An object without text is kept whole, as array items already are,
+    // rather than read out as "[object Object]".
+    if (value && typeof value === "object") return [{ type: value.type || "unknown", metadata: { original: value } }];
     return [textItem(value)];
   }
 

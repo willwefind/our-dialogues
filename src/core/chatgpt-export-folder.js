@@ -450,6 +450,18 @@ window.OD = window.OD || {};
       ].flatMap(aliasVariants);
     }
 
+    /* Every alias a record answers to, kept up to date as records gain names,
+       so matching a library entry is a lookup rather than a pass over every
+       record (thousands of library files made the old way take minutes). */
+    const aliasIndex = new Map();
+    function indexRecord(record) {
+      for (const alias of recordAliases(record)) {
+        if (!aliasIndex.has(alias)) aliasIndex.set(alias, new Set());
+        aliasIndex.get(alias).add(record);
+      }
+    }
+    records.forEach(indexRecord);
+
     function findExistingForLibrary(library) {
       const candidates = [
         library.exportedName,
@@ -461,11 +473,8 @@ window.OD = window.OD || {};
       for (const candidate of candidates) {
         const targets = aliasVariants(candidate);
         if (!targets.length) continue;
-        const matches = records.filter(record => {
-          const aliases = new Set(recordAliases(record));
-          return targets.some(target => aliases.has(target));
-        });
-        if (matches.length === 1) return matches[0];
+        const matches = new Set(targets.flatMap(target => [...(aliasIndex.get(target) || [])]));
+        if (matches.size === 1) return [...matches][0];
       }
       return null;
     }
@@ -490,6 +499,7 @@ window.OD = window.OD || {};
       record.originationMessageId ||= library.originationMessageId;
       record.originationThreadId ||= library.originationThreadId;
       record.metadata.libraryRecords.push(library);
+      indexRecord(record);
     }
 
     for (const entry of catalog.entries) {
