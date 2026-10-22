@@ -71,7 +71,7 @@ async function loadAppRuntime(savedSortMode="asc", options={}) {
     "status", "search", "conversationList", "archiveMeta", "welcome", "reader",
     "currentTitle", "readerTitle", "readerMeta", "messages", "main", "fileInput",
     "folderInput", "voiceMappingInput", "voiceArchiveInput", "clearSolVoice",
-    "sourceFilter", "clearSources", "hideUser", "showThinking", "theme", "sidebarToggle", "sidebar",
+    "sourceFilter", "sourceRow", "shelfSelectToggle", "shelfSelectBar", "shelfSelectCount", "shelfSelectDone", "shelfSelectTarget", "shelfSelectApply", "shelfSelectNewName", "shelfNewGroupDrop", "clearSources", "hideUser", "showThinking", "theme", "sidebarToggle", "sidebar",
     "directoryPicker", "localLibraryStatus", "clearLocalLibrary", "acceptanceAudit", "runAcceptanceAudit",
     "fontSmaller", "fontLarger", "lineHeight", "contentWidth", "fontFamily", "printPreset",
     "readingMode", "pageLength", "uiLocale", "pageNavigation", "previousPage", "nextPage",
@@ -1883,4 +1883,160 @@ test("sources can be renamed and filed into reader-made groups, and the shelf pe
   runtime.OD.app.renameSource(byPlatform("chatgpt").id, "");
   assert.equal(byPlatform("chatgpt").displayName, "ChatGPT official export");
   assert.deepEqual(Object.keys(mirror().sourceShelf.names), [claudeId]);
+});
+
+test("整理 mode picks several sources and files them together, then lets go", async () => {
+  const { runtime, elements } = await loadAppRuntime("asc");
+  const makeArchive = (platform, id) => ({
+    source: { platform, exporter: `${platform}-synthetic` },
+    conversations: [{
+      id, title: `${platform} title`, createdAt: "2026-08-16T00:00:00.000Z", participants: [],
+      messages: [{ id: `${id}-message`, role: "assistant", content: `${platform} body` }]
+    }]
+  });
+  runtime.OD.app.loadArchive(makeArchive("claude", "claude-chat"), "Claude JSON");
+  runtime.OD.app.loadArchive(makeArchive("chatgpt", "chatgpt-chat"), "ChatGPT");
+  runtime.OD.app.loadArchive(makeArchive("normalized", "plain-chat"), "Normalized JSON");
+  const ids = runtime.OD.app.getState().sources.map(source => source.id);
+  const bar = elements.get("shelfSelectBar");
+  assert.equal(bar.hidden, true);
+
+  elements.get("shelfSelectToggle").click();
+  assert.equal(runtime.OD.app.getState().shelfSelecting, true);
+  assert.equal(bar.hidden, false);
+  assert.equal(elements.get("shelfSelectToggle").getAttribute("aria-pressed"), "true");
+  assert.match(elements.get("conversationList").innerHTML, /class="shelf-check" role="checkbox"[^>]*aria-checked="false"/);
+  assert.equal(elements.get("shelfSelectApply").disabled, true, "nothing to move yet");
+  assert.equal(elements.get("shelfSelectTarget").value, "__new", "with no groups yet, the bar offers a new one");
+  assert.equal(elements.get("shelfSelectNewName").hidden, false);
+
+  runtime.OD.app.toggleShelfSelection([ids[0]]);
+  runtime.OD.app.toggleShelfSelection([ids[2]]);
+  assert.deepEqual([...runtime.OD.app.getState().shelfSelection], [ids[0], ids[2]]);
+  assert.match(elements.get("shelfSelectCount").textContent, /已选 2 个来源/);
+
+  // Asking for a new group without a name keeps everything picked.
+  elements.get("shelfSelectApply").click();
+  assert.equal(runtime.OD.app.getState().shelfSelecting, true);
+  elements.get("shelfSelectNewName").value = "外面的人";
+  elements.get("shelfSelectApply").click();
+  let appState = runtime.OD.app.getState();
+  assert.equal(appState.shelfSelecting, false, "moving finishes 整理");
+  assert.equal(bar.hidden, true);
+  const groupId = appState.sourceShelf.groups[0].id;
+  assert.deepEqual({ ...appState.sourceShelf.members }, { [ids[0]]: groupId, [ids[2]]: groupId });
+  assert.match(elements.get("status").textContent, /2 个来源已放进「外面的人」/);
+
+  // A second round: the existing group is offered first; picking a whole
+  // group's sources and the third source moves them all there.
+  runtime.OD.app.setShelfSelecting(true);
+  assert.equal(elements.get("shelfSelectTarget").value, groupId);
+  runtime.OD.app.toggleShelfSelection(ids);
+  assert.equal(runtime.OD.app.getState().shelfSelection.length, 3);
+  runtime.OD.app.toggleShelfSelection([ids[0], ids[2]]);
+  assert.deepEqual([...runtime.OD.app.getState().shelfSelection], [ids[1]], "toggling a fully picked group lets all of it go");
+  runtime.OD.app.applyShelfSelection();
+  appState = runtime.OD.app.getState();
+  assert.equal(Object.values(appState.sourceShelf.members).filter(id => id === groupId).length, 3);
+
+  // Out of groups, and Esc leaves the mode without moving anything.
+  runtime.OD.app.setShelfSelecting(true);
+  runtime.OD.app.toggleShelfSelection(ids);
+  elements.get("shelfSelectTarget").value = "__out";
+  runtime.OD.app.applyShelfSelection();
+  assert.deepEqual({ ...runtime.OD.app.getState().sourceShelf.members }, {});
+  runtime.OD.app.setShelfSelecting(true);
+  runtime.OD.app.toggleShelfSelection([ids[1]]);
+  runtime.OD.app.setShelfSelecting(false);
+  assert.deepEqual([...runtime.OD.app.getState().shelfSelection], []);
+  assert.equal(runtime.OD.app.applyShelfSelection(), null, "with nothing picked there is nothing to apply");
+});
+
+test("SillyTavern sources group by character in the sidebar, without the folder name as a subtitle", async () => {
+  const { runtime, elements } = await loadAppRuntime("asc");
+  const chat = (id, characterId, characterName, extra = {}) => ({
+    id, title: id, createdAt: "2026-08-16T00:00:00.000Z", participants: [],
+    context: { sourceMetadata: { characterId, characterName, ...extra } },
+    messages: [{ id: `${id}-m1`, role: "assistant", speaker: characterName, content: "body" }]
+  });
+  runtime.OD.app.loadArchive({
+    source: { platform: "sillytavern", exporter: "sillytavern-chats" },
+    conversations: [
+      chat("lantern-1", "Lantern", "Lantern"),
+      chat("lantern-2", "Lantern", "Lantern"),
+      chat("porch", "group:1787", "The porch", { isGroupChat: true })
+    ]
+  }, "SillyTavern");
+  const html = elements.get("conversationList").innerHTML;
+  assert.equal((html.match(/class="character-group"/g) || []).length, 2);
+  assert.match(html, /data-character-key="[^"]+::id:Lantern"/);
+  assert.match(html, /<span class="character-summary-label">Lantern<\/span>\s*<span class="character-count">2</);
+  assert.match(html, /<span class="character-summary-label">The porch<\/span>/);
+  assert.doesNotMatch(html, /character-identity/, "the folder name is not repeated under the character");
+});
+
+test("conversations from different sources share one group and leave their sources' lists", async () => {
+  const { runtime, elements } = await loadAppRuntime("asc");
+  const archive = (platform, ids, extra = {}) => ({
+    source: { platform, exporter: `${platform}-synthetic` },
+    conversations: ids.map((id, index) => ({
+      id, title: `${platform} ${index + 1}`, createdAt: `2026-08-1${index}T00:00:00.000Z`, participants: [],
+      context: { sourceMetadata: { characterId: "lamp", characterName: "Lamp", ...extra } },
+      messages: [{ id: `${id}-m`, role: "assistant", speaker: "Lamp", content: `${platform} body` }]
+    }))
+  });
+  runtime.OD.app.loadArchive(archive("mufy", ["m1", "m2", "m3"]), "Mufy");
+  runtime.OD.app.loadArchive(archive("sillytavern", ["s1", "s2"]), "SillyTavern");
+  runtime.OD.app.loadArchive(archive("chatgpt", ["g1"]), "ChatGPT");
+  const all = runtime.OD.app.getState().archive.conversations;
+  const idOf = title => all.find(conversation => conversation.title === title).id;
+  const picks = [idOf("mufy 1"), idOf("mufy 3"), idOf("sillytavern 2"), idOf("chatgpt 1")];
+
+  runtime.OD.app.setShelfSelecting(true);
+  runtime.OD.app.toggleShelfConversations(picks.slice(0, 2));
+  runtime.OD.app.toggleShelfConversations([picks[2]]);
+  runtime.OD.app.toggleShelfConversations([picks[3]]);
+  assert.match(elements.get("shelfSelectCount").textContent, /已选 4 项/);
+  elements.get("shelfSelectNewName").value = "放在一起读";
+  runtime.OD.app.applyShelfSelection();
+
+  const state = runtime.OD.app.getState();
+  const groupId = state.sourceShelf.groups[0].id;
+  assert.deepEqual(Object.keys(state.sourceShelf.conversations).sort(), [...picks].sort());
+  assert.match(elements.get("status").textContent, /4 项已放进「放在一起读」/);
+  const html = elements.get("conversationList").innerHTML;
+  const groupStart = html.indexOf('class="shelf-group"');
+  const groupEnd = html.indexOf("</details>", html.lastIndexOf('class="shelf-group-loose"'));
+  for (const id of picks) {
+    const at = html.indexOf(`data-id="${id}"`);
+    assert.ok(at > groupStart && at < groupEnd, `${id} is drawn inside the group`);
+    assert.equal(html.split(`data-id="${id}"`).length, 2, `${id} is drawn once, not also under its source`);
+  }
+  assert.match(html, /<div class="conv-provenance">Mufy · Lamp<\/div>/, "a loose conversation says where it came from");
+  assert.match(html, /<div class="conv-provenance">ChatGPT<\/div>/, "no character for a source that has none");
+  assert.match(html, /class="shelf-group-label">放在一起读<\/span>\s*<span class="source-count">4</);
+  assert.ok(html.includes(`data-id="${idOf("mufy 2")}"`), "unpicked conversations stay with their source");
+
+
+  elements.get("sourceFilter").value = `group:${groupId}`;
+  elements.get("sourceFilter").dispatch("change");
+  assert.deepEqual([...runtime.OD.app.getState().filteredIds].sort(), [...picks].sort(), "the group filter shows exactly the group");
+  assert.match(elements.get("sourceFilter").innerHTML, /整组 · 放在一起读（4）/);
+
+  // Out of the group, a conversation goes back under its own source.
+  runtime.OD.app.fileShelfItems({ conversations: [picks[3]] }, null);
+  assert.match(elements.get("status").textContent, /已放回原来的来源/);
+  assert.equal(runtime.OD.app.getState().sourceShelf.conversations[picks[3]], undefined);
+
+  // A drop on the new-group strip makes 新分组, then 新分组 2.
+  const first = runtime.OD.app.dropIntoNewGroup({ conversations: [idOf("sillytavern 1")] });
+  const second = runtime.OD.app.dropIntoNewGroup({ sources: [runtime.OD.app.getState().sources.find(s => s.platform === "chatgpt").id] });
+  const names = runtime.OD.app.getState().sourceShelf.groups.map(group => group.name);
+  assert.ok(first && second);
+  assert.deepEqual([...names.slice(-2)], ["新分组", "新分组 2"]);
+  assert.match(elements.get("status").textContent, /已新建「新分组 2」/);
+
+  runtime.OD.app.dissolveSourceGroup(groupId);
+  assert.equal(Object.values(runtime.OD.app.getState().sourceShelf.conversations).includes(groupId), false);
+  assert.equal(runtime.OD.app.getState().archive.conversations.length, 6, "nothing is removed");
 });

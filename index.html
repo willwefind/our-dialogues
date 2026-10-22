@@ -50,10 +50,25 @@
         </div>
       </div>
 
-      <div class="od-source-row">
+      <div id="sourceRow" class="od-source-row">
         <span class="od-source-row-label" data-i18n="source.label">来源</span>
+        <button id="shelfSelectToggle" class="shelf-select-toggle" type="button" aria-pressed="false" title="多选来源，一起放进分组" data-i18n="shelf.selectToggle" data-i18n-title="shelf.selectToggleTitle">整理</button>
         <button id="sourceAddToggle" type="button" aria-label="添加来源或管理来源" aria-haspopup="true" title="导入 ChatGPT 文件夹、JSON / ZIP，连接语音档案，管理已连接来源" data-i18n-aria-label="source.addAria" data-i18n-title="source.addTitle">＋</button>
       </div>
+
+      <div id="shelfSelectBar" class="shelf-select-bar" hidden>
+        <div class="shelf-select-head">
+          <span id="shelfSelectCount">已选 0 个来源</span>
+          <button id="shelfSelectDone" type="button" data-i18n="shelf.selectCancel">取消</button>
+        </div>
+        <div class="shelf-select-row">
+          <select id="shelfSelectTarget" aria-label="移到哪里" data-i18n-aria-label="shelf.selectTargetAria"></select>
+          <button id="shelfSelectApply" type="button" data-i18n="shelf.selectApply">放进去</button>
+        </div>
+        <input id="shelfSelectNewName" type="text" maxlength="40" autocomplete="off" placeholder="新分组的名字" aria-label="新分组的名字" data-i18n-placeholder="shelf.newGroupPlaceholder" data-i18n-aria-label="shelf.newGroupPlaceholder" hidden>
+      </div>
+
+      <div id="shelfNewGroupDrop" class="shelf-new-group-drop" hidden data-i18n="shelf.newGroupDrop">拖到这里，新建一个分组</div>
 
       <div id="sourceAddMenu" class="od-menu" hidden>
         <details id="importPanel" class="import-panel" open>
@@ -66,13 +81,13 @@
             <label class="pick pick-folder">
               <input id="folderInput" type="file" webkitdirectory directory multiple hidden>
               <span data-i18n="source.pickFolderCompat">选择来源文件夹（兼容添加）</span>
-              <small data-i18n="source.pickFolderCompatHint">ChatGPT 官方 Export · 多个 Mufy ZIP</small>
+              <small data-i18n="source.pickFolderCompatHint">ChatGPT 官方 Export · 多个 Mufy ZIP · SillyTavern</small>
             </label>
 
             <div class="pick-divider"><span data-i18n="source.or">或</span></div>
 
             <label class="pick pick-secondary">
-              <input id="fileInput" type="file" accept=".json,.zip,application/json,application/zip" multiple hidden>
+              <input id="fileInput" type="file" accept=".json,.jsonl,.zip,application/json,application/zip" multiple hidden>
               <span data-i18n="source.pickFiles">选择 JSON / ZIP</span>
             </label>
           </div>
@@ -489,6 +504,7 @@
   <script src="src/adapters/personal-archive.js"></script>
   <script src="src/adapters/ciel-house.js"></script>
   <script src="src/adapters/mufy.js"></script>
+  <script src="src/adapters/sillytavern.js"></script>
   <script src="src/adapters/claude-web-exporter.js"></script>
   <script src="src/adapters/claude-official.js"></script>
   <script src="src/adapters/chatgpt-official.js"></script>
