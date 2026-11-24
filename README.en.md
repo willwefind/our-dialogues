@@ -37,6 +37,28 @@ A local-first reader for AI conversation archives. The interface speaks English 
 |---|---|---|
 | ![Mobile reading with gutter marker and bottom controls](docs/screenshots/mobile-reading.jpg) | ![Mobile library home](docs/screenshots/mobile-home.jpg) | ![Mobile drawer with source management](docs/screenshots/mobile-drawer.jpg) |
 
+## What's new
+
+### v0.5.3 (2026-11-24) · the writing desk, renewed
+
+**The writing desk (Shiju 0.18.2)**
+
+- **Open a blind box**: the selected passage becomes a typographic poster. Layout and atmosphere are drawn as a set, long passages are read for their paragraphs, quotations, and questions before they are placed, and every word is kept. Save one you like and reuse it on another passage
+- Restyle only the characters you select: size, font, colour, weight, opacity
+- Save without a ground (transparent PNG)
+- The bundled Huiwen Mincho and Zhuque Fangsong are in the draw, even on devices with no fonts installed
+- The desk's language follows the Reader
+
+**A bug sweep** (no new features, no change to the look)
+
+- A sturdier library: a save that fails halfway (full disk, closed tab) leaves the library whole, and scrolling Library Home no longer marks the conversation underneath as read
+- Enter or Esc inside a Chinese IME no longer saves a tag or bookmark name, or closes a panel
+- Faster, more faithful imports: thousands of ChatGPT files or overlapping Mufy exports match in under a second instead of minutes; Claude exports without parent links keep every turn; damaged ZIPs say so
+- Phones: Library Home no longer runs off the right edge, and long titles wrap
+- Keyboard and screen readers: lists, file pickers, and the drawer are reachable by Tab, and toggles announce whether they are open
+
+The full record is in the [CHANGELOG](CHANGELOG.md).
+
 ## Status
 
 The core Reader and the reading-room redesign are complete and fully usable. Ongoing work now focuses on visual polish, small features, and additional source adapters rather than major architectural rewrites.
