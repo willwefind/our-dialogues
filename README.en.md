@@ -39,6 +39,11 @@ A local-first reader for AI conversation archives. The interface speaks English 
 
 ## What's new
 
+### v0.5.4 (2026-11-24) · a full-screen desk
+
+- The writing desk (Shiju 0.19.0) gains **Full screen**: the sheet alone fills the display, and the panel comes back on a button
+- On phones the whole sheet is visible without it too; a blind box no longer shows only its upper half
+
 ### v0.5.3 (2026-11-24) · the writing desk, renewed
 
 **The writing desk (Shiju 0.18.2)**

@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## v0.5.4 — 2026-11-24 · 写字台全屏 / a full-screen desk
+
+- The writing desk moves to Shiju 0.19.0. 全屏 / Full screen fills the display with the sheet alone; the panel comes back on a button, and browser bars are hidden where the browser allows it (Safari on iPhone does not). Esc leaves full screen first and closes the desk on the next press. On phones the whole sheet is visible in the ordinary view too: after a blind box it used to show only its upper half.
+
 ## v0.5.3 — 2026-11-24 · 写字台换新 / the writing desk, renewed
 
 - The writing desk moves to Shiju 0.18.2. Select a few characters in the title or body and change only those — size, font, colour, weight, opacity. 拆一个盲盒 / Open a blind box lays the passage out as a typographic poster: a layout and an atmosphere drawn together, long passages read for their paragraphs, quotations and questions before they are placed, every word kept; whatever you like can be saved and reused on another passage. Images can be saved without a ground (transparent PNG). The bundled Huiwen Mincho and Zhuque Fangsong are in the draw, so the posters keep their old-type warmth on devices with no fonts installed. The desk's language still follows the Reader.
