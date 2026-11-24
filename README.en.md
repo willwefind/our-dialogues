@@ -37,6 +37,28 @@ A local-first reader for AI conversation archives. The interface speaks English 
 |---|---|---|
 | ![Mobile reading with gutter marker and bottom controls](docs/screenshots/mobile-reading.jpg) | ![Mobile library home](docs/screenshots/mobile-home.jpg) | ![Mobile drawer with source management](docs/screenshots/mobile-drawer.jpg) |
 
+## What's new
+
+### v0.5.3 (2026-11-24) · the writing desk, renewed
+
+**The writing desk (Shiju 0.18.2)**
+
+- **Open a blind box**: the selected passage becomes a typographic poster. Layout and atmosphere are drawn as a set, long passages are read for their paragraphs, quotations, and questions before they are placed, and every word is kept. Save one you like and reuse it on another passage
+- Restyle only the characters you select: size, font, colour, weight, opacity
+- Save without a ground (transparent PNG)
+- The bundled Huiwen Mincho and Zhuque Fangsong are in the draw, even on devices with no fonts installed
+- The desk's language follows the Reader
+
+**A bug sweep** (no new features, no change to the look)
+
+- A sturdier library: a save that fails halfway (full disk, closed tab) leaves the library whole, and scrolling Library Home no longer marks the conversation underneath as read
+- Enter or Esc inside a Chinese IME no longer saves a tag or bookmark name, or closes a panel
+- Faster, more faithful imports: thousands of ChatGPT files or overlapping Mufy exports match in under a second instead of minutes; Claude exports without parent links keep every turn; damaged ZIPs say so
+- Phones: Library Home no longer runs off the right edge, and long titles wrap
+- Keyboard and screen readers: lists, file pickers, and the drawer are reachable by Tab, and toggles announce whether they are open
+
+The full record is in the [CHANGELOG](CHANGELOG.md).
+
 ## Status
 
 The core Reader and the reading-room redesign are complete and fully usable. Ongoing work now focuses on visual polish, small features, and additional source adapters rather than major architectural rewrites.
@@ -46,7 +68,7 @@ Currently included:
 - The approved reading-room redesign (2026-08): three themes as one product's lighting conditions, composite CJK/Latin print presets, a 936px paper stage with seamless texture, quiet toolbar with auto-hide, sidebar with three primary modes, Library Home, production hand-drawn highlighter strokes, and full mobile chrome with bottom sheets
 - Bilingual UI (v0.3): Simplified Chinese / English / follow-the-browser, under Aa → Display → Language; switching applies instantly and keeps your reading position. Archive content is data and is never translated
 - Personal text archive (v0.3): diaries, dreams, microblog posts, essays, letters, and fragments enter the same library through the small open format `our-dialogues.personal-archive.v1`, shelved Collection → Year, presented as full-page documents with no chat bubbles
-- Shiju writing desk (v0.3): select a passage → press Shiju, and the embedded typesetting studio opens in place with title / source / date pre-filled; 20 letter-paper sets, horizontal and vertical layout, multi-page splitting, automatic ink on dark papers, then save or copy the image. Zero load and zero footprint until invited
+- Shiju writing desk (v0.3): select a passage → press Shiju, and the embedded typesetting studio opens in place with title / source / date pre-filled; 20 letter-paper sets, horizontal and vertical layout, multi-page splitting, automatic ink on dark papers; restyle just the characters you select; **open a blind box** and the passage becomes a typographic poster, then save or copy the image. Zero load and zero footprint until invited
 - Memorial card (v0.4): Library Home gains a quiet archival note — first recorded on a date, and N days in this archive. A companion is whatever the sidebar already groups by, so one Mufy character and a whole ChatGPT export are equally addressable, and the arrows step through the ones you have pinned. Dates are never invented: an archive with nothing dated says so, a date you write down yourself outranks the derived one, and the card names which it is showing
 - Custom background (v0.4): put a picture under the words — the outer stage by default, the reading paper as a second target with a readability warning. The picture is pinned to the screen and only the text travels over it; Fill / Fit / Tile, a 3×3 focus grid, brightness, clarity, and paper density on the paper target. The panel says how far this screen is magnifying the picture and which way the focus can still move it — portraits suit phones, landscapes suit desks. Images are decoded locally, capped at 2560px, re-encoded to WebP in their own record, and the original is never kept
 - Source names and groups (v0.4.1): each source's `···` in the sidebar takes a name of your own and a group you make up on the spot; the original name stays in the menu, one Restore away. Groups fold, rename, and dissolve (dissolving only sends sources back to the top level — nothing is removed), and the source filter can show a whole group. Memorial-card companions can be renamed too
