@@ -1,9 +1,9 @@
 // 拾句 · 嵌入包（生成物，别手改）
 // 事实源：willwefind/shiju 的 src/ 碎片；重新生成：node tools/build-vendor.mjs
-// 版本：0.18.2 · 许可：AGPL-3.0（见源仓 LICENSE）
+// 版本：0.19.0 · 许可：AGPL-3.0（见源仓 LICENSE）
 (function () {
 'use strict';
-const SHIJU_VERSION = '0.18.2';
+const SHIJU_VERSION = '0.19.0';
 
 // 🔴 iOS 上的 Userscripts **没有**同步的 GM_getValue/GM_setValue（它只给异步的 GM.getValue）。
 //    照原样直接调，每次都落到 catch 里返回默认值 —— 表现是「改了纸改了字，换一页全没了」，
@@ -4948,6 +4948,7 @@ const STUDIO_I18N = {
     'pill.clip': '摘',
     'app.title': '拾 句',
     'lang.toggle': '界面换成英文',
+    'full.on': '全屏', 'full.off': '退出全屏', 'full.show': '面板', 'full.hide': '收起面板', 'full.title': '铺满整块屏，整张看得见',
     'theme.auto': '跟随', 'theme.day': '白天', 'theme.night': '黑夜',
     'tab.text': '文', 'tab.paper': '纸', 'tab.font': '字', 'tab.ink': '色', 'tab.layout': '版',
     'act.save': '存 图', 'act.copy': '复制这张', 'act.close': '关闭',
@@ -5207,6 +5208,7 @@ const STUDIO_I18N = {
     'pill.clip': 'Clip',
     'app.title': 'Shiju',
     'lang.toggle': 'Switch the interface to Chinese',
+    'full.on': 'Full screen', 'full.off': 'Exit full screen', 'full.show': 'Panel', 'full.hide': 'Hide panel', 'full.title': 'Fill the screen and see the whole sheet',
     'theme.auto': 'System', 'theme.day': 'Day', 'theme.night': 'Night',
     'tab.text': 'Text', 'tab.paper': 'Paper', 'tab.font': 'Type', 'tab.ink': 'Ink', 'tab.layout': 'Layout',
     'act.save': 'Save', 'act.copy': 'Copy this one', 'act.close': 'Close',
@@ -5810,8 +5812,9 @@ const BLIND_CSS = `
 .bsel u{right:-9px;top:-9px;cursor:pointer}
 @media (pointer: coarse){ .bov{pointer-events:none} .mask.bedit .bov{pointer-events:auto;touch-action:none} .bsel i,.bsel u{width:26px;height:26px;line-height:24px} }
 @media (max-width: 760px){
-  .bbar button{padding:9px 13px}
-  .bbar button.go{padding:10px 18px}
+  .bbar{gap:4px}
+  .bbar button{padding:9px 9px;letter-spacing:0}
+  .bbar button.go{padding:10px 14px;letter-spacing:.06em}
   .bbar .nm{flex:1 1 100%;order:5}
   .mask.blind .view{max-height:62%}
   .bx .chips button{padding:8px 12px;font-size:12px}
@@ -6153,6 +6156,109 @@ function mountBlind({ resume, mask, st, draw, repaint, sync, alive, tip, keep, k
 }
 
 // ════════════════════════════════════════════════════════════════════
+//  6d. 全屏：面板铺满整块屏，纸整张看得见；手机上再收起浏览器自己的地址栏
+// ════════════════════════════════════════════════════════════════════
+// 两层，各走各的：
+//   ① 排布（.full）—— 纯 CSS，哪儿都有。iPhone 的 Safari 不让网页进真全屏，它只有这一层。
+//   ② 浏览器的全屏接口 —— 有就顺手要一下，要不到也不吭声，① 照样成立。
+// .sheet ＝ 控制面板露不露。手机上进来先收着，只看纸；宽屏两栏摆得下，默认露着。
+const FULL_CSS = `
+.cbar{display:flex;gap:6px;align-items:center;flex:0 0 auto}
+.cbar .count{flex:1;min-width:0}
+.cbar [hidden],.ftip[hidden]{display:none!important}
+.cbar button{border:1px solid var(--line);background:var(--btn);color:var(--fg);border-radius:999px;
+     font-size:11px;padding:4px 11px;cursor:pointer;letter-spacing:.06em;white-space:nowrap;flex:0 0 auto}
+.ftip{font-size:11px;color:var(--dim);line-height:1.5;flex:0 0 auto}
+.mask.full{padding:0}
+.mask.full .box{max-width:none;height:100%;border-radius:0;
+     padding:calc(12px + env(safe-area-inset-top,0px)) calc(12px + env(safe-area-inset-right,0px)) calc(12px + env(safe-area-inset-bottom,0px)) calc(12px + env(safe-area-inset-left,0px))}
+.mask.full .pages{container-type:size;align-content:safe center;--pgmax:4000px}
+.mask.full:not(.sheet) .side{display:none}
+@media (max-width: 760px){
+  .cbar button{padding:8px 12px}
+  /* 一整张都要看得见：预览区给定高，纸按这块地方的宽和高两头收。
+     --need ＝ 按屏宽铺开要多高，横版卡片用不着那么高，就别占着。 */
+  .view{height:55%;height:min(55%, calc(var(--need, 100vw) + 112px))}
+  .mask.blind .view{height:62%;height:min(62%, calc(var(--need, 100vw) + 160px))}
+  .pages{container-type:size;padding:5px}      /* 选中的那圈边要有地方待，不然左右被裁掉 */
+  .bbar .nm{font-size:12px}
+  .mask.full .box .view{flex:1 1 auto;height:auto;max-height:none}
+  .mask.full.sheet .box .view{flex:0 0 56%}
+  .mask.full.sheet .side{min-height:0}
+  .mask.full .count{display:none}
+  .mask.full .cbar{justify-content:flex-end}
+}
+`;
+const fullHtml = () => `
+  <div class="cbar"><div class="count" id="count"></div>
+    <button id="fSave" hidden>${t('act.save')}</button>
+    <button id="fSheet" aria-expanded="false" hidden></button>
+    <button id="fGo" aria-pressed="false" title="${t('full.title')}"></button>
+  </div>
+  <div class="ftip" id="fTip" hidden></div>`;
+
+// 全屏是整页的事，不跟着哪一代面板走：换语言重拼面板时它还开着
+let fullOwn = false;      // 这个真全屏是不是拾句要来的；别人（网页自己）开的不去动它
+const fullNow = () => document.fullscreenElement || document.webkitFullscreenElement || null;
+function fullLeave(){
+  if (!fullOwn) return;
+  fullOwn = false;
+  if (!fullNow()) return;
+  try { const r = (document.exitFullscreen || document.webkitExitFullscreen).call(document); if (r && r.catch) r.catch(() => {}); } catch {}
+}
+function fullAsk(still){
+  const el = document.documentElement, ask = el.requestFullscreen || el.webkitRequestFullscreen;
+  if (!ask || fullNow()) return;
+  fullOwn = true;
+  const no = () => { fullOwn = false; };
+  // 等答复的当口又退出来了（或者面板已经关了），到手的全屏要还回去
+  try { const r = ask.call(el, { navigationUI: 'hide' }); if (r && r.then) r.then(() => { if (!still()){ fullOwn = true; fullLeave(); } }, no); } catch { no(); }
+}
+
+function mountFull({ resume, mask, alive, tipEl }){
+  const q = s => mask.querySelector(s), small = () => { try { return matchMedia('(max-width: 760px)').matches; } catch { return false; } };
+  let on = false, sheet = true, leftAt = 0, tipTimer = 0;
+  const paint = () => {
+    mask.classList.toggle('full', on); mask.classList.toggle('sheet', on && sheet);
+    q('#fGo').textContent = on ? t('full.off') : t('full.on'); q('#fGo').setAttribute('aria-pressed', String(on));
+    q('#fSheet').hidden = !on; q('#fSheet').textContent = sheet ? t('full.hide') : t('full.show'); q('#fSheet').setAttribute('aria-expanded', String(sheet));
+    q('#fSave').hidden = !on || sheet;
+    if (!on || sheet) q('#fTip').hidden = true;
+  };
+  const go = v => { if (on === v) return; on = v; if (on){ sheet = !small(); fullAsk(() => on && alive()); } else fullLeave(); paint(); };
+  q('#fGo').onclick = () => go(!on);
+  q('#fSheet').onclick = () => { sheet = !sheet; paint(); };
+  q('#fSave').onclick = () => q('#save').click();
+  // 「改一改」要用面板：收着的话替你拉开。只认这颗按钮 —— 在纸上点中一块字也会翻到「盒」那一屏，
+  // 那时候拉开面板，纸会从手指底下缩走
+  q('#bEdit').addEventListener('click', () => { if (on && !sheet){ sheet = true; paint(); } });
+  // 面板收着，底下那行话（「已存 1 张」）就看不见了，借到纸旁边说
+  const mo = new MutationObserver(() => {
+    const s = tipEl.textContent; if (!on || sheet || !s) return;
+    q('#fTip').textContent = s; q('#fTip').hidden = false;
+    clearTimeout(tipTimer); tipTimer = setTimeout(() => { q('#fTip').hidden = true; }, 5000);
+  });
+  mo.observe(tipEl, { childList: true, characterData: true, subtree: true });
+  // 用户从浏览器那头退的（Esc、安卓的返回、下拉）：排布跟着收
+  const changed = () => {
+    if (!alive()) return dispose();
+    if (fullNow() || !fullOwn) return;
+    fullOwn = false; leftAt = Date.now(); go(false);
+  };
+  for (const ev of ['fullscreenchange', 'webkitfullscreenchange']) document.addEventListener(ev, changed);
+  function dispose(){
+    for (const ev of ['fullscreenchange', 'webkitfullscreenchange']) document.removeEventListener(ev, changed);
+    mo.disconnect(); clearTimeout(tipTimer);
+  }
+  if (resume && resume.on){ on = true; sheet = resume.sheet; }
+  paint();
+  return {
+    dispose, state: () => ({ on, sheet }),
+    // Esc：先退全屏，再按一次才关面板。有的浏览器退全屏那一下 Esc 也会送到网页里，别算两次
+    drop: () => { if (on){ go(false); return true; } return Date.now() - leftAt < 400; },
+  };
+}
+// ════════════════════════════════════════════════════════════════════
 //  7. 界面（关在 shadow DOM 里，免得被网站的 CSS 冲了）
 // ════════════════════════════════════════════════════════════════════
 const CSS = `
@@ -6302,7 +6408,7 @@ function ui(){
   host = document.createElement('div');
   host.style.cssText = 'all:initial;position:static';
   root = host.attachShadow({ mode: 'open' });
-  const st = document.createElement('style'); st.textContent = CSS + PICK_CSS + BLIND_CSS; root.append(st);
+  const st = document.createElement('style'); st.textContent = CSS + PICK_CSS + BLIND_CSS + FULL_CSS; root.append(st);
   document.documentElement.append(host);
   pill = null;
 }
@@ -6366,6 +6472,7 @@ function openPanel(text, init = {}){
   const embedFontUrls = (init.fontUrls && typeof init.fontUrls === 'object') ? init.fontUrls : {};
   ui();
   if (vvStop) { vvStop(); vvStop = null; }
+  if (!init.resume) fullLeave();
   if (mask) mask.remove();
   const blank = !String(text || '').trim();     // 空手起稿（写日记随笔），不是从网页上摘的
   const st = {
@@ -6528,7 +6635,7 @@ function openPanel(text, init = {}){
       </div>
       <div class="view">
         ${blindHtml()}
-        <div class="count" id="count"></div>
+        ${fullHtml()}
         <div class="pages" id="pgs"></div>
       </div>
     </div>`;
@@ -6545,7 +6652,7 @@ function openPanel(text, init = {}){
   q('#ts').value = st.titleSize; q('#tsn').value = st.titleSize;
 
   // ── 画 ──────────────────────────────────────────────────────────
-  let plan = null, dragging = false, blindBar = null;
+  let plan = null, dragging = false, blindBar = null, full = null;
   // 盲盒里自己挑了纸 / 字 / 墨，那一样就归自己，别的照旧听种子的
   const ownIt = k => { if (blindBar) blindBar.own(k); };
   // 拖的时候只重画已有的画布，绝不重建 DOM ——
@@ -6572,8 +6679,10 @@ function openPanel(text, init = {}){
       clearTimeout(fineTimer); rough = !!plan.blind;
       const paint = (cv, i) => (plan.blind ? withDPR(1, () => renderPage(cv, st, plan, i)) : renderPage(cv, st, plan, i));
       plan.pages.forEach((_, i) => {
-        const cols = Math.min(plan.pages.length, 3), wide = `min(calc((100% - ${(cols - 1) * 14}px) / ${cols}), ${plan.W > plan.H ? 620 : 420}px)`;
-        if (same){ const cv = pageCanvases[i]; paint(cv, i); cv.style.cursor = 'default'; cv.parentElement.style.width = wide; return; }
+        const cols = Math.min(plan.pages.length, 3), wide = `min(calc((100% - ${(cols - 1) * 14}px) / ${cols}), var(--pgmax, ${plan.W > plan.H ? 620 : 420}px)`;
+        // 再按高收一道，整张看得全（cqh ＝ 预览区的高）。老内核不认 cqh，后一句赋不进去，就停在前一句
+        const size = el => { el.style.width = wide + ')'; el.style.width = `${wide}, calc(100cqh * ${(plan.W / plan.H).toFixed(4)}))`; };
+        if (same){ const cv = pageCanvases[i]; paint(cv, i); cv.style.cursor = 'default'; size(cv.parentElement); return; }
         const wrapEl = document.createElement('div');
         wrapEl.className = 'pg'; wrapEl.dataset.i = i;
         const cv = document.createElement('canvas');
@@ -6581,7 +6690,7 @@ function openPanel(text, init = {}){
         // 缩到能并排看下：一张时给大，多张时按张数分
         // 🔴 宽度得给外壳：早先给的是画布，百分比算的是外壳的宽，而外壳自己撑满整行 ——
         //    说是并排，其实一直一张一行往下堆
-        wrapEl.style.width = wide;
+        size(wrapEl);
         cv.style.width = '100%';
         cv.style.cursor = st.blind ? 'default' : 'move';
         // 在预览图上直接拖 = 整块位移。按显示比例换算回真实像素，拖多少就挪多少。
@@ -6617,6 +6726,7 @@ function openPanel(text, init = {}){
         wrapEl.onclick = () => { selected = i; markSel(); };
         box.append(wrapEl); pageCanvases.push(cv);
       });
+      { const cols = Math.min(plan.pages.length, 3), rows = Math.ceil(plan.pages.length / cols); mask.style.setProperty('--need', `calc((100vw - 24px) * ${(plan.H / plan.W / cols * rows).toFixed(4)})`); }
       if (selected >= plan.pages.length) selected = plan.pages.length - 1;
       markSel();
       // 张数、尺寸、以及「没照你说的办」的时候必须说出来，不能默默给个别的结果
@@ -6807,8 +6917,8 @@ function openPanel(text, init = {}){
     const { resume, ...rest } = init, tab = mask.querySelector('#tabs button[aria-pressed=true]');
     Object.assign(st, { text: q('#t').value, title: q('#ti').value, source: q('#s').value, date: q('#d').value, headText: q('#hd').value, sourcePrefix: q('#sp').value });
     setCfg('uiLang', studioLocale === 'en' ? 'zh-CN' : 'en');
-    document.removeEventListener('keydown', esc); pick.dispose(); clearTimeout(fineTimer); clearTimeout(typingTimer);
-    openPanel(st.text, { ...rest, resume: { st, tab: tab ? tab.dataset.v : 'text', blind: blindBar.state() } });
+    document.removeEventListener('keydown', esc); pick.dispose(); full.dispose(); clearTimeout(fineTimer); clearTimeout(typingTimer);
+    openPanel(st.text, { ...rest, resume: { st, tab: tab ? tab.dataset.v : 'text', blind: blindBar.state(), full: full.state() } });
   };
 
   const mkSwitch = (sel, key) => q(sel).addEventListener('click', e => {
@@ -7127,13 +7237,15 @@ function openPanel(text, init = {}){
       setCfg('presets', (cfg('presets') || []).concat([{ id: 'ps' + Date.now(), name, style }]));
       buildPresets();
     } });
+  full = mountFull({ resume: back && back.full, mask, alive, tipEl });
   q('#hd').oninput = () => { setCfg('headText', q('#hd').value); drawTyping(); };
 
   const close = () => {
     // 自己的 Esc 监听无条件先摘：被新面板顶替后残留的那份也借这条路自清
     document.removeEventListener('keydown', esc);
-    pick.dispose();
+    pick.dispose(); full.dispose();
     if (!alive()) return;
+    fullLeave();
     if (vvStop) { vvStop(); vvStop = null; }
     mask.remove(); mask = null;
     // onClose 只在真关掉的那一次响 —— close 本身保持幂等
@@ -7145,8 +7257,8 @@ function openPanel(text, init = {}){
   let downOnMask = false;
   mask.addEventListener('pointerdown', e => { downOnMask = e.target === mask; }, true);
   mask.onclick = e => { if (e.target === mask && downOnMask) close(); };
-  // 正选着字的时候，Esc 先放开选中的字，再按一次才关面板
-  const esc = e => { if (e.key === 'Escape' && !(alive() && (pick.drop() || blindBar.drop()))) close(); };
+  // 正选着字的时候，Esc 先放开选中的字，再退全屏，再按一次才关面板
+  const esc = e => { if (e.key === 'Escape' && !(alive() && (pick.drop() || blindBar.drop() || full.drop()))) close(); };
   document.addEventListener('keydown', esc);
 
   // ── 存 / 复制 ───────────────────────────────────────────────────
