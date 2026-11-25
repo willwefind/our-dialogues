@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## v0.5.5 — 2026-11-25 · 写字台归位 / the desk, rearranged
+
+- The writing desk moves to Shiju 0.20.0 and a new layout. Two modes, 排信纸 / Letter and 拆盲盒 / Blind box, each showing only the panels that apply to it. Layouts, moods and saved layouts are chosen from small previews drawn with the passage being set. Save, copy and transparent ground stay at the foot of the panel; on phones the tabs sit under the thumb above a drawer that rises and folds. Effects and finishes have an amount slider. Nine new layouts from Japanese, International Modern and Pop typography, two new moods. A saved layout keeps its orientation, header and date settings, typefaces and text area. Fonts install from zip packs, and large fonts fit in the desk's own storage. With header, source and date off, the corners stay empty. Opening a box is quicker. Fonts from a link, new in Shiju, stay hidden here: the desk makes no network requests of its own.
+
 ## v0.5.4 — 2026-11-24 · 写字台全屏 / a full-screen desk
 
 - The writing desk moves to Shiju 0.19.0. 全屏 / Full screen fills the display with the sheet alone; the panel comes back on a button, and browser bars are hidden where the browser allows it (Safari on iPhone does not). Esc leaves full screen first and closes the desk on the next press. On phones the whole sheet is visible in the ordinary view too: after a blind box it used to show only its upper half.

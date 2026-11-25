@@ -39,6 +39,14 @@ A local-first reader for AI conversation archives. The interface speaks English 
 
 ## What's new
 
+### v0.5.5 (2026-11-25) · the desk, rearranged
+
+- The writing desk (Shiju 0.20.0) has a new layout: **two modes, Letter and Blind box**, each with only the panels it needs, Save always at the foot, and on phones a drawer with tabs under the thumb
+- **Layouts, moods, and saved layouts are chosen from small previews** drawn with the passage you are setting
+- Effects and finishes have an amount slider; nine new layouts (Japanese, International Modern, Pop) and two new moods
+- Saved layouts come back as they were; with header, source, and date off the corners stay empty; opening a box is quicker
+- Fonts install straight from a zip, and full CJK fonts fit
+
 ### v0.5.4 (2026-11-24) · a full-screen desk
 
 - The writing desk (Shiju 0.19.0) gains **Full screen**: the sheet alone fills the display, and the panel comes back on a button
